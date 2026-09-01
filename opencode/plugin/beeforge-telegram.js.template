@@ -1,0 +1,1 @@
+export { BeeForgeTelegram } from "__BEEFORGE_PLUGIN_URI__";

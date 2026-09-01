@@ -1,0 +1,9 @@
+runtime,context,actual_input,kv_k,kv_v,gpu_layers,mtp,n_max,prefill_tok_s,decode_tok_s,peak_vram_mib,ram_gib,result
+BeeLlama v0.4.3 CUDA13.1,150000,59,kvarn4,kvarn4,all,off,,185.27,35.00,15869,,short API pass
+BeeLlama v0.4.3 CUDA13.1,180000,23594,kvarn4,kvarn4,all,off,,129.68,,15909,26.56,controlled timeout; no OOM
+BeeLlama v0.4.3 CUDA13.1,180000,8192,kvarn4,kvarn4,all,off,,1778.95,, , ,batch2048-ubatch512 llama-bench
+BeeLlama v0.4.3 CUDA13.1,180000,17116,kvarn4,kvarn4,all,off,,1687.59,,15849,,real-server pass
+BeeLlama v0.4.3 CUDA13.1,180000,,kvarn4,kvarn4,all,off,,462.50,37.64,15808,,MTP control coding prompt
+BeeLlama v0.4.3 CUDA13.1,180000,,kvarn4,kvarn4,all,on,2,68.30,14.99,15867,,acceptance 0.68056 mean 2.36
+BeeLlama v0.4.3 CUDA13.1,180000,,kvarn4,kvarn4,all,on,3,71.37,18.99,15900,,acceptance 0.67194 mean 3.00
+BeeLlama v0.4.3 CUDA13.1,180000,,kvarn4,kvarn4,all,on,4,66.08,18.65,15846,,acceptance 0.55380 mean 3.22

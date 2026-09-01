@@ -1,0 +1,19 @@
+{
+  "enabled": false,
+  "allowedUserId": "",
+  "allowedChatId": "",
+  "bridgePort": 47655,
+  "summaryIntervalMinutes": 0,
+  "notifyDelegation": true,
+  "notifyCompletion": true,
+  "notifyErrors": true,
+  "muted": false,
+  "allowedProjects": [],
+  "allowPreviouslyOpenedProjects": true,
+  "defaultProjectRoot": "__PROJECT_ROOT__",
+  "pinnedStatus": true,
+  "voiceEnabled": true,
+  "voicePort": 47656,
+  "voiceModel": "small",
+  "voiceLanguage": "auto"
+}

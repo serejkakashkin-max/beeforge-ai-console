@@ -1,0 +1,46 @@
+# Machine-local configuration and credentials
+secrets/
+config/profiles.json
+config/telegram.json
+config/opencode.json
+*.dpapi
+*.key
+*.pem
+*.pfx
+*.p12
+.env
+.env.*
+
+# Runtime state, logs, backups, models and generated artifacts
+runtime/
+logs/
+backups/
+benchmarks/*.json
+benchmarks/*.log
+*.gguf
+*.safetensors
+*.onnx
+
+# Restored third-party dependencies
+**/node_modules/
+**/.venv/
+**/__pycache__/
+*.py[cod]
+tools/windows-mcp/v*/Sbroenne.WindowsMcp.exe
+tools/github-mcp/v*/github-mcp-server.exe
+tools/owasp-secure-agent-playbook/
+
+# Temporary downloads and editor/OS state
+.tmp/
+tmp/
+*.zip
+*.7z
+*.tar
+*.gz
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Telegram project inboxes must never be committed implicitly
+**/.beeforge/telegram/inbox/

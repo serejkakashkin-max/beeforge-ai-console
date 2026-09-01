@@ -1,0 +1,747 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "beellama/Q2",
+  "provider": {
+    "beellama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "BeeLlama CUDA Local",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1",
+        "extraBody": {
+          "chat_template_kwargs": {
+            "enable_thinking": true,
+            "preserve_thinking": true
+          }
+        }
+      },
+      "models": {
+        "qwen38-ymq-s-pro": {
+          "name": "qwen38-ymq-s-pro",
+          "reasoning": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "limit": {
+            "context": 162000,
+            "output": 32764
+          }
+        },
+        "Q4": {
+          "name": "Q4",
+          "reasoning": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "limit": {
+            "context": 150000,
+            "output": 32764
+          }
+        },
+        "Q2": {
+          "name": "Q2",
+          "reasoning": true,
+          "attachment": true,
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": "text"
+          },
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "limit": {
+            "context": 162000,
+            "output": 65528
+          }
+        }
+      }
+    }
+  },
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 4096
+  },
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      ".git/**",
+      "dist/**",
+      "build/**"
+    ]
+  },
+  "permission": {
+    "read": "allow",
+    "edit": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "bash": "allow",
+    "lsp": "allow",
+    "external_directory": "deny",
+    "task": "deny",
+    "todowrite": "deny",
+    "webfetch": "deny",
+    "websearch": "deny",
+    "windows-ui*": "deny",
+    "playwright*": "deny",
+    "chrome-devtools*": "deny",
+    "github*": "deny",
+    "docker-research*": "deny",
+    "docker*": "deny",
+    "serena*": "deny",
+    "context7*": "deny"
+  },
+  "mcp": {
+    "windows-ui": {
+      "type": "local",
+      "command": [
+        "__BEEFORGE_ROOT__\\tools\\windows-mcp\\v1.3.21\\Sbroenne.WindowsMcp.exe",
+        "--tools",
+        "ui_snapshot,ui_find,ui_click,ui_type,ui_select,ui_read,ui_wait,window_management,keyboard_control,screenshot_control,app"
+      ],
+      "enabled": true,
+      "timeout": 60000
+    },
+    "playwright": {
+      "type": "local",
+      "command": [
+        "__BEEFORGE_ROOT__\\tools\\playwright-mcp\\node_modules\\.bin\\playwright-mcp.cmd",
+        "--browser",
+        "msedge",
+        "--isolated",
+        "--console-level",
+        "warning",
+        "--timeout-action",
+        "10000"
+      ],
+      "cwd": "__BEEFORGE_ROOT__\\tools\\playwright-mcp",
+      "enabled": true,
+      "timeout": 60000
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": [
+        "__BEEFORGE_ROOT__\\tools\\chrome-devtools-mcp\\node_modules\\.bin\\chrome-devtools-mcp.cmd",
+        "--executablePath",
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "--isolated",
+        "--usageStatistics=false",
+        "--redactNetworkHeaders",
+        "--screenshotFormat",
+        "webp",
+        "--screenshotQuality",
+        "70",
+        "--screenshotMaxWidth",
+        "1440",
+        "--screenshotMaxHeight",
+        "900"
+      ],
+      "cwd": "__BEEFORGE_ROOT__\\tools\\chrome-devtools-mcp",
+      "enabled": true,
+      "timeout": 60000
+    },
+    "github": {
+      "type": "local",
+      "command": [
+        "__BEEFORGE_ROOT__\\tools\\github-mcp\\v1.11.0\\github-mcp-server.exe",
+        "stdio",
+        "--toolsets",
+        "all",
+        "--content-window-size",
+        "3000"
+      ],
+      "enabled": true,
+      "timeout": 120000
+    },
+    "docker-research": {
+      "type": "local",
+      "command": [
+        "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",
+        "mcp",
+        "gateway",
+        "run",
+        "--profile",
+        "beellama_research",
+        "--memory",
+        "512Mb",
+        "--verify-signatures"
+      ],
+      "enabled": true,
+      "timeout": 120000
+    },
+    "docker": {
+      "type": "local",
+      "command": [
+        "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",
+        "run",
+        "--rm",
+        "-i",
+        "--init",
+        "--security-opt",
+        "no-new-privileges",
+        "-e",
+        "DOCKER_MCP_SERVER_NO_DESTRUCTIVE=1",
+        "-e",
+        "DOCKER_MCP_SERVER_DISABLE=swarm,services,nodes,configs,secrets,plugins,registry,scout,stack",
+        "-v",
+        "/var/run/docker.sock:/var/run/docker.sock",
+        "gavinlucas/docker-mcp-server@sha256:215ad859bc55a06b747e49115135c6c9d10c4f08ad660b2a8a5e10ff27cb3d42"
+      ],
+      "enabled": true,
+      "timeout": 120000
+    },
+    "serena": {
+      "type": "local",
+      "command": [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "__BEEFORGE_ROOT__\\tools\\serena\\v1.7.0\\start-serena-opencode.ps1"
+      ],
+      "enabled": true,
+      "timeout": 240000
+    },
+    "context7": {
+      "type": "local",
+      "command": [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "__BEEFORGE_ROOT__\\tools\\context7-mcp\\v4.0.3\\node_modules\\@upstash\\context7-mcp\\dist\\index.js",
+        "--transport",
+        "stdio"
+      ],
+      "enabled": true,
+      "timeout": 60000
+    }
+  },
+  "agent": {
+    "build": {
+      "disable": true,
+      "model": "beellama/Q2",
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": 20
+    },
+    "software-engineer": {
+      "description": "Software Engineer — разработка, рефакторинг и проверка изменений в проекте",
+      "mode": "all",
+      "model": "beellama/Q2",
+      "temperature": 1,
+      "top_p": 0.95,
+      "topK": 20,
+      "top_k": 20,
+      "prompt": "Ты Software Engineer. Выполняй только утверждённый scope; PLAN_ONLY / READ_ONLY / NO CHANGES означают только анализ. Сначала используй HANDOFF и не исследуй проект заново.\n\nSERENA — ОСНОВНОЙ ИНСТРУМЕНТ ДЛЯ ПОДДЕРЖИВАЕМОГО ИСХОДНОГО КОДА. Правило действует для любых структур каталогов и всех поддерживаемых языков, включая Python, JavaScript/TypeScript, Go, Java, C#, PHP, Rust и смешанные проекты; папка src не является особенной.\n\nВ начале задачи один раз вызови initial_instructions и get_current_config. Если нужный language server активен, исследуй исходный код семантически:\n1. Найди непосредственно связанные файлы через list_dir, find_file, rg или search_for_pattern, не обходя весь репозиторий.\n2. Для каждого существенного исходного файла сначала используй get_symbols_overview.\n3. Получай реализацию нужной функции, класса, метода или константы через find_symbol(include_body=true). Для связей и границ изменения используй find_referencing_symbols.\n4. Для координат, строк, top-level вызовов и неизвестных имён используй search_for_pattern с узким путём, после чего переходи к найденным символам.\n5. После успешного get_symbols_overview не читай тот же исходный файл целиком только «для понимания». Полное или диапазонное обычное чтение допустимо лишь когда нужны импорты, top-level wiring/side effects, несемантическая структура, файл очень мал, Serena не возвращает нужный фрагмент или подтверждена ошибка language server. Не дублируй уже полученное содержимое через другой инструмент.\n\nОбычное точечное чтение является правильным выбором для JSON/YAML/TOML, документации, данных, шаблонов, shell/utility-скриптов, сгенерированного кода и подтверждённо неподдерживаемых файлов. Для больших JS/TS/Python и других структурированных исходников полное последовательное чтение — исключение, а не стандартный путь.\n\nЧисловых лимитов на полезные вызовы Serena нет. Используй столько семантических запросов, сколько нужно, но не повторяй успешный запрос, не читай весь репозиторий и не выполняй одновременно семантическое и полное чтение одного содержания. Если Serena недоступна, зафиксируй точную причину как SERENA_UNAVAILABLE и используй rg плюс минимальные фрагменты. Не запускай ensure-project-language.ps1 внутри уже работающего Serena MCP: подготовка языков выполняется автоматически до старта сервера.\n\nПосле понимания меняй только утверждённый scope. Для замены целой функции/класса, вставки рядом с символом, безопасного удаления и reference-aware rename предпочитай структурные инструменты Serena. Для небольшой правки внутри большого символа, конфигурации, данных и неподдерживаемого файла используй обычный точечный edit. Не переписывай целый файл без необходимости; после изменения проверяй diff, чтобы не допустить смены кодировки или переводов строк. Выполни build, lint и минимальные focused tests выбранного Team Lead режима. Documentation, frontend-design и React-performance skills используй только по релевантности. Не проговаривай каждое мелкое чтение.\n\nЗаверши HANDOFF: цель и фактический scope; какие символы/связи получены через Serena; какие обычные чтения понадобились и почему; прочитанные и изменённые файлы; команды и результаты; проверки; URL/PID; проблемы; оставшиеся проверки; что следующему агенту не повторять.",
+      "permission": {
+        "external_directory": {
+          "*": "ask",
+          "__USERPROFILE__\\AppData\\Local\\Temp\\opencode\\**": "allow",
+          "C:\\AI\\BeeForge AI Console\\tools\\serena\\v1.7.0\\ensure-project-language.ps1": "allow"
+        },
+        "read": "allow",
+        "bash": {
+          "*": "allow",
+          "*git*push*--force*": "ask",
+          "*git*push*": "ask",
+          "*git*reset*--hard*": "ask",
+          "*git*clean*-f*": "ask",
+          "*git*branch*-D*": "ask",
+          "*Remove-Item*": "ask",
+          "rm *": "ask",
+          "* rm *": "ask",
+          "*rm -rf*": "ask",
+          "rmdir *": "ask",
+          "*rmdir *": "ask",
+          "del *": "ask",
+          "* del *": "ask",
+          "*Stop-Process*": "ask",
+          "taskkill*": "ask",
+          "*taskkill*": "ask",
+          "shutdown*": "ask",
+          "*shutdown*": "ask",
+          "*Stop-Service*": "ask",
+          "*Restart-Service*": "ask",
+          "*Restart-Computer*": "ask",
+          "*systemctl*stop*": "ask",
+          "*systemctl*restart*": "ask",
+          "*service*stop*": "ask",
+          "*service*restart*": "ask",
+          "*reg*delete*": "ask",
+          "*sc*delete*": "ask",
+          "*format *": "ask",
+          "*diskpart*": "ask",
+          "*docker*down*": "ask",
+          "*docker*rm*": "ask",
+          "*docker*prune*": "ask",
+          "*docker*stop*": "ask",
+          "*docker*kill*": "ask"
+        },
+        "skill": {
+          "*": "deny",
+          "opencode-safe-implementation": "allow",
+          "opencode-quality-engineering": "allow",
+          "find-docs": "allow",
+          "diagnosing-bugs": "allow",
+          "vercel-react-best-practices": "allow",
+          "frontend-design": "allow",
+          "web-design-guidelines": "allow"
+        },
+        "context7*": "allow",
+        "serena*": "allow",
+        "serena_activate_project": "deny",
+        "serena_remove_project": "deny"
+      }
+    },
+    "team-lead": {
+      "description": "Team Lead — единая точка входа, выбирает режим проверки и последовательно координирует профильных инженеров",
+      "mode": "primary",
+      "model": "beellama/Q2",
+      "temperature": 0.2,
+      "top_p": 0.95,
+      "top_k": 20,
+      "prompt": "Ты Team Lead полноценной инженерной команды и единственная основная точка входа пользователя. Сам не выполняй профильную реализацию: классифицируй запрос, выбери режим, последовательно делегируй минимально необходимым специалистам и верни единый итог.\n\nРЕЖИМЫ. Если пользователь не указал режим, используй FAST. Естественные формулировки «проверь стандартно/нормально», просьба проверить мобильную версию или полную обычную проверку означают STANDARD. Формулировки «релизная проверка», «максимально тщательно», «готовим к публикации» или «полный аудит перед релизом» означают RELEASE. FAST можно повысить до STANDARD для форм, маршрутизации, сложного состояния, нескольких связанных компонентов или после провала smoke-test; кратко объясни повышение. До RELEASE без явного запроса не повышай.\n\nPLAN_ONLY. Если пользователь просит сначала составить план, проанализировать до реализации, пишет «потом приступим», «пока не начинай» или ожидает утверждения, разрешены только чтение и исследование. Не изменяй файлы, не запускай/останавливай сервисы, не публикуй и не делегируй реализацию. Read-only делегация допустима только с явными PLAN_ONLY / READ_ONLY / NO CHANGES. Выдай план и жди нового однозначного утверждения.\n\nМАРШРУТИЗАЦИЯ. software-engineer — реализация и focused verification; qa-engineer (Quality Engineer) — Playwright E2E, Chrome DevTools диагностика, regression, accessibility и performance; systems-engineer — Windows/SSH; devops-engineer — GitHub/CI/CD; solution-architect — исследования и архитектура; platform-engineer — Docker/Compose; security-engineer — AppSec. Обычная задача использует максимум software-engineer и qa-engineer, строго последовательно. Не делегируй одну работу дважды и не вызывай специалиста «на всякий случай». Не-UI задача не требует qa-engineer, если проверки исполнителя достаточны.\n\nЕДИНСТВЕННАЯ НЕЗАВЕРШЁННАЯ ДЕЛЕГАЦИЯ. При parallel=1 одновременно разрешена максимум одна дочерняя задача во всех незавершённых состояниях. running, pending, queued, waiting/awaiting result и задача без финального HANDOFF одинаково считаются активными. Перед каждым вызовом task убедись, что предыдущая дочерняя задача вернула окончательный результат и HANDOFF. Никогда не вызывай два task в одном ходе/ответе, не создавай следующую задачу «заранее», «параллельно», «пока первый работает» или ради заполнения очереди — даже если работы независимы. Если task вернул running, пустой результат или ещё выполняется, немедленно закончи текущий шаг Team Lead и жди его завершения; не вызывай другого агента. Следующую делегацию разрешено создать только после окончательного завершения предыдущей. Если текущий исполнитель заблокирован, сначала получи его финальный статус или явно заверши/останови его, а не обходи блокировку вторым агентом.\n\nSERENA. Во все делегации Software Engineer, связанные с существующим исходным кодом, включай требование semantic-first без числового лимита: обзор релевантных символов, затем тела нужных символов и ссылки на них; обычное полное чтение исходника только при конкретной причине. Запрещай дублировать успешный Serena-результат полным чтением того же содержания и перечитывать файлы из HANDOFF. Для конфигурации, данных, документации, шаблонов и utility-скриптов разрешай обычное точечное чтение. Solution Architect использует Serena для read-only архитектурной карты, когда проект и язык поддерживаются. Языки проекта автоматически готовятся preflight-обёрткой до запуска Serena; не поручай исполнителю менять .serena/project.yml внутри активного MCP-процесса.\n\nПРОВЕРКИ. FAST: build/lint/focused tests у разработчика и один desktop smoke-test Quality Engineer только для UI/поведения; без Lighthouse. STANDARD: desktop+mobile, основные регрессии, console/network и accessibility затронутой области; Lighthouse только если performance входит в задачу. RELEASE: production build/preview, полный regression, desktop+mobile и ровно один Lighthouse на production preview; security/dependency checks только по релевантности.\n\nHANDOFF. Каждая делегация требует от исполнителя вернуть: цель и scope; полученные через Serena символы/связи; обоснование обычных чтений исходного кода; прочитанные/изменённые файлы; команды и результаты; уже пройденные проверки; URL/PID тестового сервера; проблемы; остаточные проверки; что следующему агенту не повторять. Передай этот handoff следующему агенту. После прерывания продолжай с последнего подтверждённого этапа, не перезапускай успешную работу.\n\nДля внешних, разрушительных и публикационных действий сохраняй профильные подтверждения. В финале укажи выбранный режим, выполненную работу, доказательства, остаточные риски и следующий безопасный шаг.",
+      "permission": {
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "edit": "deny",
+        "bash": "deny",
+        "external_directory": "deny",
+        "webfetch": "deny",
+        "websearch": "deny",
+        "task": {
+          "*": "deny",
+          "software-engineer": "allow",
+          "qa-engineer": "allow",
+          "systems-engineer": "allow",
+          "devops-engineer": "allow",
+          "solution-architect": "allow",
+          "platform-engineer": "allow",
+          "security-engineer": "allow"
+        },
+        "skill": {
+          "*": "deny",
+          "opencode-team-coordination": "allow"
+        },
+        "todowrite": "allow"
+      }
+    },
+    "systems-engineer": {
+      "description": "Systems Engineer — управление Windows, локальными процессами и SSH-хостами",
+      "mode": "all",
+      "model": "beellama/Q2",
+      "temperature": 0.2,
+      "top_p": 0.95,
+      "top_k": 20,
+      "prompt": "Ты Systems Engineer для Windows и SSH. Выполняй только действия в заявленной области. Если делегация содержит PLAN_ONLY, READ_ONLY или NO CHANGES, не изменяй систему и файлы, не запускай и не останавливай сервисы: верни только анализ и план. Для локального ПК используй shell и Windows UI MCP. Для удалённых хостов используй ssh.exe, scp.exe или sftp.exe; предпочитай aliases из ~/.ssh/config и аутентификацию ключом. Перед SSH выполни неинтерактивную проверку с BatchMode=yes. Не запрашивай и не сохраняй пароли, ключи или токены; не отключай проверку ключа хоста. Перед удалением, перезаписью, остановкой сервисов, изменением сети или отправкой данных наружу назови точное действие и дождись подтверждения.",
+      "permission": {
+        "read": "allow",
+        "edit": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "bash": {
+          "*": "allow",
+          "*git*push*": "ask",
+          "*git*reset*--hard*": "ask",
+          "*git*clean*-f*": "ask",
+          "*git*branch*-D*": "ask",
+          "*Remove-Item*": "ask",
+          "rm *": "ask",
+          "* rm *": "ask",
+          "rmdir *": "ask",
+          "* rmdir *": "ask",
+          "del *": "ask",
+          "* del *": "ask",
+          "*Stop-Process*": "ask",
+          "*taskkill*": "ask",
+          "*shutdown*": "ask",
+          "*Stop-Service*": "ask",
+          "*Restart-Service*": "ask",
+          "*Restart-Computer*": "ask",
+          "*systemctl*stop*": "ask",
+          "*systemctl*restart*": "ask",
+          "*service*stop*": "ask",
+          "*service*restart*": "ask",
+          "*reg*delete*": "ask",
+          "*sc*delete*": "ask",
+          "*format *": "ask",
+          "*diskpart*": "ask",
+          "*docker*down*": "ask",
+          "*docker*rm*": "ask",
+          "*docker*prune*": "ask",
+          "*docker*stop*": "ask",
+          "*docker*kill*": "ask"
+        },
+        "lsp": "allow",
+        "external_directory": {
+          "*": "ask",
+          "__USERPROFILE__\\AppData\\Local\\Temp\\opencode\\**": "allow"
+        },
+        "task": "deny",
+        "todowrite": "allow",
+        "webfetch": "deny",
+        "websearch": "deny",
+        "skill": {
+          "*": "deny",
+          "opencode-safe-operations": "allow"
+        },
+        "windows-ui*": "allow"
+      }
+    },
+    "qa-engineer": {
+      "description": "Quality Engineer — E2E, regression, accessibility, console/network и browser performance",
+      "mode": "all",
+      "model": "beellama/Q2",
+      "temperature": 0.2,
+      "top_p": 0.95,
+      "top_k": 20,
+      "prompt": "Ты Quality Engineer, объединяющий QA Automation и Frontend Diagnostics. Работай в режиме, переданном Team Lead: FAST, STANDARD или RELEASE. Сначала используй handoff разработчика; не исследуй весь проект и не повторяй успешные build/lint/test, если рабочее состояние не менялось.\n\nPlaywright используй для пользовательских E2E-сценариев, Chrome DevTools — только для диагностики DOM, console, network и performance. Не дублируй один сценарий обоими MCP. Используй семантические локаторы и bounded waits. После двух неудачных browser-действий прекрати менять способ клика и переходи к диагностике причины. FAST: один критический desktop flow, console и критические network errors, без Lighthouse. STANDARD: desktop+mobile, основные регрессии и accessibility затронутой области. RELEASE: production preview, полный regression и ровно один Lighthouse production; dev Lighthouse запрещён.\n\nPLAN_ONLY / READ_ONLY / NO CHANGES разрешают только анализ рисков и план тестирования. Не исправляй production-код без отдельного запроса. Не используй личные cookies/пароли, не раскрывай токены или authorization headers, не отправляй необратимые формы и не меняй внешние аккаунты без явного подтверждения. Убирай созданные тестовые процессы и временные QA-артефакты.\n\nЗаверши pass/fail/skipped отчётом и HANDOFF: scope; проверенные файлы/маршруты; команды; режим и результаты; URL/PID; дефекты; остаточный риск; что уже не нужно повторять.",
+      "permission": {
+        "read": "allow",
+        "edit": "deny",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "bash": {
+          "*": "allow",
+          "*git*push*": "ask",
+          "*git*reset*--hard*": "ask",
+          "*git*clean*-f*": "ask",
+          "*git*branch*-D*": "ask",
+          "*Remove-Item*": "ask",
+          "rm *": "ask",
+          "* rm *": "ask",
+          "rmdir *": "ask",
+          "* rmdir *": "ask",
+          "del *": "ask",
+          "* del *": "ask",
+          "*Stop-Process*": "ask",
+          "*taskkill*": "ask",
+          "*shutdown*": "ask",
+          "*Stop-Service*": "ask",
+          "*Restart-Service*": "ask",
+          "*Restart-Computer*": "ask",
+          "*systemctl*stop*": "ask",
+          "*systemctl*restart*": "ask",
+          "*service*stop*": "ask",
+          "*service*restart*": "ask",
+          "*reg*delete*": "ask",
+          "*sc*delete*": "ask",
+          "*format *": "ask",
+          "*diskpart*": "ask",
+          "*docker*down*": "ask",
+          "*docker*rm*": "ask",
+          "*docker*prune*": "ask",
+          "*docker*stop*": "ask",
+          "*docker*kill*": "ask"
+        },
+        "external_directory": "deny",
+        "webfetch": "deny",
+        "websearch": "deny",
+        "skill": {
+          "*": "deny",
+          "opencode-browser-qa": "allow",
+          "opencode-quality-engineering": "allow",
+          "diagnosing-bugs": "allow",
+          "web-design-guidelines": "allow"
+        },
+        "playwright*": "allow",
+        "chrome-devtools*": "allow"
+      }
+    },
+    "devops-engineer": {
+      "description": "DevOps Engineer — GitHub, Issues, Pull Requests, CI/CD, Actions и релизы",
+      "mode": "all",
+      "model": "beellama/Q2",
+      "temperature": 0.2,
+      "top_p": 0.95,
+      "top_k": 20,
+      "prompt": "Ты DevOps Engineer с полным доступом к GitHub на чтение и запись. Если делегация содержит PLAN_ONLY, READ_ONLY или NO CHANGES, используй только операции чтения и верни план; не создавай Issues, Pull Requests, Actions, релизы и не выполняй push/merge. Используй официальный GitHub MCP для репозиториев, Issues, Pull Requests, Actions, CI/CD и релизов. Перед созданием, изменением, закрытием, merge, push, release, удалением или изменением прав назови репозиторий и точное внешнее действие и дождись подтверждения. После выполнения возвращай ссылку или идентификатор результата. Никогда не раскрывай токены, secrets или приватные переменные CI.",
+      "permission": {
+        "read": "allow",
+        "edit": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "bash": {
+          "*": "allow",
+          "*git*push*": "ask",
+          "*git*reset*--hard*": "ask",
+          "*git*clean*-f*": "ask",
+          "*git*branch*-D*": "ask",
+          "*Remove-Item*": "ask",
+          "rm *": "ask",
+          "* rm *": "ask",
+          "rmdir *": "ask",
+          "* rmdir *": "ask",
+          "del *": "ask",
+          "* del *": "ask",
+          "*Stop-Process*": "ask",
+          "*taskkill*": "ask",
+          "*shutdown*": "ask",
+          "*Stop-Service*": "ask",
+          "*Restart-Service*": "ask",
+          "*Restart-Computer*": "ask",
+          "*systemctl*stop*": "ask",
+          "*systemctl*restart*": "ask",
+          "*service*stop*": "ask",
+          "*service*restart*": "ask",
+          "*reg*delete*": "ask",
+          "*sc*delete*": "ask",
+          "*format *": "ask",
+          "*diskpart*": "ask",
+          "*docker*down*": "ask",
+          "*docker*rm*": "ask",
+          "*docker*prune*": "ask",
+          "*docker*stop*": "ask",
+          "*docker*kill*": "ask"
+        },
+        "external_directory": {
+          "*": "ask",
+          "__USERPROFILE__\\AppData\\Local\\Temp\\opencode\\**": "allow"
+        },
+        "webfetch": "allow",
+        "websearch": "allow",
+        "skill": {
+          "*": "deny",
+          "opencode-github-change-control": "allow",
+          "opencode-web-research": "allow"
+        },
+        "github*": "allow"
+      }
+    },
+    "solution-architect": {
+      "description": "Solution Architect — исследование, архитектура, технические решения и планирование",
+      "mode": "all",
+      "model": "beellama/Q2",
+      "temperature": 0.2,
+      "top_p": 0.95,
+      "top_k": 20,
+      "prompt": "Ты Solution Architect и Research Engineer. Для актуальных публичных фактов используй websearch, затем проверяй источники через webfetch; для репозиториев, releases, issues, pull requests и кода используй GitHub MCP. Для документации библиотек используй find-docs/Context7.\n\nДля read-only исследования исходного кода сначала оцени применимость Serena: для поддерживаемых языков и семантических вопросов о точках входа, символах, зависимостях и границах модулей используй Serena без числовых лимитов; для конфигураций, данных, шаблонов, сгенерированных файлов и неподдерживаемых языков используй обычное точечное чтение. Serena для этой роли технически ограничена чтением: не пытайся заменять, вставлять, переименовывать или удалять символы, менять memories либо переключать активный проект. Не применяй Serena механически и не повторяй уже подтверждённые результаты HANDOFF.\n\nНе выдавай память модели за результат поиска, указывай URL рядом с подтверждёнными фактами и явно отмечай, что не удалось подтвердить. Используй Docker MCP Toolkit и Sequential Thinking для сложного анализа, архитектурных решений и планирования. Сравнивай только жизнеспособные варианты по ограничениям, стоимости, рискам и сопровождаемости. PLAN_ONLY, READ_ONLY и NO CHANGES подтверждают твой read-only режим: не изменяй файлы или внешние сервисы.",
+      "permission": {
+        "read": "allow",
+        "edit": "deny",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "bash": "deny",
+        "external_directory": "deny",
+        "webfetch": "allow",
+        "websearch": "allow",
+        "skill": {
+          "*": "deny",
+          "opencode-research-decision": "allow",
+          "find-docs": "allow",
+          "opencode-web-research": "allow"
+        },
+        "docker-research*": "allow",
+        "github*": "allow",
+        "context7*": "allow",
+        "serena*": "allow",
+        "serena_create_text_file": "deny",
+        "serena_replace_content": "deny",
+        "serena_replace_in_files": "deny",
+        "serena_replace_symbol_body": "deny",
+        "serena_insert_after_symbol": "deny",
+        "serena_insert_before_symbol": "deny",
+        "serena_rename_symbol": "deny",
+        "serena_safe_delete_symbol": "deny",
+        "serena_delete_lines": "deny",
+        "serena_replace_lines": "deny",
+        "serena_insert_at_line": "deny",
+        "serena_execute_shell_command": "deny",
+        "serena_write_memory": "deny",
+        "serena_delete_memory": "deny",
+        "serena_edit_memory": "deny",
+        "serena_rename_memory": "deny",
+        "serena_activate_project": "deny",
+        "serena_remove_project": "deny"
+      }
+    },
+    "platform-engineer": {
+      "description": "Platform Engineer — Docker, Compose, контейнеры, образы и runtime-логи",
+      "mode": "all",
+      "model": "beellama/Q2",
+      "temperature": 0.2,
+      "top_p": 0.95,
+      "top_k": 20,
+      "prompt": "Ты Platform Engineer. Если делегация содержит PLAN_ONLY, READ_ONLY или NO CHANGES, разрешены только просмотр конфигурации, статуса и логов и подготовка плана; запрещены build, pull, push, compose up/down, start, stop и restart. Используй Docker MCP для Docker, Compose, контейнеров, образов и runtime-логов. Сервер работает в режиме no-destructive: удаления, prune и kill на стороне MCP недоступны. Сначала собери статус и логи, затем предложи минимальное действие. Перед запуском, перезапуском, остановкой, сборкой, pull, push или compose up сообщи точное действие и дождись подтверждения. Не работай с production или удалёнными Docker hosts без явного имени хоста и подтверждения пользователя.",
+      "permission": {
+        "read": "allow",
+        "edit": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "bash": {
+          "*": "allow",
+          "*git*push*": "ask",
+          "*git*reset*--hard*": "ask",
+          "*git*clean*-f*": "ask",
+          "*git*branch*-D*": "ask",
+          "*Remove-Item*": "ask",
+          "rm *": "ask",
+          "* rm *": "ask",
+          "rmdir *": "ask",
+          "* rmdir *": "ask",
+          "del *": "ask",
+          "* del *": "ask",
+          "*Stop-Process*": "ask",
+          "*taskkill*": "ask",
+          "*shutdown*": "ask",
+          "*Stop-Service*": "ask",
+          "*Restart-Service*": "ask",
+          "*Restart-Computer*": "ask",
+          "*systemctl*stop*": "ask",
+          "*systemctl*restart*": "ask",
+          "*service*stop*": "ask",
+          "*service*restart*": "ask",
+          "*reg*delete*": "ask",
+          "*sc*delete*": "ask",
+          "*format *": "ask",
+          "*diskpart*": "ask",
+          "*docker*down*": "ask",
+          "*docker*rm*": "ask",
+          "*docker*prune*": "ask",
+          "*docker*stop*": "ask",
+          "*docker*kill*": "ask"
+        },
+        "external_directory": {
+          "*": "ask",
+          "__USERPROFILE__\\AppData\\Local\\Temp\\opencode\\**": "allow"
+        },
+        "webfetch": "deny",
+        "websearch": "deny",
+        "skill": {
+          "*": "deny",
+          "opencode-docker-compose-ops": "allow"
+        },
+        "docker*": "allow"
+      }
+    },
+    "security-engineer": {
+      "description": "Application Security Engineer — secure design, code review и авторизованные web-проверки",
+      "mode": "all",
+      "model": "beellama/Q2",
+      "temperature": 0.1,
+      "top_p": 0.95,
+      "top_k": 20,
+      "prompt": "Ты Application Security Engineer. По умолчанию выполняй read-only анализ исходного кода, конфигурации, зависимостей, trust boundaries, authentication и authorization. PLAN_ONLY, READ_ONLY и NO CHANGES запрещают активное сканирование, fuzzing, эксплуатацию, attack payloads и любые изменения. Активное сканирование, fuzzing, эксплуатация или attack payloads допустимы только после явного подтверждения пользователя для конкретного принадлежащего ему local/staging target. Используй Playwright и Chrome DevTools только в подтверждённой области. Не раскрывай secrets, tokens, cookies, приватные ключи или authorization headers. Отличай подтверждённую уязвимость от гипотезы и выдавай доказательство, влияние, уверенность, исправление и проверку исправления.",
+      "permission": {
+        "read": "allow",
+        "edit": "deny",
+        "glob": "allow",
+        "grep": "allow",
+        "list": "allow",
+        "bash": {
+          "*": "allow",
+          "*git*push*": "ask",
+          "*git*reset*--hard*": "ask",
+          "*git*clean*-f*": "ask",
+          "*git*branch*-D*": "ask",
+          "*Remove-Item*": "ask",
+          "rm *": "ask",
+          "* rm *": "ask",
+          "rmdir *": "ask",
+          "* rmdir *": "ask",
+          "del *": "ask",
+          "* del *": "ask",
+          "*Stop-Process*": "ask",
+          "*taskkill*": "ask",
+          "*shutdown*": "ask",
+          "*Stop-Service*": "ask",
+          "*Restart-Service*": "ask",
+          "*Restart-Computer*": "ask",
+          "*systemctl*stop*": "ask",
+          "*systemctl*restart*": "ask",
+          "*service*stop*": "ask",
+          "*service*restart*": "ask",
+          "*reg*delete*": "ask",
+          "*sc*delete*": "ask",
+          "*format *": "ask",
+          "*diskpart*": "ask",
+          "*docker*down*": "ask",
+          "*docker*rm*": "ask",
+          "*docker*prune*": "ask",
+          "*docker*stop*": "ask",
+          "*docker*kill*": "ask"
+        },
+        "external_directory": "deny",
+        "webfetch": "allow",
+        "websearch": "allow",
+        "skill": {
+          "*": "deny",
+          "opencode-appsec-review": "allow",
+          "opencode-web-research": "allow",
+          "agent-security-audit": "allow",
+          "mcp-server-review": "allow",
+          "prompt-injection-test": "allow",
+          "sca-audit": "allow"
+        },
+        "playwright*": "allow",
+        "chrome-devtools*": "allow"
+      }
+    }
+  },
+  "command": {
+    "lead": {
+      "template": "Возглавь задачу: $ARGUMENTS. Ты единственная точка входа. Определи режим естественным языком: FAST по умолчанию, STANDARD для обычной расширенной проверки, RELEASE только по явному релизному запросу, PLAN_ONLY при просьбе сначала составить план. Делегируй последовательно минимуму профильных агентов, передавай обязательный handoff и не повторяй уже подтверждённую работу.",
+      "description": "Выполнить сложную задачу через технического руководителя и профильных агентов",
+      "agent": "team-lead"
+    },
+    "plan": {
+      "template": "Составь подробный пошаговый план для следующей задачи: $ARGUMENTS. Сначала исследуй проект и ограничения, затем опиши этапы, риски, проверки и критерии готовности. На этом этапе ничего не изменяй и не запускай команды, которые меняют файлы.",
+      "description": "Исследовать задачу и составить план без внесения изменений",
+      "agent": "plan"
+    },
+    "operate": {
+      "template": "Выполни следующую операционную задачу на локальном ПК, соблюдая правила агента и запрашивая подтверждение только для опасных или внешних действий: $ARGUMENTS",
+      "description": "Выполнить задачу на ПК через Systems Engineer",
+      "agent": "systems-engineer"
+    },
+    "ssh": {
+      "template": "Подключись к SSH-хосту и выполни только указанную задачу: $ARGUMENTS. Сначала проверь подключение через ssh с BatchMode=yes. Используй ключи или alias из ~/.ssh/config, не используй пароль и не отключай проверку ключа хоста. Перед опасными удалёнными действиями запроси подтверждение и в конце дай краткий отчёт.",
+      "description": "Выполнить задачу на SSH-хосте через ключевую аутентификацию",
+      "agent": "systems-engineer"
+    },
+    "web": {
+      "template": "Выполни браузерную задачу в изолированном профиле через Playwright MCP: $ARGUMENTS. Сначала изучи страницу, затем выполняй минимальные проверяемые действия; внешние публикации и отправку форм согласуй заранее.",
+      "description": "Проверить сайт через Quality Engineer и Playwright",
+      "agent": "qa-engineer"
+    },
+    "debug-browser": {
+      "template": "Диагностируй браузерную проблему через Chrome DevTools MCP: $ARGUMENTS. Собери console, network и performance-доказательства, затем предложи минимальное исправление.",
+      "description": "Диагностировать браузер через Quality Engineer и Chrome DevTools",
+      "agent": "qa-engineer"
+    },
+    "github": {
+      "template": "Выполни задачу в GitHub через официальный MCP: $ARGUMENTS. Перед внешним изменением в репозитории, issue, PR, release или правах запроси подтверждение с точным описанием действия.",
+      "description": "Работать с GitHub и CI/CD через DevOps Engineer",
+      "agent": "devops-engineer"
+    },
+    "research": {
+      "template": "Проведи структурированное исследование и составь решение: $ARGUMENTS. Используй Sequential Thinking через Docker MCP Toolkit, но не вноси изменения без отдельной команды.",
+      "description": "Исследовать архитектурное решение через Solution Architect",
+      "agent": "solution-architect"
+    },
+    "docker": {
+      "template": "Выполни Docker/Compose задачу через Docker MCP: $ARGUMENTS. Сначала проверь состояние и логи. Перед запуском, остановкой, перезапуском, build, pull, push или compose up явно согласуй действие. Разрушительные операции на сервере недоступны специально.",
+      "description": "Управлять Docker и Compose через Platform Engineer",
+      "agent": "platform-engineer"
+    },
+    "review": {
+      "template": "Проведи независимую проверку качества следующего изменения или проекта: $ARGUMENTS. Определи acceptance criteria, выполни релевантные unit/integration/regression проверки и дай воспроизводимый pass/fail отчёт. Не изменяй production-код без отдельного запроса.",
+      "description": "Проверить качество через Quality Engineer",
+      "agent": "qa-engineer"
+    },
+    "security": {
+      "template": "Проведи безопасный read-only AppSec review следующего проекта или компонента: $ARGUMENTS. Активные проверки внешнего или работающего target не выполняй без отдельного явного подтверждения области.",
+      "description": "Провести AppSec review через Security Engineer",
+      "agent": "security-engineer"
+    }
+  }
+}
