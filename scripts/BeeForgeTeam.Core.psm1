@@ -279,6 +279,15 @@ function Write-BeeTeamConfig($Config,[string]$Reason='save') {
                         Set-BeeObjectProperty $accessState 'agents' (@($accessState.agents)+@($snapshot));$known[[string]$agentProperty.Name]=$snapshot
                     }
                 }
+                if($Reason-in@('save-agent','new-agent','clone-agent','delete-agent','research-role-defaults')){
+                    $mcpIds=@($(if($Config.mcp){$Config.mcp.PSObject.Properties.Name}else{@()}))
+                    foreach($agentProperty in @($Config.agent.PSObject.Properties)){
+                        $snapshot=$known[[string]$agentProperty.Name]
+                        $updated=Merge-BeePermissionAssignments (Get-BeeObjectProperty $snapshot 'permission' $null) (Get-BeeObjectProperty $agentProperty.Value 'permission' $null) $mcpIds
+                        Set-BeeObjectProperty $snapshot 'permission' $updated
+                        if($updated-and@($updated.PSObject.Properties).Count){Set-BeeObjectProperty $snapshot 'permissionExisted' $true}
+                    }
+                }
                 Set-BeeObjectProperty $Config 'permission' (New-BeeFullAccessPermission (Get-BeeObjectProperty $accessState 'globalPermission' $null))
                 foreach($agentProperty in @($Config.agent.PSObject.Properties)){
                     $snapshot=$known[[string]$agentProperty.Name]
@@ -316,16 +325,61 @@ function Write-BeeFullAccessAudit([string]$Action,[string]$Source,[bool]$Succeed
 
 function New-BeeFullAccessPermission($OriginalPermission=$null) {
     $permission=[ordered]@{'*'='allow'}
+    $skills=Get-BeeObjectProperty $OriginalPermission 'skill' $null
+    if($skills){
+        $skillPermission=[ordered]@{'*'='allow'}
+        foreach($rule in @($skills.PSObject.Properties)){
+            if($rule.Name-ne'*'-and[string]$rule.Value-eq'allow'){$skillPermission[$rule.Name]='allow'}
+        }
+        $permission['skill']=[pscustomobject]$skillPermission
+    }
+    if($OriginalPermission){
+        foreach($rule in @($OriginalPermission.PSObject.Properties)){
+            if($rule.Name-in@('*','skill','task')){continue}
+            if([string]$rule.Value-eq'allow'){$permission[$rule.Name]='allow'}
+        }
+    }
     $task=Get-BeeObjectProperty $OriginalPermission 'task' $null
     if($null-ne$task){$permission['task']=Copy-BeeJsonValue $task}
     return [pscustomobject]$permission
 }
 
+function Merge-BeePermissionAssignments($OriginalPermission,$CurrentPermission,[string[]]$McpIds) {
+    $merged=$(if($OriginalPermission){Copy-BeeJsonValue $OriginalPermission}else{[pscustomobject]@{}})
+    $currentSkills=Get-BeeObjectProperty $CurrentPermission 'skill' $null
+    if($currentSkills){
+        $mergedSkills=Get-BeeObjectProperty $merged 'skill' $null
+        if(-not$mergedSkills){$mergedSkills=[pscustomobject]@{'*'='deny'};Set-BeeObjectProperty $merged 'skill' $mergedSkills}
+        foreach($rule in @($mergedSkills.PSObject.Properties)){
+            if($rule.Name-ne'*'-and[string]$rule.Value-eq'allow'){Remove-BeeObjectProperty $mergedSkills $rule.Name}
+        }
+        foreach($rule in @($currentSkills.PSObject.Properties)){
+            if($rule.Name-ne'*'-and[string]$rule.Value-eq'allow'){Set-BeeObjectProperty $mergedSkills $rule.Name 'allow'}
+        }
+    }
+    foreach($mcpId in @($McpIds)){
+        $ruleName="$mcpId*"
+        Remove-BeeObjectProperty $merged $ruleName
+        $currentRule=$(if($CurrentPermission){$CurrentPermission.PSObject.Properties[$ruleName]}else{$null})
+        if($currentRule-and[string]$currentRule.Value-eq'allow'){Set-BeeObjectProperty $merged $ruleName 'allow'}
+    }
+    $currentTask=Get-BeeObjectProperty $CurrentPermission 'task' $null
+    if($null-ne$currentTask){Set-BeeObjectProperty $merged 'task' (Copy-BeeJsonValue $currentTask)}
+    return $merged
+}
+
 function Test-BeePermissionFullAccess($Permission) {
     if(-not$Permission){return $false}
     $rules=@($Permission.PSObject.Properties)
-    $unexpected=@($rules|Where-Object{$_.Name-notin@('*','task')})
-    return $unexpected.Count-eq0-and$rules[0].Name-eq'*'-and[string]$rules[0].Value-eq'allow'
+    if(-not($rules.Count-and$rules[0].Name-eq'*'-and[string]$rules[0].Value-eq'allow')){return $false}
+    foreach($rule in @($rules|Where-Object{$_.Name-notin@('*','task')})){
+        if($rule.Name-eq'skill'){
+            $skillRules=@($rule.Value.PSObject.Properties)
+            if(-not($skillRules.Count-and$skillRules[0].Name-eq'*'-and[string]$skillRules[0].Value-eq'allow')){return $false}
+            if(@($skillRules|Where-Object{[string]$_.Value-ne'allow'}).Count){return $false}
+        }elseif([string]$rule.Value-ne'allow'){return $false}
+    }
+    return $true
 }
 
 function Test-BeeTaskRoutingMatches($Permission,$OriginalPermission) {
@@ -370,7 +424,7 @@ function Set-BeeFullAccess([bool]$Enabled,[string]$Source='BeeForge AI Console')
         if($Enabled){
             $current=Get-BeeFullAccessStatus
             $existingVersion=[int](Get-BeeObjectProperty $existingState 'version' 0)
-            if($current.Enabled-and$existingVersion-ge3){return $current}
+            if($current.Enabled-and$existingVersion-ge4){return $current}
             if($existingState-and[bool](Get-BeeObjectProperty $existingState 'enabled' $false)-and$existingState.PSObject.Properties['agents']){
                 $state=$existingState
                 $agentSnapshotCount=@($state.agents).Count
@@ -383,9 +437,9 @@ function Set-BeeFullAccess([bool]$Enabled,[string]$Source='BeeForge AI Console')
                     $agentSnapshots.Add([pscustomobject]@{id=[string]$agentProperty.Name;permissionExisted=$permissionExisted;permission=(Copy-BeeJsonValue $permission)})
                 }
                 $agentSnapshotCount=$agentSnapshots.Count
-                $state=[pscustomobject]@{version=3;enabled=$false;pending=$true;enabledAt=(Get-Date).ToString('o');source=$Source;globalPermissionExisted=$globalExisted;globalPermission=(Copy-BeeJsonValue (Get-BeeObjectProperty $config 'permission' $null));agents=$agentSnapshots.ToArray()}
+                $state=[pscustomobject]@{version=4;enabled=$false;pending=$true;enabledAt=(Get-Date).ToString('o');source=$Source;globalPermissionExisted=$globalExisted;globalPermission=(Copy-BeeJsonValue (Get-BeeObjectProperty $config 'permission' $null));agents=$agentSnapshots.ToArray()}
             }
-            Set-BeeObjectProperty $state 'version' 3;Set-BeeObjectProperty $state 'pending' $true;Set-BeeObjectProperty $state 'enabled' $false;Set-BeeObjectProperty $state 'source' $Source
+            Set-BeeObjectProperty $state 'version' 4;Set-BeeObjectProperty $state 'pending' $true;Set-BeeObjectProperty $state 'enabled' $false;Set-BeeObjectProperty $state 'source' $Source
             Write-BeeFullAccessState $state
             Set-BeeObjectProperty $config 'permission' (New-BeeFullAccessPermission (Get-BeeObjectProperty $state 'globalPermission' $null))
             $snapshots=@{};foreach($snapshot in @($state.agents)){$snapshots[[string]$snapshot.id]=$snapshot}
