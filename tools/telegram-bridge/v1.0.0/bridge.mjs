@@ -41,6 +41,7 @@ const recentNotifications = new Map();
 const deliveredProgress = new Map();
 const deliveredFinals = new Map();
 const deliveredFiles = new Map();
+const pendingMainProgress = new Map();
 const pendingCommands = new Map();
 const pendingMediaGroups = new Map();
 const queuedPrompts = [];
@@ -1128,6 +1129,44 @@ async function sendProgress(event, title) {
   await send(`${title}\nПроект: ${event.projectName}\n${source}: ${event.agent || "Team Lead"}\n\n${summary}`);
 }
 
+function scheduleMainProgress(event, delayMs = 900) {
+  const previous = pendingMainProgress.get(event.sessionId);
+  if (previous?.timer) clearTimeout(previous.timer);
+  const timer = setTimeout(() => {
+    pendingMainProgress.delete(event.sessionId);
+    void sendProgress(event, "📝 Обновление работы").catch((error) => audit("main_progress_send_failed", { sessionId: event.sessionId, error: error.message }));
+  }, delayMs);
+  timer.unref();
+  pendingMainProgress.set(event.sessionId, { timer, event });
+}
+
+function cancelMainProgress(sessionId) {
+  const pending = pendingMainProgress.get(sessionId);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pendingMainProgress.delete(sessionId);
+}
+
+function splitTelegramText(value, maxLength = 3800) {
+  const text = String(value || "");
+  if (!text) return [];
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > maxLength) {
+    const window = remaining.slice(0, maxLength + 1);
+    let splitAt = window.lastIndexOf("\n\n");
+    if (splitAt < Math.floor(maxLength * 0.55)) splitAt = window.lastIndexOf("\n");
+    if (splitAt < Math.floor(maxLength * 0.55)) splitAt = window.lastIndexOf(" ");
+    if (splitAt < Math.floor(maxLength * 0.55)) splitAt = maxLength;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt);
+    if (remaining.startsWith("\n\n")) remaining = remaining.slice(2);
+    else if (remaining.startsWith("\n") || remaining.startsWith(" ")) remaining = remaining.slice(1);
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
 async function sendTeamLeadVerdict(event) {
   const full = cleanText(event.finalText, 100000);
   if (!full) return;
@@ -1135,13 +1174,11 @@ async function sendTeamLeadVerdict(event) {
   if (deliveredFinals.get(event.sessionId) === hash) return;
   deliveredFinals.set(event.sessionId, hash);
   const header = `✅ Финальный отчёт Team Lead\nПроект: ${event.projectName}`;
-  const fullLimit = Math.max(1000, 3850 - header.length);
-  if (full.length <= fullLimit) {
-    await send(`${header}\n\n${full}`);
-    return;
+  const parts = splitTelegramText(full, 3700);
+  for (let index = 0; index < parts.length; index += 1) {
+    const partHeader = index === 0 ? header : `📄 Продолжение финального отчёта Team Lead · ${index + 1}/${parts.length}`;
+    await send(`${partHeader}\n\n${parts[index]}`);
   }
-  const summary = compactProgress(full) || cleanText(full, fullLimit - 160);
-  await send(`${header}\n\nℹ️ Полный ответ превышает лимит одного сообщения Telegram. Передаю главное:\n\n${cleanText(summary, fullLimit - 120)}`);
 }
 
 function mainMenuKeyboard() {
@@ -1284,7 +1321,10 @@ async function handleEvent(event) {
       if (!muted && config.notifyDelegation && firstNotification(`${event.sessionId}:delegate:${event.agent}:${event.detail}`)) await send(`👤 Team Lead назначил: ${cleanText(event.agent || "специалист")}\nПроект: ${instance.projectName}\n${cleanText(event.detail, 800)}`);
       break;
     case "assistant_update":
-      if (!muted) await sendProgress(event, "📝 Обновление работы");
+      if (!muted) {
+        if (event.parentID) await sendProgress(event, "📝 Обновление работы");
+        else scheduleMainProgress(event);
+      }
       await sendEventAttachments(event, instance);
       break;
     case "compaction_started":
@@ -1297,6 +1337,7 @@ async function handleEvent(event) {
       if (config.notifyErrors) await send(`❌ Ошибка BeeForge/OpenCode\nПроект: ${instance.projectName}\n${cleanText(event.detail, 2500)}`);
       break;
     case "idle":
+      if (!event.parentID) cancelMainProgress(event.sessionId);
       if (!muted && config.notifyCompletion) {
         if (event.parentID) await sendProgress(event, "✅ Субагент завершил этап");
         else await sendTeamLeadVerdict(event);

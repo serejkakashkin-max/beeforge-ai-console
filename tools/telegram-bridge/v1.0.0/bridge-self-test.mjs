@@ -253,15 +253,21 @@ for (let attempt = 0; attempt < 80; attempt++) {
     await local("/register", "POST", { instanceId: "instance-attachment", directory: attachmentProject, projectName: "AttachmentProject", pid: process.pid });
     await local("/event", "POST", { instanceId: "instance-attachment", kind: "prompted", sessionId: "attachment-main", parentID: "", agent: "team-lead", mode: "FAST" });
     const finalVerdict = "Готово. Team Lead принял работу специалиста.\n\nЧто сделано\n- Репозиторий проверен полностью.\n- FULL_TEAM_LEAD_VERDICT_SENTINEL сохранён.\n\nСледующие шаги\n- Продолжить реализацию по запросу пользователя.";
+    const verdictMessageStart = sentMessages.length;
+    await local("/event", "POST", { instanceId: "instance-attachment", kind: "assistant_update", sessionId: "attachment-main", parentID: "", agent: "team-lead", finalText: finalVerdict });
     await local("/event", "POST", { instanceId: "instance-attachment", kind: "idle", sessionId: "attachment-main", parentID: "", agent: "devops-engineer", finalText: finalVerdict });
     for (let verdictAttempt = 0; verdictAttempt < 40 && !sentMessages.some((item) => item.text?.includes("FULL_TEAM_LEAD_VERDICT_SENTINEL")); verdictAttempt++) await new Promise((resolve) => setTimeout(resolve, 25));
-    const verdictMessage = sentMessages.find((item) => item.text?.includes("FULL_TEAM_LEAD_VERDICT_SENTINEL"));
+    const verdictMessages = sentMessages.slice(verdictMessageStart).filter((item) => item.text?.includes("FULL_TEAM_LEAD_VERDICT_SENTINEL"));
+    const verdictMessage = verdictMessages[0];
     if (!verdictMessage?.text?.includes("Финальный отчёт Team Lead") || verdictMessage.text.includes("Агент: devops-engineer") || !verdictMessage.text.includes(finalVerdict)) throw new Error("Parent-session final verdict was not delivered in full as Team Lead");
-    const longVerdict = `**Что сделано**\n- IMPORTANT_DONE_SENTINEL\n${"Подробности выполненной работы. ".repeat(180)}\n**Следующие шаги**\n- IMPORTANT_NEXT_SENTINEL\n**Релевантные файлы**\n- src/final.ts`;
+    if (verdictMessages.length !== 1 || sentMessages.slice(verdictMessageStart).some((item) => item.text?.includes("📝 Обновление работы"))) throw new Error("Completed Team Lead answer was duplicated as progress plus final verdict");
+    const longVerdict = `LONG_VERDICT_START\n${"Первая подробная часть. ".repeat(170)}\nLONG_VERDICT_MIDDLE\n${"Вторая подробная часть. ".repeat(170)}\nLONG_VERDICT_END`;
+    const longVerdictStart = sentMessages.length;
     await local("/event", "POST", { instanceId: "instance-attachment", kind: "idle", sessionId: "attachment-main", parentID: "", agent: "devops-engineer", finalText: longVerdict });
-    for (let longAttempt = 0; longAttempt < 40 && !sentMessages.some((item) => item.text?.includes("IMPORTANT_NEXT_SENTINEL")); longAttempt++) await new Promise((resolve) => setTimeout(resolve, 25));
-    const longVerdictMessage = sentMessages.find((item) => item.text?.includes("IMPORTANT_NEXT_SENTINEL"));
-    if (!longVerdictMessage?.text?.includes("IMPORTANT_DONE_SENTINEL") || !longVerdictMessage.text.includes("превышает лимит") || longVerdictMessage.text.length > 3900) throw new Error("Long Team Lead verdict was not reduced to its important sections");
+    for (let longAttempt = 0; longAttempt < 40 && !sentMessages.slice(longVerdictStart).some((item) => item.text?.includes("LONG_VERDICT_END")); longAttempt++) await new Promise((resolve) => setTimeout(resolve, 25));
+    const longVerdictMessages = sentMessages.slice(longVerdictStart);
+    const joinedLongVerdict = longVerdictMessages.map((item) => item.text || "").join("\n");
+    if (longVerdictMessages.length < 2 || longVerdictMessages.some((item) => (item.text || "").length > 3900) || !joinedLongVerdict.includes("LONG_VERDICT_START") || !joinedLongVerdict.includes("LONG_VERDICT_MIDDLE") || !joinedLongVerdict.includes("LONG_VERDICT_END") || joinedLongVerdict.includes("превышает лимит")) throw new Error("Long Team Lead verdict was not delivered completely in Telegram-sized chunks");
     pendingUpdates.push({ update_id: updateId++, message: { message_id: 300, from: { id: Number(realConfig.allowedUserId) }, chat: { id: Number(realConfig.allowedChatId), type: "private" }, caption: "Проверь этот файл", document: { file_id: "telegram-file-1", file_name: "sample.txt", mime_type: "text/plain", file_size: 24 } } });
     let attachmentCommand = null;
     for (let attachmentAttempt = 0; attachmentAttempt < 80 && !attachmentCommand; attachmentAttempt++) {
