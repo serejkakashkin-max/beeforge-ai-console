@@ -12,7 +12,7 @@ $softwarePrompt = @'
 
 SERENA — ОСНОВНОЙ ИНСТРУМЕНТ ДЛЯ ПОДДЕРЖИВАЕМОГО ИСХОДНОГО КОДА. Правило действует для любых структур каталогов и всех поддерживаемых языков, включая Python, JavaScript/TypeScript, Go, Java, C#, PHP, Rust и смешанные проекты; папка src не является особенной.
 
-В начале задачи один раз вызови initial_instructions и get_current_config. Если активного проекта нет, выбран другой проект или пользователь явно указал внешнюю папку, вызови activate_project только для точного пути из запроса или текущего выбранного проекта, затем снова проверь get_current_config. Если нужный language server активен, исследуй исходный код семантически:
+В начале задачи один раз вызови initial_instructions. Если пользователь явно указал путь внешнего или другого проекта, сразу вызови activate_project с этим точным путём и только после успешной активации вызови get_current_config. Не вызывай get_current_config до activate_project для явно указанного внешнего пути: отсутствие активного проекта в этот момент ожидаемо и не требует диагностики. Если внешний путь не указан, вызови get_current_config и активируй текущий выбранный проект только при необходимости. Если нужный language server активен, исследуй исходный код семантически:
 1. Найди непосредственно связанные файлы через list_dir, find_file, rg или search_for_pattern, не обходя весь репозиторий.
 2. Для каждого существенного исходного файла сначала используй get_symbols_overview.
 3. Получай реализацию нужной функции, класса, метода или константы через find_symbol(include_body=true). Для связей и границ изменения используй find_referencing_symbols.
@@ -31,7 +31,7 @@ SERENA — ОСНОВНОЙ ИНСТРУМЕНТ ДЛЯ ПОДДЕРЖИВАЕМ
 $architectPrompt = @'
 Ты Solution Architect и Research Engineer. Для актуальных публичных фактов используй websearch, затем проверяй источники через webfetch; для репозиториев, releases, issues, pull requests и кода используй GitHub MCP. Для документации библиотек используй find-docs/Context7.
 
-Для read-only исследования исходного кода сначала оцени применимость Serena: для поддерживаемых языков и семантических вопросов о точках входа, символах, зависимостях и границах модулей используй Serena без числовых лимитов; для конфигураций, данных, шаблонов, сгенерированных файлов и неподдерживаемых языков используй обычное точечное чтение. Если активного проекта нет, выбран другой проект или пользователь явно указал внешнюю папку, разрешено вызвать activate_project только для точного пути из запроса или текущего выбранного проекта. Serena для этой роли технически ограничена чтением: не пытайся заменять, вставлять, переименовывать или удалять символы, менять memories либо удалять проекты Serena. Не применяй Serena механически и не повторяй уже подтверждённые результаты HANDOFF.
+Для read-only исследования исходного кода сначала оцени применимость Serena: для поддерживаемых языков и семантических вопросов о точках входа, символах, зависимостях и границах модулей используй Serena без числовых лимитов; для конфигураций, данных, шаблонов, сгенерированных файлов и неподдерживаемых языков используй обычное точечное чтение. Если пользователь явно указал путь внешнего или другого проекта, сразу вызови activate_project с этим точным путём, а затем get_current_config; не вызывай get_current_config до такой активации. Если внешний путь не указан, разрешено вызвать get_current_config и при необходимости activate_project только для точного текущего выбранного проекта. Serena для этой роли технически ограничена чтением: не пытайся заменять, вставлять, переименовывать или удалять символы, менять memories либо удалять проекты Serena. Не применяй Serena механически и не повторяй уже подтверждённые результаты HANDOFF.
 
 Не выдавай память модели за результат поиска, указывай URL рядом с подтверждёнными фактами и явно отмечай, что не удалось подтвердить. Используй Docker MCP Toolkit и Sequential Thinking для сложного анализа, архитектурных решений и планирования. Сравнивай только жизнеспособные варианты по ограничениям, стоимости, рискам и сопровождаемости. PLAN_ONLY, READ_ONLY и NO CHANGES подтверждают твой read-only режим: не изменяй файлы или внешние сервисы.
 '@
@@ -72,7 +72,10 @@ $config.agent.'team-lead'.prompt = $teamLeadPrompt.Trim()
 $config.agent.'solution-architect'.prompt = $architectPrompt.Trim()
 
 # OpenCode evaluates permission rules in insertion order and the last matching
-# rule wins. Keep the broad Serena grant first and append exact safety rules.
+# rule wins. When Full Access is active, preserve its sole wildcard rule.
+$globalRules = @($config.permission.PSObject.Properties)
+$fullAccessActive = $globalRules.Count -eq 1 -and $globalRules[0].Name -eq '*' -and [string]$globalRules[0].Value -eq 'allow'
+if (-not $fullAccessActive) {
 Set-OrderedToolRules -Permission $config.agent.'software-engineer'.permission -Rules ([ordered]@{
     'serena*' = 'allow'
     'serena_activate_project' = 'allow'
@@ -99,6 +102,7 @@ Set-OrderedToolRules -Permission $config.agent.'solution-architect'.permission -
     'serena_activate_project' = 'allow'
     'serena_remove_project' = 'deny'
 })
+}
 
 if ($config.mcp.serena) { $config.mcp.serena.timeout = 240000 }
 

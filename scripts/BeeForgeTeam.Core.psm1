@@ -266,6 +266,25 @@ function Backup-BeeTeamConfig([string]$Path,[string]$Reason='save') {
 
 function Write-BeeTeamConfig($Config,[string]$Reason='save') {
     $path=Get-BeeTeamConfigPath;[void](Backup-BeeTeamConfig $path $Reason)
+    if($Reason-ne'full-access-disable'-and(Test-Path -LiteralPath $script:FullAccessStatePath -PathType Leaf)){
+        try{
+            $accessState=Read-BeeUtf8Json $script:FullAccessStatePath
+            if([bool](Get-BeeObjectProperty $accessState 'enabled' $false)-and-not[bool](Get-BeeObjectProperty $accessState 'pending' $false)){
+                $known=@{};foreach($snapshot in @($accessState.agents)){$known[[string]$snapshot.id]=$true}
+                foreach($agentProperty in @($Config.agent.PSObject.Properties)){
+                    if(-not$known.ContainsKey([string]$agentProperty.Name)){
+                        $permissionExisted=[bool]$agentProperty.Value.PSObject.Properties['permission']
+                        $permission=Get-BeeObjectProperty $agentProperty.Value 'permission' $null
+                        $snapshot=[pscustomobject]@{id=[string]$agentProperty.Name;permissionExisted=$permissionExisted;permission=(Copy-BeeJsonValue $permission)}
+                        Set-BeeObjectProperty $accessState 'agents' (@($accessState.agents)+@($snapshot));$known[[string]$agentProperty.Name]=$true
+                    }
+                }
+                Set-BeeObjectProperty $Config 'permission' (New-BeeFullAccessPermission)
+                foreach($agentProperty in @($Config.agent.PSObject.Properties)){Set-BeeObjectProperty $agentProperty.Value 'permission' (New-BeeFullAccessPermission)}
+                Write-BeeFullAccessState $accessState
+            }
+        }catch{throw "Не удалось сохранить инвариант полного доступа: $($_.Exception.Message)"}
+    }
     $temp="$path.tmp";$json=$Config|ConvertTo-Json -Depth 40
     [IO.File]::WriteAllText($temp,$json,[Text.UTF8Encoding]::new($true))
     try{[void](Read-BeeUtf8Json $temp);Move-Item -LiteralPath $temp -Destination $path -Force}catch{Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue;throw}
@@ -292,11 +311,14 @@ function Write-BeeFullAccessAudit([string]$Action,[string]$Source,[bool]$Succeed
     [IO.File]::AppendAllText($script:FullAccessAuditPath,$line,[Text.UTF8Encoding]::new($false))
 }
 
-function Set-BeePermissionFullAccess($Permission) {
-    if(-not$Permission){$Permission=[pscustomobject]@{}}
-    Remove-BeeObjectProperty $Permission '*'
-    $Permission|Add-Member -NotePropertyName '*' -NotePropertyValue 'allow'
-    return $Permission
+function New-BeeFullAccessPermission {
+    return [pscustomobject]@{'*'='allow'}
+}
+
+function Test-BeePermissionFullAccess($Permission) {
+    if(-not$Permission){return $false}
+    $rules=@($Permission.PSObject.Properties)
+    return $rules.Count-eq1-and$rules[0].Name-eq'*'-and[string]$rules[0].Value-eq'allow'
 }
 
 function Get-BeeFullAccessStatus {
@@ -304,9 +326,9 @@ function Get-BeeFullAccessStatus {
     if(Test-Path -LiteralPath $script:FullAccessStatePath -PathType Leaf){try{$state=Read-BeeUtf8Json $script:FullAccessStatePath}catch{}}
     $config=Read-BeeUtf8Json (Get-BeeTeamConfigPath)
     $globalPermission=Get-BeeObjectProperty $config 'permission' $null
-    $globalAllowed=[bool]($globalPermission-and$globalPermission.PSObject.Properties['*']-and[string]$globalPermission.'*'-eq'allow')
+    $globalAllowed=Test-BeePermissionFullAccess $globalPermission
     $agents=@($config.agent.PSObject.Properties)
-    $agentsAllowed=@($agents|Where-Object{$p=Get-BeeObjectProperty $_.Value 'permission' $null;$p-and$p.PSObject.Properties['*']-and[string]$p.'*'-eq'allow'}).Count
+    $agentsAllowed=@($agents|Where-Object{Test-BeePermissionFullAccess (Get-BeeObjectProperty $_.Value 'permission' $null)}).Count
     $configured=$globalAllowed-and$agentsAllowed-eq$agents.Count
     $stateEnabled=[bool]($state-and$state.PSObject.Properties['enabled']-and$state.enabled)
     return [pscustomobject]@{
@@ -326,24 +348,29 @@ function Set-BeeFullAccess([bool]$Enabled,[string]$Source='BeeForge AI Console')
         $existingState=$null;if(Test-Path -LiteralPath $script:FullAccessStatePath){try{$existingState=Read-BeeUtf8Json $script:FullAccessStatePath}catch{}}
         if($Enabled){
             $current=Get-BeeFullAccessStatus;if($current.Enabled){return $current}
-            $globalExisted=[bool]$config.PSObject.Properties['permission']
-            $agentSnapshots=New-Object System.Collections.Generic.List[object]
-            foreach($agentProperty in @($config.agent.PSObject.Properties)){
-                $permissionExisted=[bool]$agentProperty.Value.PSObject.Properties['permission']
-                $permission=Get-BeeObjectProperty $agentProperty.Value 'permission' $null
-                $agentSnapshots.Add([pscustomobject]@{id=[string]$agentProperty.Name;permissionExisted=$permissionExisted;permission=(Copy-BeeJsonValue $permission)})
+            if($existingState-and[bool](Get-BeeObjectProperty $existingState 'enabled' $false)-and$existingState.PSObject.Properties['agents']){
+                $state=$existingState
+                $agentSnapshotCount=@($state.agents).Count
+            }else{
+                $globalExisted=[bool]$config.PSObject.Properties['permission']
+                $agentSnapshots=New-Object System.Collections.Generic.List[object]
+                foreach($agentProperty in @($config.agent.PSObject.Properties)){
+                    $permissionExisted=[bool]$agentProperty.Value.PSObject.Properties['permission']
+                    $permission=Get-BeeObjectProperty $agentProperty.Value 'permission' $null
+                    $agentSnapshots.Add([pscustomobject]@{id=[string]$agentProperty.Name;permissionExisted=$permissionExisted;permission=(Copy-BeeJsonValue $permission)})
+                }
+                $agentSnapshotCount=$agentSnapshots.Count
+                $state=[pscustomobject]@{version=2;enabled=$false;pending=$true;enabledAt=(Get-Date).ToString('o');source=$Source;globalPermissionExisted=$globalExisted;globalPermission=(Copy-BeeJsonValue (Get-BeeObjectProperty $config 'permission' $null));agents=$agentSnapshots.ToArray()}
             }
-            $state=[pscustomobject]@{version=1;enabled=$false;pending=$true;enabledAt=(Get-Date).ToString('o');source=$Source;globalPermissionExisted=$globalExisted;globalPermission=(Copy-BeeJsonValue (Get-BeeObjectProperty $config 'permission' $null));agents=$agentSnapshots.ToArray()}
+            Set-BeeObjectProperty $state 'version' 2;Set-BeeObjectProperty $state 'pending' $true;Set-BeeObjectProperty $state 'enabled' $false;Set-BeeObjectProperty $state 'source' $Source
             Write-BeeFullAccessState $state
-            $global=Get-BeeObjectProperty $config 'permission' $null;if(-not$global){$global=[pscustomobject]@{};Set-BeeObjectProperty $config 'permission' $global}
-            [void](Set-BeePermissionFullAccess $global)
+            Set-BeeObjectProperty $config 'permission' (New-BeeFullAccessPermission)
             foreach($agentProperty in @($config.agent.PSObject.Properties)){
-                $permission=Get-BeeObjectProperty $agentProperty.Value 'permission' $null;if(-not$permission){$permission=[pscustomobject]@{};Set-BeeObjectProperty $agentProperty.Value 'permission' $permission}
-                [void](Set-BeePermissionFullAccess $permission)
+                Set-BeeObjectProperty $agentProperty.Value 'permission' (New-BeeFullAccessPermission)
             }
             [void](Write-BeeTeamConfig $config 'full-access-enable')
             $state.enabled=$true;$state.pending=$false;Write-BeeFullAccessState $state
-            Write-BeeFullAccessAudit 'enable' $Source $true "agents=$($agentSnapshots.Count)"
+            Write-BeeFullAccessAudit 'enable' $Source $true "agents=$agentSnapshotCount unrestricted=true"
         }else{
             if(-not$existingState-or-not$existingState.PSObject.Properties['agents']){
                 $status=Get-BeeFullAccessStatus;if(-not$status.Configured){return $status}

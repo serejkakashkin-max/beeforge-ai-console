@@ -23,10 +23,21 @@ try {
     $enabled=Set-BeeFullAccess -Enabled $true -Source 'self-test'
     if(-not$enabled.Enabled){throw 'Full access did not become enabled'}
     $during=[IO.File]::ReadAllText($openCodePath,[Text.UTF8Encoding]::new($false))|ConvertFrom-Json
-    if([string]$during.permission.'*'-ne'allow'-or[string]$during.agent.alpha.permission.'*'-ne'allow'-or[string]$during.agent.beta.permission.'*'-ne'allow'){throw 'Wildcard allow was not applied to all permission scopes'}
+    foreach($scope in @($during.permission,$during.agent.alpha.permission,$during.agent.beta.permission)){
+        $rules=@($scope.PSObject.Properties)
+        if($rules.Count-ne1-or$rules[0].Name-ne'*'-or[string]$rules[0].Value-ne'allow'){throw "Full access retained a limiting permission rule: $($rules.Name -join ', ')"}
+    }
 
     $during.marker='changed-during-full-access'
-    [IO.File]::WriteAllText($openCodePath,($during|ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
+    $during.permission | Add-Member -NotePropertyName 'external_directory' -NotePropertyValue 'deny'
+    $during.agent.alpha.permission | Add-Member -NotePropertyName 'bash' -NotePropertyValue 'ask'
+    $module=Get-Module BeeForgeTeam.Core
+    [void](& $module { param($candidate) Write-BeeTeamConfig $candidate 'self-test-save-during-full-access' } $during)
+    $afterSave=[IO.File]::ReadAllText($openCodePath,[Text.UTF8Encoding]::new($false))|ConvertFrom-Json
+    foreach($scope in @($afterSave.permission,$afterSave.agent.alpha.permission,$afterSave.agent.beta.permission)){
+        $rules=@($scope.PSObject.Properties)
+        if($rules.Count-ne1-or$rules[0].Name-ne'*'-or[string]$rules[0].Value-ne'allow'){throw "A later config save weakened full access: $($rules.Name -join ', ')"}
+    }
     $disabled=Set-BeeFullAccess -Enabled $false -Source 'self-test'
     if($disabled.Enabled-or$disabled.Inconsistent){throw 'Full access did not return to a consistent disabled state'}
     $after=[IO.File]::ReadAllText($openCodePath,[Text.UTF8Encoding]::new($false))|ConvertFrom-Json
