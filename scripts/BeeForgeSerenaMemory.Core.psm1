@@ -105,10 +105,20 @@ function Get-BeeSerenaMemoryStatus([string]$ProjectPath) {
     $memoryDir=Join-Path $full '.serena\memories'
     $existing=@();if(Test-Path -LiteralPath $memoryDir){$existing=@(Get-ChildItem -LiteralPath $memoryDir -File -Filter '*.md'|ForEach-Object{$_.BaseName})}
     $required=@($script:RequiredMemories);$present=@($required|Where-Object{$_ -in $existing});$missing=@($required|Where-Object{$_ -notin $existing})
+    $verified=@();$needsReview=@()
+    foreach($name in $present){
+        $memoryFile=Join-Path $memoryDir "$name.md"
+        $content=[IO.File]::ReadAllText($memoryFile,[Text.UTF8Encoding]::new($false))
+        $hasDate=$content-match'(?im)^\s*-\s*Last verified:\s*\d{4}-\d{2}-\d{2}\s*$'
+        $hasScope=$content-match'(?im)^\s*-\s*Scope:\s*\S.+'
+        $hasEvidence=$content-match'(?im)^\s*-\s*Evidence:\s*\S.+'
+        if($hasDate-and$hasScope-and$hasEvidence){$verified+=$name}else{$needsReview+=$name}
+    }
     $config=Join-Path $full '.serena\project.yml';$readOnly=$null
     if(Test-Path -LiteralPath $config){$match=Select-String -LiteralPath $config -Pattern '^read_only:\s*(true|false)'|Select-Object -First 1;if($match){$readOnly=$match.Matches[0].Groups[1].Value-eq'true'}}
     $status=if(-not(Test-Path -LiteralPath $config)){'UNCONFIGURED'}elseif($missing.Count-eq 0){'READY'}elseif($present.Count-gt 0){'PARTIAL'}else{'NEEDS_ONBOARDING'}
-    [pscustomobject]@{Path=$full;Managed=(Test-Path -LiteralPath $config);ReadOnly=$readOnly;Status=$status;MemoryCount=$existing.Count;Present=$present;Missing=$missing;MemoryDirectory=$memoryDir}
+    $quality=if($present.Count-eq 0){'NO_DATA'}elseif($needsReview.Count-eq 0){'VERIFIED'}else{'NEEDS_REVIEW'}
+    [pscustomobject]@{Path=$full;Managed=(Test-Path -LiteralPath $config);ReadOnly=$readOnly;Status=$status;Quality=$quality;MemoryCount=$existing.Count;Present=$present;Missing=$missing;Verified=$verified;NeedsReview=$needsReview;MemoryDirectory=$memoryDir}
 }
 
 function Set-BeeSerenaProjectConfigMode([string]$ProjectPath,[bool]$Managed) {
@@ -145,7 +155,7 @@ function Get-BeeSerenaMemoryProjects {
     foreach($pair in @(@('Serena',@(Get-BeeSerenaRegisteredProjects)),@('OpenCode',@(Get-BeeOpenCodeProjects)),@('Telegram',@(Get-BeeTelegramProjects)))){
         foreach($raw in $pair[1]){$path=Get-BeeCanonicalProjectPath $raw;if(-not$path){continue};if(-not$sources.ContainsKey($path)){$sources[$path]=[Collections.Generic.List[string]]::new()};if($pair[0]-notin$sources[$path]){$sources[$path].Add($pair[0])}}
     }
-    return @($sources.Keys|Sort-Object|ForEach-Object{$s=Get-BeeSerenaMemoryStatus $_;[pscustomobject]@{Name=[IO.Path]::GetFileName($_);Path=$_;Sources=($sources[$_]-join ', ');Mode='Постоянная';Memories="$($s.Present.Count)/$($script:RequiredMemories.Count)";Status=$s.Status;Missing=($s.Missing-join ', ')}})
+    return @($sources.Keys|Sort-Object|ForEach-Object{$s=Get-BeeSerenaMemoryStatus $_;[pscustomobject]@{Name=[IO.Path]::GetFileName($_);Path=$_;Sources=($sources[$_]-join ', ');Mode='Постоянная';Memories="$($s.Present.Count)/$($script:RequiredMemories.Count)";Quality="$($s.Verified.Count)/$($s.Present.Count)";Status=$s.Status;Missing=($s.Missing-join ', ');NeedsReview=($s.NeedsReview-join ', ')}})
 }
 
 function Test-BeeSerenaProjectMemories {
