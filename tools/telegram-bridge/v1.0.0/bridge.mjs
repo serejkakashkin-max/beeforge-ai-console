@@ -63,6 +63,7 @@ let pinnedUpdateInFlight = false;
 let voiceServiceProcess = null;
 const bridgeStatePath = path.join(path.dirname(args.status), "bridge-state.json");
 const modelStatusPath = path.join(path.dirname(args.status), "model-start.status.json");
+const fullAccessStatePath = path.resolve(path.dirname(args.status), "..", "access", "full-access.json");
 
 try {
   const saved = readJson(bridgeStatePath);
@@ -355,6 +356,63 @@ function readModelStatus() {
   const result = spawnSync(powerShellExe, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", manager, "-Action", "Status"], { encoding: "utf8", windowsHide: true, timeout: 15000 });
   if (result.error || result.status !== 0) throw new Error(cleanText(result.error?.message || result.stderr || "Не удалось получить состояние модели", 900));
   return JSON.parse(String(result.stdout || "{}"));
+}
+
+function readFullAccessStatus() {
+  try {
+    const state = readJson(fullAccessStatePath);
+    return { enabled: Boolean(state.enabled) && !Boolean(state.pending), pending: Boolean(state.pending), enabledAt: cleanText(state.enabledAt || "", 80) };
+  } catch { return { enabled: false, pending: false, enabledAt: "" }; }
+}
+
+function runFullAccessAction(enabled, userId) {
+  if (process.env.BEEFORGE_BRIDGE_SELF_TEST === "1") {
+    return { Enabled: Boolean(enabled), Configured: Boolean(enabled), Inconsistent: false, Source: `Telegram user ${userId}` };
+  }
+  const powerShellExe = path.join(process.env.WINDIR || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const helper = "C:\\AI\\BeeForge AI Console\\scripts\\Set-BeeFullAccess.ps1";
+  const action = enabled ? "Enable" : "Disable";
+  const result = spawnSync(powerShellExe, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", helper, "-Action", action, "-Source", `Telegram user ${userId}`], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+  const output = String(result.stdout || "").trim();
+  if (result.error || result.status !== 0) throw new Error(cleanText(result.error?.message || result.stderr || output || `Команда завершилась с кодом ${result.status}`, 1800));
+  const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) throw new Error("Скрипт режима доступа не вернул состояние.");
+  try { return JSON.parse(lines.at(-1).replace(/^\uFEFF/, "")); }
+  catch { throw new Error(`Некорректный ответ режима доступа: ${cleanText(output, 1200)}`); }
+}
+
+async function executeFullAccessAction(enabled, userId) {
+  try {
+    const result = runFullAccessAction(enabled, userId);
+    audit("full_access", { enabled, userId, succeeded: true });
+    schedulePinnedStatus(50);
+    await send(enabled
+      ? "🟠 Полный доступ ВКЛЮЧЁН. Все агенты OpenCode могут работать с файлами, shell, интернетом и MCP без системных запросов разрешения. Для уже открытой сессии может потребоваться новая сессия."
+      : "🟢 Полный доступ выключен. Обычные правила и запросы разрешений восстановлены.", mainMenuKeyboard());
+    return result;
+  } catch (error) {
+    audit("full_access", { enabled, userId, succeeded: false, error: error.message });
+    await send(`❌ Не удалось ${enabled ? "включить" : "выключить"} полный доступ\n${cleanText(error.message, 1800)}`, mainMenuKeyboard());
+    return null;
+  }
+}
+
+async function requestFullAccessEnable() {
+  const token = newCallback({ kind: "full_access_first" }, 2 * 60 * 1000);
+  await send("⚠️ Полный доступ отключает системные запросы разрешения для файлов, shell, интернета и MCP. Агент сможет выполнять команды на компьютере с правами текущего пользователя.\n\nНажмите «Продолжить», затем подтвердите действие ещё раз.", { inline_keyboard: [[
+    { text: "Продолжить", callback_data: `bf:${token}:confirm` },
+    { text: "Отмена", callback_data: `bf:${token}:cancel` },
+  ]] });
+}
+
+async function showFullAccess() {
+  const status = readFullAccessStatus();
+  if (status.enabled) {
+    const token = newCallback({ kind: "full_access_disable" }, 2 * 60 * 1000);
+    return send(`🟠 Полный доступ: ВКЛЮЧЁН${status.enabledAt ? `\nС: ${status.enabledAt}` : ""}\n\nМожно безопасно вернуть обычные запросы разрешений.`, { inline_keyboard: [[{ text: "🛡 Вернуть обычный режим", callback_data: `bf:${token}:disable` }]] });
+  }
+  const token = newCallback({ kind: "full_access_menu" }, 2 * 60 * 1000);
+  return send("🟢 Полный доступ: выключен. Действуют обычные запросы разрешений.", { inline_keyboard: [[{ text: "🟠 Включить полный доступ", callback_data: `bf:${token}:enable` }]] });
 }
 
 function launchBeeForgeConsole() {
@@ -1147,6 +1205,14 @@ function cancelMainProgress(sessionId) {
   pendingMainProgress.delete(sessionId);
 }
 
+async function flushMainProgress(sessionId) {
+  const pending = pendingMainProgress.get(sessionId);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pendingMainProgress.delete(sessionId);
+  await sendProgress(pending.event, "📝 Обновление работы");
+}
+
 function splitTelegramText(value, maxLength = 3800) {
   const text = String(value || "");
   if (!text) return [];
@@ -1195,6 +1261,8 @@ function mainMenuKeyboard() {
   const profiles = newCallback({ kind: "menu" });
   const worktrees = newCallback({ kind: "menu" });
   const clearChat = newCallback({ kind: "menu" });
+  const fullAccess = newCallback({ kind: "menu" });
+  const fullAccessEnabled = readFullAccessStatus().enabled;
   return { inline_keyboard: [
     [{ text: "📂 Проекты", callback_data: `bf:${projects}:projects` }, { text: "🧵 Сессии", callback_data: `bf:${sessionsToken}:sessions` }],
     [{ text: "➕ Новая сессия", callback_data: `bf:${newSession}:new` }, { text: "📊 Статус", callback_data: `bf:${status}:status` }],
@@ -1202,6 +1270,7 @@ function mainMenuKeyboard() {
     [{ text: "📁 Файлы", callback_data: `bf:${files}:files` }, { text: "🕘 История", callback_data: `bf:${history}:messages` }],
     [{ text: "🧩 Worktree", callback_data: `bf:${worktrees}:worktrees` }, { text: "🎛 Профили", callback_data: `bf:${profiles}:profiles` }],
     [{ text: "🤖 Состояние модели", callback_data: `bf:${model}:model` }],
+    [{ text: fullAccessEnabled ? "🟠 Полный доступ: ВКЛ" : "🛡 Полный доступ: ВЫКЛ", callback_data: `bf:${fullAccess}:fullaccess` }],
     [{ text: "🚀 Запустить всё", callback_data: `bf:${launch}:launch` }],
     [{ text: lifecycleActions.all.button, callback_data: `bf:${closeAll}:closeall` }],
     [{ text: "🧹 Очистить чат", callback_data: `bf:${clearChat}:clear` }],
@@ -1286,6 +1355,7 @@ async function handleEvent(event) {
   if (!instance) return;
   event.projectName = instance.projectName;
   if (event.kind === "idle" && !event.parentID) event.agent = "team-lead";
+  let lateAssistantUpdate = false;
   if (event.sessionId) {
     const old = sessions.get(event.sessionId) || {};
     const oldState = String(old.status || old.stage || "").toLowerCase();
@@ -1294,6 +1364,7 @@ async function handleEvent(event) {
     // informative, not a new model turn, so it must never re-mark an already
     // idle Team Lead session as working and strand the next Telegram prompt.
     const keepIdle = event.kind === "assistant_update" && oldState === "idle";
+    lateAssistantUpdate = keepIdle;
     const nextStatus = event.kind === "idle" ? "idle" : (keepIdle ? (old.status || "idle") : (event.status || old.status));
     if (keepIdle) audit("assistant_update_after_idle", { instanceId: event.instanceId, sessionId: event.sessionId });
     sessions.set(event.sessionId, { ...old, id: event.sessionId, instanceId: event.instanceId, directory: instance.directory, projectName: instance.projectName, updatedAt: Date.now(), startedAt: old.startedAt || (event.kind === "prompted" ? Date.now() : undefined), agent: event.agent || old.agent, stage: event.kind === "delegation" ? event.agent : (old.stage || event.status), status: nextStatus, mode: event.mode || old.mode || "FAST", title: event.title || old.title, parentID: event.parentID || old.parentID || "" });
@@ -1318,10 +1389,11 @@ async function handleEvent(event) {
       if (!muted) await send(`▶️ Задача запущена\nПроект: ${instance.projectName}\nРежим: ${event.mode || "FAST"}\nАгент: ${event.agent || "Team Lead"}`);
       break;
     case "delegation":
+      if (!event.parentID) await flushMainProgress(event.sessionId);
       if (!muted && config.notifyDelegation && firstNotification(`${event.sessionId}:delegate:${event.agent}:${event.detail}`)) await send(`👤 Team Lead назначил: ${cleanText(event.agent || "специалист")}\nПроект: ${instance.projectName}\n${cleanText(event.detail, 800)}`);
       break;
     case "assistant_update":
-      if (!muted) {
+      if (!muted && !lateAssistantUpdate) {
         if (event.parentID) await sendProgress(event, "📝 Обновление работы");
         else scheduleMainProgress(event);
       }
@@ -1351,6 +1423,7 @@ async function handleEvent(event) {
 
 function buildStatusText() {
   pruneInstances();
+  const accessLine = readFullAccessStatus().enabled ? "Полный доступ: 🟠 ВКЛЮЧЁН" : "Полный доступ: 🟢 выключен";
   let modelLine = "Модель: состояние недоступно";
   try {
     const model = readModelStatus();
@@ -1383,7 +1456,7 @@ function buildStatusText() {
     const projects = countBy(waiting, (item) => item.projectName).slice(0, 4).map(([name, count]) => `${name}: ${count}`).join(", ");
     lines.push(`Ожидают: ${waitingMain.length} основных сессий${waitingTeam.length ? `, команда: ${waitingTeam.length}` : ""}.\nРоли: ${roles}\nПроекты: ${projects}`);
   } else lines.push("Ожидающих сессий нет.");
-  return cleanText(`BeeForge Telegram Bridge\nСостояние: работает\n${modelLine}\nOpenCode: ${instances.size} подключено\nАвтоматические сводки: выключены${focus}\n\nКоманда:\n${lines.join("\n\n")}\n\nbusy / «выполняет задачу» означает, что модель сейчас обрабатывает запрос или инструмент.`, 3900);
+  return cleanText(`BeeForge Telegram Bridge\nСостояние: работает\n${modelLine}\n${accessLine}\nOpenCode: ${instances.size} подключено\nАвтоматические сводки: выключены${focus}\n\nКоманда:\n${lines.join("\n\n")}\n\nbusy / «выполняет задачу» означает, что модель сейчас обрабатывает запрос или инструмент.`, 3900);
 }
 
 function schedulePinnedStatus(delayMs = 1500) {
@@ -1479,7 +1552,7 @@ async function handleMessage(message) {
   audit("telegram_command", { command: incomingAttachment ? "attachment" : (command || "message"), userId: message.from?.id, chatId: message.chat?.id });
   if (incomingAttachment && message.media_group_id) { enqueueMediaGroup(message); return; }
   if (incomingAttachment) return handleInboundAttachment(message);
-  if (command === "/help" || command === "/start") return send("BeeForge Telegram\n/status — состояние и закреплённая карточка\n/projects, /sessions, /new [задача]\n/messages — история, fork и безопасный откат\n/files [путь] — просмотр и скачивание файлов\n/worktrees; /worktree create Имя\n/profiles — выбрать профиль BeeForge\n/task — запланировать Team Lead; /tasklist; /taskdel ID\n/queue — очередь сообщений; /queueclear\n/create Имя; /createat C:\\Путь\\Имя\n/send Путь — отправить файл\n/model — состояние модели; /launch — запустить всё\n/closeall — выгрузить модель и закрыть приложения\n/clear — очистить недавние сообщения чата\n/stop, /mute, /unmute, /cancel\n\nГолосовые сообщения распознаются локально и передаются Team Lead. Альбомы фото и файлов приходят одним запросом. Критические действия, revert и удаление worktree требуют двойного подтверждения. Reasoning, полные tool outputs и секреты в Telegram не отправляются.", mainMenuKeyboard());
+  if (command === "/help" || command === "/start") return send("BeeForge Telegram\n/status — состояние и закреплённая карточка\n/projects, /sessions, /new [задача]\n/messages — история, fork и безопасный откат\n/files [путь] — просмотр и скачивание файлов\n/worktrees; /worktree create Имя\n/profiles — выбрать профиль BeeForge\n/task — запланировать Team Lead; /tasklist; /taskdel ID\n/queue — очередь сообщений; /queueclear\n/create Имя; /createat C:\\Путь\\Имя\n/send Путь — отправить файл\n/model — состояние модели; /launch — запустить всё\n/fullaccess — управление полным доступом\n/closeall — выгрузить модель и закрыть приложения\n/clear — очистить недавние сообщения чата\n/stop, /mute, /unmute, /cancel\n\nГолосовые сообщения распознаются локально и передаются Team Lead. Альбомы фото и файлов приходят одним запросом. Включение полного доступа, критические действия, revert и удаление worktree требуют двойного подтверждения. Reasoning, полные tool outputs и секреты в Telegram не отправляются.", mainMenuKeyboard());
   if (command === "/status") return showStatus();
   if (command === "/projects") return showProjects();
   if (command === "/sessions") return showSessions();
@@ -1496,6 +1569,12 @@ async function handleMessage(message) {
   if (command === "/opencodeclose") return requestLifecycleAction("opencode");
   if (command === "/consoleclose") return requestLifecycleAction("console");
   if (command === "/closeall") return requestLifecycleAction("all");
+  if (command === "/fullaccess") {
+    const requested = String(rest[0] || "").toLowerCase();
+    if (requested === "on" || requested === "enable" || requested === "вкл") return requestFullAccessEnable();
+    if (requested === "off" || requested === "disable" || requested === "выкл") return executeFullAccessAction(false, message.from.id);
+    return showFullAccess();
+  }
   if (command === "/clear") {
     const token = newCallback({ kind: "clear_chat", anchorMessageId: Number(message.message_id || 0) }, 2 * 60 * 1000);
     return send("⚠️ Очистить последние доступные сообщения в чате? Telegram разрешает удалить сообщения не старше 48 часов. После очистки останется только новое служебное сообщение.", { inline_keyboard: [[{ text: "🧹 Очистить чат", callback_data: `bf:${token}:confirm` }, { text: "Отмена", callback_data: `bf:${token}:cancel` }]] });
@@ -1641,6 +1720,7 @@ async function handleCallback(query) {
     if (action === "model") { await showModelStatus(); return answerCallback(query.id, "Состояние модели"); }
     if (action === "files") { await showFiles(); return answerCallback(query.id, "Файлы"); }
     if (action === "profiles") { await showProfiles(); return answerCallback(query.id, "Профили"); }
+    if (action === "fullaccess") { await showFullAccess(); return answerCallback(query.id, "Полный доступ"); }
     if (action === "clear") {
       const token = newCallback({ kind: "clear_chat", anchorMessageId: Number(query.message?.message_id || 0) }, 2 * 60 * 1000);
       await send("⚠️ Очистить последние доступные сообщения в чате? Telegram разрешает удалить сообщения не старше 48 часов. После очистки останется только новое служебное сообщение.", { inline_keyboard: [[{ text: "🧹 Очистить чат", callback_data: `bf:${token}:confirm` }, { text: "Отмена", callback_data: `bf:${token}:cancel` }]] });
@@ -1686,6 +1766,34 @@ async function handleCallback(query) {
       await send(`Создание новой основной сессии Team Lead в проекте ${instance.projectName}.\nОтправьте следующим сообщением текст задачи.`);
       return answerCallback(query.id, "Жду текст задачи");
     }
+  }
+  if (item.kind === "full_access_menu") {
+    item.used = true;
+    if (action === "enable") { await requestFullAccessEnable(); return answerCallback(query.id, "Требуется подтверждение"); }
+    return answerCallback(query.id, "Отменено");
+  }
+  if (item.kind === "full_access_first") {
+    item.used = true;
+    if (action === "cancel") return answerCallback(query.id, "Отменено");
+    const token = newCallback({ kind: "full_access_final" }, 60 * 1000);
+    await send("🚨 Критическое подтверждение\n\nПосле включения агенты смогут работать без системных запросов разрешения от имени текущего пользователя Windows. Подтвердите в течение 60 секунд.", { inline_keyboard: [[
+      { text: "✅ Подтверждаю полный доступ", callback_data: `bf:${token}:confirm` },
+      { text: "Отмена", callback_data: `bf:${token}:cancel` },
+    ]] });
+    return answerCallback(query.id, "Подтвердите ещё раз");
+  }
+  if (item.kind === "full_access_final") {
+    item.used = true;
+    if (action === "cancel") return answerCallback(query.id, "Отменено");
+    await answerCallback(query.id, "Включаю полный доступ…");
+    await executeFullAccessAction(true, query.from.id);
+    return;
+  }
+  if (item.kind === "full_access_disable") {
+    item.used = true;
+    await answerCallback(query.id, "Восстанавливаю обычный режим…");
+    await executeFullAccessAction(false, query.from.id);
+    return;
   }
   if (item.kind === "lifecycle") {
     item.used = true;

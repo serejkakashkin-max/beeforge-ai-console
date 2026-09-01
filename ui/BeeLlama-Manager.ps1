@@ -114,7 +114,7 @@ try { Invoke-BeeRetention } catch {}
     <TabItem Header="CLI" Name="CommandTab"><Grid Margin="10"><TextBox Name="CommandPreview" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="13"/></Grid></TabItem>
     <TabItem Header="AI-команда" Name="TeamTab">
      <Grid Margin="10"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-       <StackPanel><Border Background="#18364A" BorderBrush="#3285B5" BorderThickness="1" CornerRadius="6" Padding="10" Margin="3"><DockPanel><StackPanel DockPanel.Dock="Left"><TextBlock Name="TeamSummary" Text="Загрузка AI-команды..." FontSize="16" FontWeight="SemiBold" Foreground="White"/><TextBlock Name="TeamConfigInfo" Foreground="#A9D7F2"/></StackPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Name="RefreshTeam" Content="Обновить"/><Button Name="OpenTeamConfig" Content="Открыть OpenCode config"/></StackPanel></DockPanel></Border><Border Background="#1F2A20" BorderBrush="#4E7855" BorderThickness="1" CornerRadius="6" Padding="9" Margin="3"><TextBlock Text="ПОЛИТИКА КОМАНДЫ  •  вход: Team Lead  •  режим по умолчанию: FAST  •  режим задаётся обычными словами  •  одновременно: 1 субагент  •  обычный лимит: 2 исполнителя" Foreground="#BFE8C5" TextWrapping="Wrap"/></Border></StackPanel>
+       <StackPanel><Border Background="#18364A" BorderBrush="#3285B5" BorderThickness="1" CornerRadius="6" Padding="10" Margin="3"><DockPanel><StackPanel DockPanel.Dock="Left"><TextBlock Name="TeamSummary" Text="Загрузка AI-команды..." FontSize="16" FontWeight="SemiBold" Foreground="White"/><TextBlock Name="TeamConfigInfo" Foreground="#A9D7F2"/></StackPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Name="RefreshTeam" Content="Обновить"/><Button Name="OpenTeamConfig" Content="Открыть OpenCode config"/></StackPanel></DockPanel></Border><Border Background="#1F2A20" BorderBrush="#4E7855" BorderThickness="1" CornerRadius="6" Padding="9" Margin="3"><TextBlock Text="ПОЛИТИКА КОМАНДЫ  •  вход: Team Lead  •  режим по умолчанию: FAST  •  режим задаётся обычными словами  •  одновременно: 1 субагент  •  обычный лимит: 2 исполнителя" Foreground="#BFE8C5" TextWrapping="Wrap"/></Border><Border Name="FullAccessCard" Background="#20242C" BorderBrush="#596579" BorderThickness="1" CornerRadius="6" Padding="10" Margin="3"><DockPanel><StackPanel><TextBlock Name="FullAccessStatus" Text="Полный доступ: проверка..." FontSize="15" FontWeight="SemiBold" Foreground="White"/><TextBlock Text="Без запросов разрешения: любые файлы, shell, интернет и MCP. Критические действия всё равно ограничены системными инструкциями агента." Foreground="#BFC9D7" TextWrapping="Wrap" MaxWidth="700"/></StackPanel><Button DockPanel.Dock="Right" Name="ToggleFullAccess" Content="Полный доступ" MinWidth="190" Background="#9B4D12"/></DockPanel></Border></StackPanel>
       <Grid Grid.Row="1" Margin="0,7"><Grid.ColumnDefinitions><ColumnDefinition Width="275"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Background="#14171C" BorderBrush="#343B46" BorderThickness="1" CornerRadius="6" Padding="7" Margin="3"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="AI-КОМАНДА" Foreground="#9EABC0" FontWeight="Bold" Margin="5"/><ListBox Grid.Row="1" Name="TeamAgentList" Background="#111318" Foreground="White" BorderBrush="#343B46" ScrollViewer.HorizontalScrollBarVisibility="Disabled"><ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/></Style></ListBox.ItemContainerStyle><ListBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" ToolTip="{Binding Description}"/></DataTemplate></ListBox.ItemTemplate><ListBox.GroupStyle><GroupStyle><GroupStyle.HeaderTemplate><DataTemplate><Border Background="#26303B" Padding="6,4" Margin="0,6,0,2"><TextBlock Text="{Binding Name}" Foreground="#74B9FF" FontWeight="Bold"/></Border></DataTemplate></GroupStyle.HeaderTemplate></GroupStyle></ListBox.GroupStyle></ListBox><UniformGrid Grid.Row="2" Columns="3"><Button Name="NewAgent" Content="Новый"/><Button Name="CloneAgent" Content="Клон"/><Button Name="DeleteAgent" Content="Удалить"/></UniformGrid></Grid></Border>
        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"><StackPanel>
@@ -182,8 +182,8 @@ try { Invoke-BeeRetention } catch {}
       <TextBlock Text="5. Сохранение и запуск" FontSize="17" FontWeight="Bold" Foreground="#74B9FF"/><TextBlock Text="«Сохранить профиль» записывает настройки и при включённой галочке «Обновлять OpenCode» автоматически синхронизирует конфигурацию. Для нового vision-профиля image-capability включается после успешного запуска с projector. «Применить и перезапустить» сохраняет настройки, перезапускает сервер и ждёт /health." TextWrapping="Wrap" Foreground="#D7DEE8" Margin="0,4,0,13"/>
       <TextBlock Text="6. Мониторинг и остановка" FontSize="17" FontWeight="Bold" Foreground="#74B9FF"/><TextBlock Text="«Открыть live log» показывает prompt/decode tok/s и ошибки в отдельном PowerShell. UI можно закрыть — модель продолжит работать. Для завершения сервера снова откройте менеджер и нажмите «Остановить»." TextWrapping="Wrap" Foreground="#D7DEE8" Margin="0,4,0,13"/>
       <TextBlock Text="7. Проверка производительности" FontSize="17" FontWeight="Bold" Foreground="#74B9FF"/><TextBlock Text="На вкладке «Тест» задайте примерный размер input и max output. По умолчанию профиль автоматически применяется и сервер перезапускается, чтобы тестировать именно введённые параметры. Во время теста отображаются prefill/decode tok/s, токены и elapsed. «Стоп тест» отменяет benchmark, но не выключает модель." TextWrapping="Wrap" Foreground="#D7DEE8" Margin="0,4,0,13"/>
-      <TextBlock Text="8. AI-команда OpenCode" FontSize="17" FontWeight="Bold" Foreground="#74B9FF"/><TextBlock Text="Работайте через Team Lead: он определяет тип задачи и последовательно назначает специалистов. FAST применяется по умолчанию; STANDARD или RELEASE достаточно указать обычными словами в запросе. Основная команда — Team Lead, Software Engineer и объединённый Quality Engineer; остальные роли вызываются только по необходимости. Вкладка читает фактический opencode.json и показывает skills, MCP, разрешения и делегирование. Пассивный просмотр ничего не запускает." TextWrapping="Wrap" Foreground="#D7DEE8" Margin="0,4,0,13"/>
-      <TextBlock Text="9. Telegram-управление" FontSize="17" FontWeight="Bold" Foreground="#74B9FF"/><TextBlock Text="Создайте личного бота через BotFather, укажите токен, собственные User ID и Chat ID, добавьте разрешённые проекты и проверьте соединение. Все новые задачи из Telegram всегда направляются Team Lead. Остановка моста не останавливает BeeLlama или OpenCode." TextWrapping="Wrap" Foreground="#D7DEE8" Margin="0,4,0,13"/>
+      <TextBlock Text="8. AI-команда OpenCode" FontSize="17" FontWeight="Bold" Foreground="#74B9FF"/><TextBlock Text="Работайте через Team Lead: он определяет тип задачи и последовательно назначает специалистов. FAST применяется по умолчанию; STANDARD или RELEASE достаточно указать обычными словами в запросе. Основная команда — Team Lead, Software Engineer и объединённый Quality Engineer; остальные роли вызываются только по необходимости. Вкладка читает фактический opencode.json и показывает skills, MCP, разрешения и делегирование. Переключатель «Полный доступ» снимает системные запросы разрешений для всех агентов; при выключении прежние правила восстанавливаются." TextWrapping="Wrap" Foreground="#D7DEE8" Margin="0,4,0,13"/>
+      <TextBlock Text="9. Telegram-управление" FontSize="17" FontWeight="Bold" Foreground="#74B9FF"/><TextBlock Text="Создайте личного бота через BotFather, укажите токен, собственные User ID и Chat ID, добавьте разрешённые проекты и проверьте соединение. Все новые задачи из Telegram всегда направляются Team Lead. Команда /fullaccess управляет полным доступом; включение требует двойного подтверждения. Остановка моста не останавливает BeeLlama или OpenCode." TextWrapping="Wrap" Foreground="#D7DEE8" Margin="0,4,0,13"/>
       <TextBlock Text="Если эксперимент не загрузился" FontSize="17" FontWeight="Bold" Foreground="#FFBA69"/><TextBlock Text="Откройте current.stderr.log или live log. OpenCode не изменяется при неудачном запуске. Исправьте параметры выбранного профиля либо запустите другой сохранённый профиль." TextWrapping="Wrap" Foreground="#D7DEE8" Margin="0,4,0,13"/>
      </StackPanel></ScrollViewer>
     </TabItem>
@@ -707,8 +707,51 @@ function Refresh-TeamView([string]$SelectId='') {
         if(-not$selected.Count){$selected=@($script:teamSnapshot.Agents|Select-Object -First 1)}
         if($selected.Count){(UI 'TeamAgentList').SelectedItem=$selected[0];Load-TeamAgent $selected[0]}
         (UI 'TeamStatus').Text=$(if($script:teamSnapshot.SerenaWarningCount){@($script:teamSnapshot.SerenaWarnings)-join[Environment]::NewLine}else{'Конфигурация прочитана. Serena-проекты проиндексированы или ещё не содержат распознаваемого исходного кода.'})
+        Refresh-FullAccessUi
     }catch{(UI 'TeamSummary').Text='Не удалось прочитать AI-команду';(UI 'TeamStatus').Text=$_.Exception.Message}
     finally{$script:teamRefreshInProgress=$false}
+}
+
+function Refresh-FullAccessUi {
+    try{
+        $status=Get-BeeFullAccessStatus
+        if($status.Enabled){
+            (UI 'FullAccessStatus').Text="Полный доступ: ВКЛЮЧЁН$(if($status.EnabledAt){" · с $($status.EnabledAt)"})"
+            (UI 'FullAccessStatus').Foreground=[Windows.Media.Brushes]::Orange
+            (UI 'FullAccessCard').BorderBrush=[Windows.Media.Brushes]::DarkOrange
+            (UI 'ToggleFullAccess').Content='Выключить полный доступ'
+            (UI 'ToggleFullAccess').Background=[Windows.Media.Brushes]::DarkRed
+        }elseif($status.Inconsistent){
+            (UI 'FullAccessStatus').Text='Полный доступ: состояние требует восстановления'
+            (UI 'FullAccessStatus').Foreground=[Windows.Media.Brushes]::Tomato
+            (UI 'FullAccessCard').BorderBrush=[Windows.Media.Brushes]::Tomato
+            (UI 'ToggleFullAccess').Content='Восстановить обычный режим'
+            (UI 'ToggleFullAccess').Background=[Windows.Media.Brushes]::DarkRed
+        }else{
+            (UI 'FullAccessStatus').Text='Полный доступ: выключен · действуют обычные подтверждения'
+            (UI 'FullAccessStatus').Foreground=[Windows.Media.Brushes]::LightGreen
+            (UI 'FullAccessCard').BorderBrush=[Windows.Media.Brushes]::DimGray
+            (UI 'ToggleFullAccess').Content='Включить полный доступ'
+            (UI 'ToggleFullAccess').Background=[Windows.Media.Brushes]::DarkOrange
+        }
+    }catch{(UI 'FullAccessStatus').Text="Полный доступ: ошибка проверки — $($_.Exception.Message)";(UI 'FullAccessStatus').Foreground=[Windows.Media.Brushes]::Tomato}
+}
+
+function Toggle-FullAccessFromUi {
+    try{
+        $status=Get-BeeFullAccessStatus
+        if($status.Enabled-or$status.Inconsistent){
+            [void](Set-BeeFullAccess -Enabled $false -Source 'BeeForge UI')
+            Refresh-TeamView 'team-lead'
+            (UI 'TeamStatus').Text='Обычные разрешения восстановлены.'
+            return
+        }
+        $warning="Включить ПОЛНЫЙ ДОСТУП для всех агентов OpenCode?`n`nАгенты смогут без системных запросов разрешения читать и изменять любые доступные файлы, запускать команды, использовать интернет и MCP. Включайте режим только для доверенной задачи. Действие будет записано в журнал."
+        if([Windows.MessageBox]::Show($window,$warning,'Полный доступ','YesNo','Warning')-ne'Yes'){return}
+        [void](Set-BeeFullAccess -Enabled $true -Source 'BeeForge UI')
+        Refresh-TeamView 'team-lead'
+        (UI 'TeamStatus').Text='Полный доступ включён. Для уже открытой сессии OpenCode может потребоваться новая сессия.'
+    }catch{Show-Message $_.Exception.Message 'Не удалось изменить полный доступ' Error;Refresh-FullAccessUi}
 }
 
 function Commit-TeamGridEdits {
@@ -871,6 +914,7 @@ foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionO
 (UI 'StopTest').Add_Click({ End-Benchmark })
 (UI 'TeamAgentList').Add_SelectionChanged({if((UI 'TeamAgentList').SelectedItem){Load-TeamAgent (UI 'TeamAgentList').SelectedItem}})
 (UI 'RefreshTeam').Add_Click({Refresh-TeamView})
+(UI 'ToggleFullAccess').Add_Click({Toggle-FullAccessFromUi})
 (UI 'OpenTeamConfig').Add_Click({try{Start-Process notepad.exe -ArgumentList ('"'+(Get-BeeTeamPaths).Config+'"')}catch{Show-Message $_.Exception.Message 'OpenCode config' Error}})
 (UI 'OpenSelectedSkill').Add_Click({try{$row=(UI 'TeamSkillsGrid').SelectedItem;if(-not$row){throw 'Выберите skill в таблице'};if(-not(Test-Path -LiteralPath $row.Path)){throw "SKILL.md не найден: $($row.Path)"};Start-Process notepad.exe -ArgumentList ('"'+$row.Path+'"')}catch{Show-Message $_.Exception.Message 'Открыть skill' Error}})
 (UI 'NewAgent').Add_Click({New-TeamAgentFromUi})
@@ -989,6 +1033,8 @@ if($env:BEEFORGE_TEAM_SMOKE_TEST-eq'1'){
     $watch.Stop()
     if((UI 'Tabs').SelectedItem-ne(UI 'TeamTab')){throw 'AI-команда не стала активной вкладкой'}
     if(-not$script:teamSnapshot-or-not(UI 'TeamAgentList').Items.Count){throw 'AI-команда не загрузила агентов'}
+    if(-not(UI 'FullAccessStatus').Text-or(UI 'FullAccessStatus').Text-like'*проверка*'){throw 'Состояние полного доступа не загрузилось'}
+    if(-not(UI 'ToggleFullAccess').Content){throw 'Кнопка полного доступа не создана'}
     $longNames=@($script:teamSnapshot.Agents|Where-Object{$_.DisplayName.Length-gt64})
     if($longNames.Count){throw "Список агентов содержит длинные описания вместо ролей: $($longNames.Id -join ', ')"}
     if([Windows.Controls.ScrollViewer]::GetHorizontalScrollBarVisibility((UI 'TeamAgentList'))-ne[Windows.Controls.ScrollBarVisibility]::Disabled){throw 'Горизонтальная прокрутка списка агентов не отключена'}

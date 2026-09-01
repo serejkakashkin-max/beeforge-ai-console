@@ -182,8 +182,12 @@ pendingUpdates.push({ update_id: updateId++, message: { message_id: 27, from: { 
   pendingUpdates.push({ update_id: updateId++, message: { message_id: 28, from: { id: Number(realConfig.allowedUserId) }, chat: { id: Number(realConfig.allowedChatId), type: "private" }, text: "/console" } });
   pendingUpdates.push({ update_id: updateId++, message: { message_id: 29, from: { id: Number(realConfig.allowedUserId) }, chat: { id: Number(realConfig.allowedChatId), type: "private" }, text: "/closeall" } });
   pendingUpdates.push({ update_id: updateId++, message: { message_id: 30, from: { id: Number(realConfig.allowedUserId) }, chat: { id: Number(realConfig.allowedChatId), type: "private" }, text: "/profiles" } });
+  pendingUpdates.push({ update_id: updateId++, message: { message_id: 31, from: { id: Number(realConfig.allowedUserId) }, chat: { id: Number(realConfig.allowedChatId), type: "private" }, text: "/fullaccess on" } });
 let dialogOpenQueued = false;
 let lifecycleConfirmQueued = false;
+let fullAccessFirstQueued = false;
+let fullAccessFinalQueued = false;
+let fullAccessDisableQueued = false;
 for (let attempt = 0; attempt < 80; attempt++) {
   await new Promise((resolve) => setTimeout(resolve, 25));
   const dialogProjectMessage = sentMessages.find((item) => item.text?.includes("DialogProject") && (item.reply_markup?.inline_keyboard || []).flat().some((button) => button.text?.includes("Только OpenCode")));
@@ -197,6 +201,23 @@ for (let attempt = 0; attempt < 80; attempt++) {
   if (lifecycleConfirm && !lifecycleConfirmQueued) {
     lifecycleConfirmQueued = true;
     pendingUpdates.push({ update_id: updateId++, callback_query: { id: "callback-lifecycle-all", from: { id: Number(realConfig.allowedUserId) }, message: { chat: { id: Number(realConfig.allowedChatId), type: "private" } }, data: lifecycleConfirm } });
+  }
+  const fullAccessWarning = sentMessages.find((item) => item.text?.includes("Полный доступ отключает системные запросы"));
+  const fullAccessFirst = (fullAccessWarning?.reply_markup?.inline_keyboard || []).flat().find((button) => button.text === "Продолжить")?.callback_data;
+  if (fullAccessFirst && !fullAccessFirstQueued) {
+    fullAccessFirstQueued = true;
+    pendingUpdates.push({ update_id: updateId++, callback_query: { id: "callback-full-access-first", from: { id: Number(realConfig.allowedUserId) }, message: { chat: { id: Number(realConfig.allowedChatId), type: "private" } }, data: fullAccessFirst } });
+  }
+  const fullAccessCritical = sentMessages.find((item) => item.text?.includes("Критическое подтверждение") && item.text?.includes("После включения агенты"));
+  const fullAccessFinal = (fullAccessCritical?.reply_markup?.inline_keyboard || []).flat().find((button) => button.text?.includes("Подтверждаю полный доступ"))?.callback_data;
+  if (fullAccessFinal && !fullAccessFinalQueued) {
+    fullAccessFinalQueued = true;
+    pendingUpdates.push({ update_id: updateId++, callback_query: { id: "callback-full-access-final", from: { id: Number(realConfig.allowedUserId) }, message: { chat: { id: Number(realConfig.allowedChatId), type: "private" } }, data: fullAccessFinal } });
+  }
+  const fullAccessEnabled = sentMessages.some((item) => item.text?.includes("Полный доступ ВКЛЮЧЁН"));
+  if (fullAccessEnabled && !fullAccessDisableQueued) {
+    fullAccessDisableQueued = true;
+    pendingUpdates.push({ update_id: updateId++, message: { message_id: 32, from: { id: Number(realConfig.allowedUserId) }, chat: { id: Number(realConfig.allowedChatId), type: "private" }, text: "/fullaccess off" } });
   }
   const hasNew = sentMessages.some((item) => (item.reply_markup?.inline_keyboard || []).flat().some((button) => button.text?.includes("Новая сессия")));
   const projectsListed = sentMessages.some((item) => item.text?.includes("PreviouslyOpened") && item.text?.includes("BridgeTest"));
@@ -218,6 +239,7 @@ for (let attempt = 0; attempt < 80; attempt++) {
       && !buttons.some((button) => /(?:Выгрузить модель|Закрыть OpenCode|Закрыть BeeForge|Открыть BeeForge Console)/.test(button.text || ""));
   });
   const lifecycleCompleted = sentMessages.some((item) => item.text?.includes("self-test all") && item.text?.includes("Telegram-мост продолжает работать"));
+  const fullAccessCompleted = fullAccessEnabled && sentMessages.some((item) => item.text?.includes("Полный доступ выключен"));
   const created = fs.existsSync(path.join(projectRoot, "DemoProject"));
   const dialogCreated = fs.existsSync(path.join(projectRoot, "DialogProject"));
   const dialogOpened = sentMessages.some((item) => item.text?.includes("OpenCode открыт с выбранным проектом"));
@@ -231,7 +253,7 @@ for (let attempt = 0; attempt < 80; attempt++) {
   const savedConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
   const persisted = savedConfig.allowedProjects.some((item) => path.win32.basename(item) === "DemoProject");
   const dialogPersisted = savedConfig.allowedProjects.some((item) => path.win32.basename(item) === "DialogProject");
-  if (hasNew && projectsListed && offlineSelectable && unmuted && modelMenu && profilesMenu && modelStart && modelStatus && consoleLaunch && compactStatus && lifecycleMenu && lifecycleCompleted && created && persisted && dialogCreated && dialogPersisted && dialogOpened && dialogDeepLinkLogged && dialogRegisteredInOpenCode) {
+  if (hasNew && projectsListed && offlineSelectable && unmuted && modelMenu && profilesMenu && modelStart && modelStatus && consoleLaunch && compactStatus && lifecycleMenu && lifecycleCompleted && fullAccessCompleted && created && persisted && dialogCreated && dialogPersisted && dialogOpened && dialogDeepLinkLogged && dialogRegisteredInOpenCode) {
     pendingUpdates.push({ update_id: updateId++, message: { message_id: 700, from: { id: Number(realConfig.allowedUserId) }, chat: { id: Number(realConfig.allowedChatId), type: "private" }, text: "/clear" } });
     let clearChatConfirm = "";
     for (let clearAttempt = 0; clearAttempt < 80 && !clearChatConfirm; clearAttempt++) {
@@ -261,6 +283,14 @@ for (let attempt = 0; attempt < 80; attempt++) {
     const verdictMessage = verdictMessages[0];
     if (!verdictMessage?.text?.includes("Финальный отчёт Team Lead") || verdictMessage.text.includes("Агент: devops-engineer") || !verdictMessage.text.includes(finalVerdict)) throw new Error("Parent-session final verdict was not delivered in full as Team Lead");
     if (verdictMessages.length !== 1 || sentMessages.slice(verdictMessageStart).some((item) => item.text?.includes("📝 Обновление работы"))) throw new Error("Completed Team Lead answer was duplicated as progress plus final verdict");
+    const orderingStart = sentMessages.length;
+    await local("/event", "POST", { instanceId: "instance-attachment", kind: "assistant_update", sessionId: "ordering-main", parentID: "", agent: "team-lead", status: "working", finalText: "LEAD_BEFORE_DELEGATION_SENTINEL" });
+    await local("/event", "POST", { instanceId: "instance-attachment", kind: "delegation", sessionId: "ordering-main", parentID: "", agent: "solution-architect", detail: "ORDERING_DELEGATION_SENTINEL" });
+    for (let orderingAttempt = 0; orderingAttempt < 60 && !sentMessages.slice(orderingStart).some((item) => item.text?.includes("LEAD_BEFORE_DELEGATION_SENTINEL")); orderingAttempt++) await new Promise((resolve) => setTimeout(resolve, 25));
+    const orderingMessages = sentMessages.slice(orderingStart);
+    const leadUpdateIndex = orderingMessages.findIndex((item) => item.text?.includes("LEAD_BEFORE_DELEGATION_SENTINEL"));
+    const delegationIndex = orderingMessages.findIndex((item) => item.text?.includes("ORDERING_DELEGATION_SENTINEL"));
+    if (leadUpdateIndex < 0 || delegationIndex < 0 || leadUpdateIndex > delegationIndex) throw new Error("Team Lead explanation was not delivered before its delegation notification");
     const longVerdict = `LONG_VERDICT_START\n${"Первая подробная часть. ".repeat(170)}\nLONG_VERDICT_MIDDLE\n${"Вторая подробная часть. ".repeat(170)}\nLONG_VERDICT_END`;
     const longVerdictStart = sentMessages.length;
     await local("/event", "POST", { instanceId: "instance-attachment", kind: "idle", sessionId: "attachment-main", parentID: "", agent: "devops-engineer", finalText: longVerdict });
@@ -301,6 +331,8 @@ for (let attempt = 0; attempt < 80; attempt++) {
     // OpenCode may deliver message.updated after session.idle. Its historical
     // status=working must not block the next Telegram message.
     await local("/event", "POST", { instanceId: "instance-attachment", kind: "assistant_update", sessionId: "attachment-main", parentID: "", agent: "team-lead", status: "working", finalText: "Позднее техническое обновление" });
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (sentMessages.some((item) => item.text?.includes("Позднее техническое обновление"))) throw new Error("A late assistant update was posted after the final Team Lead verdict");
     pendingUpdates.push({ update_id: updateId++, message: { message_id: 304, from: { id: Number(realConfig.allowedUserId) }, chat: { id: Number(realConfig.allowedChatId), type: "private" }, text: "POST_IDLE_QUEUE_SENTINEL" } });
     let postIdleCommand = null;
     for (let postIdleAttempt = 0; postIdleAttempt < 80 && !postIdleCommand; postIdleAttempt++) {
@@ -330,7 +362,7 @@ for (let attempt = 0; attempt < 80; attempt++) {
       return file?.name === "concurrent-screenshot.png";
     });
     if (concurrentUploads.length !== 1) throw new Error(`Concurrent assistant/idle events uploaded one screenshot ${concurrentUploads.length} times`);
-    console.log("BRIDGE_CALLBACK_SELF_TEST_OK | always,retry-after-failure,env-cleanup-noncritical,destructive-second-confirmation,confirmed,new-session-menu,project-discovery,offline-selectable,focus,mute-unmute,create-project,create-project-dialog,opencode-registration,opencode-deep-link,console,last-model-launch,model-status,lifecycle-confirmation,team-lead-final-verdict,inbound-attachment,outbound-attachment");
+    console.log("BRIDGE_CALLBACK_SELF_TEST_OK | always,retry-after-failure,env-cleanup-noncritical,destructive-second-confirmation,confirmed,new-session-menu,project-discovery,offline-selectable,focus,mute-unmute,create-project,create-project-dialog,opencode-registration,opencode-deep-link,console,last-model-launch,model-status,lifecycle-confirmation,full-access-double-confirmation,full-access-disable,team-lead-final-verdict,inbound-attachment,outbound-attachment");
     process.exit(0);
   }
 }

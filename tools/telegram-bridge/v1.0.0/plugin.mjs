@@ -179,6 +179,21 @@ export const BeeForgeTelegram = async ({ project, client, directory, worktree, s
 
   async function latestAssistantText(sessionId) { return (await latestAssistantPayload(sessionId)).text; }
 
+  async function emitDelegation(sessionId, agent, detail) {
+    const latest = await latestAssistantPayload(sessionId);
+    if (latest.text) {
+      await emitForSession({
+        kind: "assistant_update",
+        sessionId,
+        agent: clean(latest.agent || "team-lead", 80),
+        status: "working",
+        finalText: latest.text,
+        attachments: latest.attachments,
+      });
+    }
+    return emitForSession({ kind: "delegation", sessionId, agent, detail });
+  }
+
   async function latestUserMode(sessionId) {
     try {
       const result = unwrap(await client.session.messages({ path: { id: sessionId }, query: { directory: instanceDirectory } }));
@@ -457,7 +472,7 @@ export const BeeForgeTelegram = async ({ project, client, directory, worktree, s
       if (String(input?.tool || "").toLowerCase() !== "task") return;
       const args = output?.args || {};
       activeAgent = clean(args.agent || args.subagent_type || args.name || "specialist", 80);
-      await emitForSession({ kind: "delegation", sessionId: input?.sessionID || input?.sessionId, agent: activeAgent, detail: clean(args.description || args.prompt || "Назначена подзадача", 800) });
+      await emitDelegation(input?.sessionID || input?.sessionId, activeAgent, clean(args.description || args.prompt || "Назначена подзадача", 800));
     },
     event: async ({ event }) => {
       const type = String(event?.type || "");
@@ -498,12 +513,12 @@ export const BeeForgeTelegram = async ({ project, client, directory, worktree, s
       }
       if (type === "session.next.agent.switched") {
         activeAgent = clean(p.agent || p.agentID || p.to || "specialist", 80);
-        return emitForSession({ kind: "delegation", sessionId, agent: activeAgent, detail: clean(p.title || p.task || "Передача следующему специалисту", 800) });
+        return emitDelegation(sessionId, activeAgent, clean(p.title || p.task || "Передача следующему специалисту", 800));
       }
       if ((type === "session.next.tool.called" || type === "tool.execute.before") && String(p.tool || p.name || "").toLowerCase() === "task") {
         const input = p.input || p.args || {};
         activeAgent = clean(input.agent || input.subagent_type || input.name || "specialist", 80);
-        return emitForSession({ kind: "delegation", sessionId, agent: activeAgent, detail: clean(input.description || input.prompt || "Назначена подзадача", 800) });
+        return emitDelegation(sessionId, activeAgent, clean(input.description || input.prompt || "Назначена подзадача", 800));
       }
       if (type === "permission.updated" || type === "permission.asked" || type === "permission.v2.asked") {
         const nestedRequest = p.request && typeof p.request === "object"

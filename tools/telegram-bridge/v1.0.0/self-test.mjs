@@ -96,6 +96,7 @@ try {
   const kinds = events.map((item) => item.kind);
   const required = ["prompted", "delegation", "permission", "permission_closed", "question", "question_closed", "assistant_update", "compaction_started", "compaction_ended", "idle"];
   for (const kind of required) if (!kinds.includes(kind)) throw new Error(`Missing event: ${kind}`);
+  if (kinds.indexOf("assistant_update") > kinds.indexOf("delegation")) throw new Error("Team Lead update was emitted after delegation instead of before it");
   if (JSON.stringify(events).includes("PRIVATE_REASONING")) throw new Error("Reasoning leaked into bridge events");
   const prompted = events.find((item) => item.kind === "prompted");
   if (prompted.mode !== "STANDARD" || prompted.agent !== "team-lead") throw new Error("Mode or Team Lead routing mismatch");

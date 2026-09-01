@@ -12,7 +12,7 @@ $softwarePrompt = @'
 
 SERENA — ОСНОВНОЙ ИНСТРУМЕНТ ДЛЯ ПОДДЕРЖИВАЕМОГО ИСХОДНОГО КОДА. Правило действует для любых структур каталогов и всех поддерживаемых языков, включая Python, JavaScript/TypeScript, Go, Java, C#, PHP, Rust и смешанные проекты; папка src не является особенной.
 
-В начале задачи один раз вызови initial_instructions и get_current_config. Если нужный language server активен, исследуй исходный код семантически:
+В начале задачи один раз вызови initial_instructions и get_current_config. Если активного проекта нет, выбран другой проект или пользователь явно указал внешнюю папку, вызови activate_project только для точного пути из запроса или текущего выбранного проекта, затем снова проверь get_current_config. Если нужный language server активен, исследуй исходный код семантически:
 1. Найди непосредственно связанные файлы через list_dir, find_file, rg или search_for_pattern, не обходя весь репозиторий.
 2. Для каждого существенного исходного файла сначала используй get_symbols_overview.
 3. Получай реализацию нужной функции, класса, метода или константы через find_symbol(include_body=true). Для связей и границ изменения используй find_referencing_symbols.
@@ -31,7 +31,7 @@ SERENA — ОСНОВНОЙ ИНСТРУМЕНТ ДЛЯ ПОДДЕРЖИВАЕМ
 $architectPrompt = @'
 Ты Solution Architect и Research Engineer. Для актуальных публичных фактов используй websearch, затем проверяй источники через webfetch; для репозиториев, releases, issues, pull requests и кода используй GitHub MCP. Для документации библиотек используй find-docs/Context7.
 
-Для read-only исследования исходного кода сначала оцени применимость Serena: для поддерживаемых языков и семантических вопросов о точках входа, символах, зависимостях и границах модулей используй Serena без числовых лимитов; для конфигураций, данных, шаблонов, сгенерированных файлов и неподдерживаемых языков используй обычное точечное чтение. Serena для этой роли технически ограничена чтением: не пытайся заменять, вставлять, переименовывать или удалять символы, менять memories либо переключать активный проект. Не применяй Serena механически и не повторяй уже подтверждённые результаты HANDOFF.
+Для read-only исследования исходного кода сначала оцени применимость Serena: для поддерживаемых языков и семантических вопросов о точках входа, символах, зависимостях и границах модулей используй Serena без числовых лимитов; для конфигураций, данных, шаблонов, сгенерированных файлов и неподдерживаемых языков используй обычное точечное чтение. Если активного проекта нет, выбран другой проект или пользователь явно указал внешнюю папку, разрешено вызвать activate_project только для точного пути из запроса или текущего выбранного проекта. Serena для этой роли технически ограничена чтением: не пытайся заменять, вставлять, переименовывать или удалять символы, менять memories либо удалять проекты Serena. Не применяй Serena механически и не повторяй уже подтверждённые результаты HANDOFF.
 
 Не выдавай память модели за результат поиска, указывай URL рядом с подтверждёнными фактами и явно отмечай, что не удалось подтвердить. Используй Docker MCP Toolkit и Sequential Thinking для сложного анализа, архитектурных решений и планирования. Сравнивай только жизнеспособные варианты по ограничениям, стоимости, рискам и сопровождаемости. PLAN_ONLY, READ_ONLY и NO CHANGES подтверждают твой read-only режим: не изменяй файлы или внешние сервисы.
 '@
@@ -75,7 +75,7 @@ $config.agent.'solution-architect'.prompt = $architectPrompt.Trim()
 # rule wins. Keep the broad Serena grant first and append exact safety rules.
 Set-OrderedToolRules -Permission $config.agent.'software-engineer'.permission -Rules ([ordered]@{
     'serena*' = 'allow'
-    'serena_activate_project' = 'deny'
+    'serena_activate_project' = 'allow'
     'serena_remove_project' = 'deny'
 })
 Set-OrderedToolRules -Permission $config.agent.'solution-architect'.permission -Rules ([ordered]@{
@@ -96,7 +96,7 @@ Set-OrderedToolRules -Permission $config.agent.'solution-architect'.permission -
     'serena_delete_memory' = 'deny'
     'serena_edit_memory' = 'deny'
     'serena_rename_memory' = 'deny'
-    'serena_activate_project' = 'deny'
+    'serena_activate_project' = 'allow'
     'serena_remove_project' = 'deny'
 })
 
