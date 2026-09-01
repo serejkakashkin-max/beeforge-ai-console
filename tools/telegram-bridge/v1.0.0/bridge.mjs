@@ -387,7 +387,7 @@ async function executeFullAccessAction(enabled, userId) {
     audit("full_access", { enabled, userId, succeeded: true });
     schedulePinnedStatus(50);
     await send(enabled
-      ? "🟠 Полный доступ ВКЛЮЧЁН. Все агенты OpenCode могут работать с файлами, shell, интернетом и MCP без системных запросов разрешения. Для уже открытой сессии может потребоваться новая сессия."
+      ? "🟠 Полный доступ ВКЛЮЧЁН. Все агенты OpenCode могут работать с файлами, shell, интернетом, MCP и skills без системных запросов. Маршрутизация Team Lead не изменена: делегирование доступно только настроенным агентам. Для уже открытой сессии может потребоваться новая сессия."
       : "🟢 Полный доступ выключен. Обычные правила и запросы разрешений восстановлены.", mainMenuKeyboard());
     return result;
   } catch (error) {
