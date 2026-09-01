@@ -493,6 +493,19 @@ function Stop-BeeBenchmark {
     return [pscustomobject]@{Stopped=$true;Message='Benchmark stopped'}
 }
 
+function Resolve-BeeBenchmarkRequest([int]$Context,[int]$PromptTokens,[int]$OutputTokens,[int]$TimeoutSec) {
+    $adjustments=New-Object System.Collections.Generic.List[string]
+    if($OutputTokens-lt16){$adjustments.Add("Output автоматически увеличен с $OutputTokens до 16 tokens.");$OutputTokens=16}
+    elseif($OutputTokens-gt4096){$adjustments.Add("Output автоматически уменьшен с $OutputTokens до 4096 tokens — это максимальная длина измерения генерации.");$OutputTokens=4096}
+    if($TimeoutSec-lt30){$adjustments.Add("Timeout автоматически увеличен с $TimeoutSec до 30 секунд.");$TimeoutSec=30}
+    elseif($TimeoutSec-gt3600){$adjustments.Add("Timeout автоматически уменьшен с $TimeoutSec до 3600 секунд.");$TimeoutSec=3600}
+    $safeInput=[int]([math]::Floor(($Context-$OutputTokens-256)/256.0)*256.0)
+    if($safeInput-lt256){throw "Context $Context слишком мал для output $OutputTokens и служебного запаса."}
+    if($PromptTokens-lt256){$adjustments.Add("Input автоматически увеличен с $PromptTokens до 256 tokens.");$PromptTokens=256}
+    elseif($PromptTokens-gt$safeInput){$adjustments.Add("Input автоматически уменьшен с $PromptTokens до $safeInput tokens, чтобы поместиться в context $Context.");$PromptTokens=$safeInput}
+    [pscustomobject]@{Context=$Context;PromptTokens=$PromptTokens;OutputTokens=$OutputTokens;TimeoutSec=$TimeoutSec;SafeInput=$safeInput;Adjustments=($adjustments-join[Environment]::NewLine)}
+}
+
 function Start-BeeBenchmark([string]$ProfileId,[int]$PromptTokens=4096,[int]$OutputTokens=256,[int]$TimeoutSec=900) {
     Initialize-BeeFolders
     $profile = Get-BeeProfile $ProfileId
@@ -503,18 +516,15 @@ function Start-BeeBenchmark([string]$ProfileId,[int]$PromptTokens=4096,[int]$Out
         try { $activeRun = Get-Content -Raw -LiteralPath $script:RunPath | ConvertFrom-Json } catch {}
         if (-not $activeRun -or $activeRun.profileId -ne $profile.id) { throw 'The selected profile is not the running server profile. Enable apply/restart before the test.' }
     }
-    if ($PromptTokens -lt 256) { throw 'Benchmark prompt must be at least 256 tokens' }
-    if ($OutputTokens -lt 16 -or $OutputTokens -gt 4096) { throw 'Benchmark output must be between 16 and 4096 tokens' }
-    $safeInput = [int]$profile.context - $OutputTokens - 256
-    if (($PromptTokens + $OutputTokens + 256) -gt [int]$profile.context) { throw "Benchmark input $PromptTokens plus output $OutputTokens does not fit context $($profile.context). Maximum safe input is $safeInput." }
-    if ($TimeoutSec -lt 30 -or $TimeoutSec -gt 3600) { throw 'Benchmark timeout must be between 30 and 3600 seconds' }
+    $request=Resolve-BeeBenchmarkRequest -Context ([int]$profile.context) -PromptTokens $PromptTokens -OutputTokens $OutputTokens -TimeoutSec $TimeoutSec
+    $PromptTokens=$request.PromptTokens;$OutputTokens=$request.OutputTokens;$TimeoutSec=$request.TimeoutSec
     Stop-BeeBenchmark | Out-Null
     Remove-Item -LiteralPath $script:BenchmarkStatusPath,$script:BenchmarkResultPath -Force -ErrorAction SilentlyContinue
     $worker = Join-Path $PSScriptRoot 'run-benchmark.ps1'
     $arguments = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$worker,'-ProfileId',[string]$profile.id,'-PromptTokens',[string]$PromptTokens,'-OutputTokens',[string]$OutputTokens,'-TimeoutSec',[string]$TimeoutSec)
     $process = Start-Process -FilePath 'powershell.exe' -ArgumentList (ConvertTo-BeeArgumentLine $arguments) -PassThru -WindowStyle Hidden
     Set-Content -LiteralPath $script:BenchmarkPidPath -Value $process.Id -Encoding ASCII
-    return [pscustomobject]@{Started=$true;Pid=$process.Id;PromptTokens=$PromptTokens;OutputTokens=$OutputTokens;Message='Benchmark started'}
+    return [pscustomobject]@{Started=$true;Pid=$process.Id;PromptTokens=$PromptTokens;OutputTokens=$OutputTokens;TimeoutSec=$TimeoutSec;Adjustments=$request.Adjustments;Message='Benchmark started'}
 }
 
 function Get-BeeBenchmarkStatus {
@@ -587,4 +597,4 @@ function Open-BeeLiveLog {
     Start-Process -FilePath 'powershell.exe' -ArgumentList (ConvertTo-BeeArgumentLine $arguments) -WindowStyle Normal | Out-Null
 }
 
-Export-ModuleMember -Function Initialize-BeeFolders,Invoke-BeeRetention,Get-BeeRoot,Get-BeeLogPaths,Get-BeeProfileStore,Save-BeeProfileStore,Get-BeeNewProfileTemplate,Get-BeeProfile,Get-BeeModelFiles,Get-BeeVisionProjectorFiles,Get-BeeSupportedHelp,Test-BeeProfile,Get-BeeArguments,Get-BeeCommandPreview,Start-BeeServer,Stop-BeeServer,Get-BeeServerStatus,Open-BeeLiveLog,Update-BeeOpenCode,Test-BeeRunningProfileMatch,Start-BeeBenchmark,Stop-BeeBenchmark,Get-BeeBenchmarkStatus
+Export-ModuleMember -Function Initialize-BeeFolders,Invoke-BeeRetention,Get-BeeRoot,Get-BeeLogPaths,Get-BeeProfileStore,Save-BeeProfileStore,Get-BeeNewProfileTemplate,Get-BeeProfile,Get-BeeModelFiles,Get-BeeVisionProjectorFiles,Get-BeeSupportedHelp,Test-BeeProfile,Get-BeeArguments,Get-BeeCommandPreview,Start-BeeServer,Stop-BeeServer,Get-BeeServerStatus,Open-BeeLiveLog,Update-BeeOpenCode,Test-BeeRunningProfileMatch,Resolve-BeeBenchmarkRequest,Start-BeeBenchmark,Stop-BeeBenchmark,Get-BeeBenchmarkStatus

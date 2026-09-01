@@ -6,6 +6,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\BeeLlamaManager.Core.psm1') -Force
 Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\BeeForgeTeam.Core.psm1') -Force
 Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\BeeForgeTelegram.Core.psm1') -Force
+Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\BeeForgeSerenaMemory.Core.psm1') -Force
 try { Invoke-BeeRetention } catch {}
 
 [xml]$xaml = @'
@@ -132,6 +133,13 @@ try { Invoke-BeeRetention } catch {}
        </StackPanel></ScrollViewer>
       </Grid>
       <DockPanel Grid.Row="2" Margin="3"><TextBlock Name="TeamStatus" Text="Просмотр не изменяет OpenCode." Foreground="#BFC9D7" VerticalAlignment="Center" TextWrapping="Wrap"/><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Name="SaveAgent" Content="Сохранить изменения" Background="#176B52"/><Button Name="RestoreTeamConfig" Content="Восстановить предыдущую конфигурацию"/></StackPanel></DockPanel>
+     </Grid>
+    </TabItem>
+    <TabItem Header="Память Serena" Name="SerenaMemoryTab">
+     <Grid Margin="12"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <StackPanel><Border Background="#18364A" BorderBrush="#3285B5" BorderThickness="1" CornerRadius="6" Padding="12" Margin="3"><StackPanel><TextBlock Text="Долговременная память проектов" FontSize="19" FontWeight="SemiBold"/><TextBlock Name="SerenaMemorySummary" Text="Загрузка состояния..." Foreground="#A9D7F2" TextWrapping="Wrap" Margin="0,4,0,0"/></StackPanel></Border><Border Background="#302C20" BorderBrush="#8E7937" BorderThickness="1" CornerRadius="6" Padding="11" Margin="3"><TextBlock Text="Одинаковая постоянная память действует для любого открытого или указанного по пути проекта. Она хранит только проверенные устойчивые знания; секреты и временные отчёты не записываются. Удаление памяти требует отдельного подтверждения." TextWrapping="Wrap" Foreground="#FFE4A3"/></Border></StackPanel>
+      <DataGrid Grid.Row="1" Name="SerenaMemoryGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionMode="Single" Background="#15181E" Foreground="White" RowBackground="#20242C" AlternatingRowBackground="#262B34" Margin="3"><DataGrid.Columns><DataGridTextColumn Header="Проект" Binding="{Binding Name}" Width="150"/><DataGridTextColumn Header="Путь" Binding="{Binding Path}" Width="*"/><DataGridTextColumn Header="Источники" Binding="{Binding Sources}" Width="150"/><DataGridTextColumn Header="Режим" Binding="{Binding Mode}" Width="115"/><DataGridTextColumn Header="Память" Binding="{Binding Memories}" Width="75"/><DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="145"/></DataGrid.Columns></DataGrid>
+      <DockPanel Grid.Row="2" Margin="3"><TextBlock Name="SerenaMemoryStatus" Text="Выберите проект." Foreground="#BFC9D7" VerticalAlignment="Center" TextWrapping="Wrap"/><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Name="RefreshSerenaMemory" Content="Обновить"/><Button Name="EnableSerenaMemory" Content="Активировать память" Background="#176B52"/><Button Name="CheckSerenaMemory" Content="Проверить память"/><Button Name="OpenSerenaMemoryFolder" Content="Открыть memories"/></StackPanel></DockPanel>
      </Grid>
     </TabItem>
     <TabItem Header="Telegram" Name="TelegramTab">
@@ -347,10 +355,12 @@ $advanced = New-Object 'System.Collections.ObjectModel.ObservableCollection[obje
 $teamSkills = New-Object 'System.Collections.ObjectModel.ObservableCollection[object]'
 $teamMcps = New-Object 'System.Collections.ObjectModel.ObservableCollection[object]'
 $telegramProjects = New-Object 'System.Collections.ObjectModel.ObservableCollection[object]'
+$serenaMemoryProjects = New-Object 'System.Collections.ObjectModel.ObservableCollection[object]'
 (UI 'AdvancedGrid').ItemsSource = $advanced
 (UI 'TeamSkillsGrid').ItemsSource = $teamSkills
 (UI 'TeamMcpGrid').ItemsSource = $teamMcps
 (UI 'TelegramProjects').ItemsSource = $telegramProjects
+(UI 'SerenaMemoryGrid').ItemsSource = $serenaMemoryProjects
 (UI 'AgentMode').ItemsSource = @('primary','subagent','all')
 
 foreach ($name in @('KvK','KvV')) { (UI $name).ItemsSource = @('f16','bf16','q8_0','q4_0','iq4_nl','kvarn4','kvarn3') }
@@ -359,7 +369,7 @@ foreach ($name in @('KvK','KvV')) { (UI $name).ItemsSource = @('f16','bf16','q8_
 (UI 'GpuLayers').ItemsSource = @('all') + @(64..0 | ForEach-Object { [string]$_ })
 (UI 'TestPromptTokens').ItemsSource = @(1024,4096,8192,16384,32768)
 (UI 'TestPromptTokens').Text = '4096'
-(UI 'TestOutputTokens').ItemsSource = @(64,128,256,512,1024)
+(UI 'TestOutputTokens').ItemsSource = @(64,128,256,512,1024,2048,4096)
 (UI 'TestOutputTokens').Text = '256'
 
 $resourceDebounce = New-Object Windows.Threading.DispatcherTimer
@@ -631,10 +641,9 @@ function Begin-Benchmark {
         $timeout = [int](UI 'TestTimeout').Text
         $applyProfile=[bool](UI 'ApplyBeforeTest').IsChecked
         $profileForLimit=if($applyProfile){Get-FormProfile}else{Get-BeeProfile $script:currentProfile.id}
-        $safeInput=Get-SafeTestInput ([int]$profileForLimit.context) $outputTokens
-        if($safeInput-lt 256){throw "Context $($profileForLimit.context) слишком мал для output $outputTokens. Уменьшите output или увеличьте context."}
-        $adjustment=''
-        if($promptTokens-gt$safeInput){$adjustment="Input автоматически уменьшен с $promptTokens до $safeInput tokens, чтобы поместиться в context $($profileForLimit.context).";$promptTokens=$safeInput;(UI 'TestPromptTokens').Text=[string]$promptTokens;Update-TestLimitHint}
+        $resolved=Resolve-BeeBenchmarkRequest -Context ([int]$profileForLimit.context) -PromptTokens $promptTokens -OutputTokens $outputTokens -TimeoutSec $timeout
+        $promptTokens=$resolved.PromptTokens;$outputTokens=$resolved.OutputTokens;$timeout=$resolved.TimeoutSec;$adjustment=$resolved.Adjustments
+        (UI 'TestPromptTokens').Text=[string]$promptTokens;(UI 'TestOutputTokens').Text=[string]$outputTokens;(UI 'TestTimeout').Text=[string]$timeout;Update-TestLimitHint
         if ($applyProfile) {
             $p = Save-CurrentProfile
             if (-not $p) { return }
@@ -820,6 +829,22 @@ function Update-TelegramStatus {
     } catch {(UI 'TelegramStatus').Text="ОШИБКА | $($_.Exception.Message)"}
 }
 
+function Refresh-SerenaMemoryView {
+    try {
+        $script:serenaMemoryProjects.Clear()
+        foreach($project in @(Get-BeeSerenaMemoryProjects)){$script:serenaMemoryProjects.Add($project)}
+        $ready=@($script:serenaMemoryProjects|Where-Object{$_.Status-eq'READY'}).Count
+        (UI 'SerenaMemorySummary').Text="Найдено проектов: $($script:serenaMemoryProjects.Count) • память готова: $ready • единая политика для всех проектов"
+        (UI 'SerenaMemoryStatus').Text='Для нового проекта активируйте память; Team Lead поручит Solution Architect первоначальный onboarding.'
+    } catch {(UI 'SerenaMemorySummary').Text="Ошибка: $($_.Exception.Message)"}
+}
+
+function Get-SelectedSerenaMemoryProject {
+    $row=(UI 'SerenaMemoryGrid').SelectedItem
+    if(-not$row){throw 'Выберите проект в таблице памяти Serena.'}
+    return $row
+}
+
 function Refresh-TelegramView {
     try {
         $config=Get-BeeTelegramConfig
@@ -929,6 +954,10 @@ foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionO
 (UI 'TelegramStart').Add_Click({Start-TelegramFromUi})
 (UI 'TelegramStop').Add_Click({try{$script:telegramManualStop=$true;[void](Stop-BeeTelegramBridge);Update-TelegramStatus}catch{Show-Message $_.Exception.Message 'Остановка Telegram Bridge' Error}})
 (UI 'TelegramOpenLog').Add_Click({try{Open-BeeTelegramLog}catch{Show-Message $_.Exception.Message 'Журнал Telegram' Error}})
+(UI 'RefreshSerenaMemory').Add_Click({Refresh-SerenaMemoryView})
+(UI 'EnableSerenaMemory').Add_Click({try{$row=Get-SelectedSerenaMemoryProject;$result=Enable-BeeSerenaProjectMemory -ProjectPath $row.Path;(UI 'SerenaMemoryStatus').Text="Постоянная память включена: $($result.Path). Статус: $($result.Status). Недостаёт: $($result.Missing -join ', ')";Refresh-SerenaMemoryView}catch{Show-Message $_.Exception.Message 'Память Serena' Error}})
+(UI 'CheckSerenaMemory').Add_Click({try{$row=Get-SelectedSerenaMemoryProject;$result=Test-BeeSerenaProjectMemories -ProjectPath $row.Path;(UI 'SerenaMemoryStatus').Text="Проверка завершена. Статус: $($result.Status). Недостаёт: $($result.Missing -join ', ')";Refresh-SerenaMemoryView}catch{Show-Message $_.Exception.Message 'Проверка памяти Serena' Error}})
+(UI 'OpenSerenaMemoryFolder').Add_Click({try{$row=Get-SelectedSerenaMemoryProject;$dir=Join-Path $row.Path '.serena\memories';if(-not(Test-Path -LiteralPath $dir)){throw 'Папка memories ещё не создана. Сначала включите постоянную память.'};Start-Process explorer.exe -ArgumentList ('"'+$dir+'"')}catch{Show-Message $_.Exception.Message 'Память Serena' Error}})
 (UI 'TelegramAddProject').Add_Click({Add-TelegramProject})
 (UI 'TelegramRemoveProject').Add_Click({$selected=(UI 'TelegramProjects').SelectedItem;if($null-ne$selected){[void]$telegramProjects.Remove($selected)}})
 (UI 'OpenLiveLog').Add_Click({ try { Open-BeeLiveLog } catch { Show-Message $_.Exception.Message 'Live log' Error } })
@@ -946,6 +975,7 @@ foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionO
     if ($sender.SelectedItem -eq (UI 'CommandTab')) { Update-Preview }
     if ($sender.SelectedItem -eq (UI 'ResourcesTab')) { Update-ResourceEstimate }
     if ($sender.SelectedItem -eq (UI 'TeamTab')) { Refresh-TeamView }
+    if ($sender.SelectedItem -eq (UI 'SerenaMemoryTab')) { Refresh-SerenaMemoryView }
     if ($sender.SelectedItem -eq (UI 'TelegramTab')) { Refresh-TelegramView }
 })
 
@@ -1024,6 +1054,14 @@ if($env:BEEFORGE_TELEGRAM_SMOKE_TEST-eq'1'){
     if(-not(UI 'TelegramStatus').Text){throw 'Статус Telegram пуст'}
     if([Windows.Controls.ScrollViewer]::GetHorizontalScrollBarVisibility((UI 'TelegramProjects'))-ne[Windows.Controls.ScrollBarVisibility]::Disabled){throw 'Горизонтальная прокрутка проектов не отключена'}
     Write-Output ("TELEGRAM_TAB_SMOKE_OK | {0} projects | {1}" -f (UI 'TelegramProjects').Items.Count,(UI 'TelegramStatus').Text)
+    $window.Close();return
+}
+if($env:BEEFORGE_SERENA_SMOKE_TEST-eq'1'){
+    (UI 'Tabs').SelectedItem=(UI 'SerenaMemoryTab')
+    if((UI 'Tabs').SelectedItem-ne(UI 'SerenaMemoryTab')){throw 'Память Serena не стала активной вкладкой'}
+    if(-not(UI 'SerenaMemoryGrid').Items.Count){throw 'Список проектов Serena пуст'}
+    if(-not(UI 'SerenaMemorySummary').Text-or(UI 'SerenaMemorySummary').Text-like'*Загрузка*'){throw 'Сводка памяти Serena не загрузилась'}
+    Write-Output ("SERENA_TAB_SMOKE_OK | {0} projects | {1}" -f (UI 'SerenaMemoryGrid').Items.Count,(UI 'SerenaMemorySummary').Text)
     $window.Close();return
 }
 if($env:BEEFORGE_TEAM_SMOKE_TEST-eq'1'){

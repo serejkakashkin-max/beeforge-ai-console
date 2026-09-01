@@ -12,6 +12,16 @@ try {
     if (Test-Path -LiteralPath $ensureScript -PathType Leaf) {
         & $ensureScript -ProjectPath $projectRoot *> $null
     }
+    if (Test-Path -LiteralPath (Join-Path $projectRoot '.serena\project.yml') -PathType Leaf) {
+        $previousEncoding = $env:PYTHONIOENCODING
+        try {
+            $env:PYTHONIOENCODING = 'utf-8'
+            & $serenaExe memories initialize $projectRoot *> $null
+        } finally {
+            if ($null -eq $previousEncoding) { Remove-Item Env:PYTHONIOENCODING -ErrorAction SilentlyContinue }
+            else { $env:PYTHONIOENCODING = $previousEncoding }
+        }
+    }
 } catch {
     # Keep stdout clean because it carries the MCP stdio protocol. Serena can
     # still start; stderr is safe for a concise diagnostic message.

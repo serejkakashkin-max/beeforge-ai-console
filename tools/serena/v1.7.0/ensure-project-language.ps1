@@ -147,6 +147,41 @@ function Set-UnsetScalar {
     return $true
 }
 
+function Set-ScalarValue {
+    param(
+        [System.Collections.Generic.List[string]]$Lines,
+        [string]$Name,
+        [string]$Value
+    )
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($Lines[$i] -match "^$([regex]::Escape($Name)):") {
+            $changed = $Lines[$i] -ne "$Name`: $Value"
+            $Lines[$i] = "$Name`: $Value"
+            return $changed
+        }
+    }
+    $Lines.Add("$Name`: $Value")
+    return $true
+}
+
+function Register-SerenaProject {
+    $configPath = Join-Path $env:USERPROFILE '.serena\serena_config.yml'
+    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) { return }
+    $configLines = [System.Collections.Generic.List[string]]::new()
+    $configLines.AddRange([IO.File]::ReadAllLines($configPath, [Text.UTF8Encoding]::new($false)))
+    $canonical = $script:ProjectRoot.TrimEnd('\')
+    if ($configLines | Where-Object { $_ -match '^\s*-\s*(.+?)\s*$' -and $matches[1].Trim('"','''').TrimEnd('\') -eq $canonical } | Select-Object -First 1) { return }
+    $projectsIndex = -1
+    for ($i = 0; $i -lt $configLines.Count; $i++) { if ($configLines[$i] -match '^projects:\s*$') { $projectsIndex = $i; break } }
+    if ($projectsIndex -lt 0) { $configLines.Add(''); $configLines.Add('projects:'); $configLines.Add("- $canonical") }
+    else {
+        $insert = $projectsIndex + 1
+        while ($insert -lt $configLines.Count -and $configLines[$insert] -match '^\s*-\s*') { $insert++ }
+        $configLines.Insert($insert, "- $canonical")
+    }
+    [IO.File]::WriteAllLines($configPath, $configLines, [Text.UTF8Encoding]::new($false))
+}
+
 Initialize-ProjectInventory
 $servers = @(Get-DetectedLanguageServers)
 $lineEnding = Get-DetectedLineEnding
@@ -168,10 +203,13 @@ if (-not (Test-Path -LiteralPath $projectYml)) {
         'encoding: "utf-8"'
         $(if ($lineEnding) { "line_ending: `"$lineEnding`"" } else { 'line_ending:' })
         'ignore_all_files_in_gitignore: true'
+        'read_only: false'
+        'initial_prompt: "BeeForge project: use durable Serena memories for every activated project; read memory_maintenance first; never store secrets or transient task logs."'
         'ls_workspace_folders:'
         '- "."'
     )
     [IO.File]::WriteAllLines($projectYml, $newConfig, [Text.UTF8Encoding]::new($true))
+    Register-SerenaProject
     [pscustomobject]@{ status = 'created'; project = $script:ProjectRoot; language_servers = $servers; line_ending = $lineEnding } | ConvertTo-Json -Compress
     exit 0
 }
@@ -201,14 +239,17 @@ if ($languagesChanged) {
     $lines.InsertRange($start, $replacement)
 }
 $lineEndingChanged = Set-UnsetScalar -Lines $lines -Name 'line_ending' -Value $lineEnding
+$memoryReadOnlyChanged = Set-ScalarValue -Lines $lines -Name 'read_only' -Value 'false'
+$memoryPromptChanged = Set-ScalarValue -Lines $lines -Name 'initial_prompt' -Value '"BeeForge project: use durable Serena memories for every activated project; read memory_maintenance first; never store secrets or transient task logs."'
 
-if ($languagesChanged -or $lineEndingChanged) {
+if ($languagesChanged -or $lineEndingChanged -or $memoryReadOnlyChanged -or $memoryPromptChanged) {
     [IO.File]::WriteAllLines($projectYml, $lines, [Text.UTF8Encoding]::new($true))
 }
+Register-SerenaProject
 
 $added = @($target | Where-Object { $_ -notin $existing })
 $removed = @($existing | Where-Object { $_ -notin $target })
-$status = if ($languagesChanged -and $managed) { 'reconciled' } elseif ($languagesChanged) { 'extended' } elseif ($lineEndingChanged) { 'line-ending-set' } else { 'already-configured' }
+$status = if ($languagesChanged -and $managed) { 'reconciled' } elseif ($languagesChanged) { 'extended' } elseif ($lineEndingChanged) { 'line-ending-set' } elseif ($memoryReadOnlyChanged -or $memoryPromptChanged) { 'memory-enabled' } else { 'already-configured' }
 [pscustomobject]@{
     status = $status
     project = $script:ProjectRoot

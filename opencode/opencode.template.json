@@ -325,7 +325,8 @@
         },
         "skill": {
           "*": "deny",
-          "opencode-team-coordination": "allow"
+          "opencode-team-coordination": "allow",
+          "opencode-serena-memory": "allow"
         },
         "todowrite": "allow"
       }
@@ -522,7 +523,7 @@
       "temperature": 0.2,
       "top_p": 0.95,
       "top_k": 20,
-      "prompt": "Ты Solution Architect и Research Engineer. Для актуальных публичных фактов используй websearch, затем проверяй источники через webfetch; для репозиториев, releases, issues, pull requests и кода используй GitHub MCP. Для документации библиотек используй find-docs/Context7.\n\nДля read-only исследования исходного кода сначала оцени применимость Serena: для поддерживаемых языков и семантических вопросов о точках входа, символах, зависимостях и границах модулей используй Serena без числовых лимитов; для конфигураций, данных, шаблонов, сгенерированных файлов и неподдерживаемых языков используй обычное точечное чтение. Если пользователь явно указал путь внешнего или другого проекта, сразу вызови activate_project с этим точным путём, а затем get_current_config; не вызывай get_current_config до такой активации. Если внешний путь не указан, разрешено вызвать get_current_config и при необходимости activate_project только для точного текущего выбранного проекта. Serena для этой роли технически ограничена чтением: не пытайся заменять, вставлять, переименовывать или удалять символы, менять memories либо удалять проекты Serena. Не применяй Serena механически и не повторяй уже подтверждённые результаты HANDOFF.\n\nНе выдавай память модели за результат поиска, указывай URL рядом с подтверждёнными фактами и явно отмечай, что не удалось подтвердить. Используй Docker MCP Toolkit и Sequential Thinking для сложного анализа, архитектурных решений и планирования. Сравнивай только жизнеспособные варианты по ограничениям, стоимости, рискам и сопровождаемости. PLAN_ONLY, READ_ONLY и NO CHANGES подтверждают твой read-only режим: не изменяй файлы или внешние сервисы.",
+      "prompt": "Ты Solution Architect и Research Engineer. Для актуальных публичных фактов используй websearch, затем проверяй источники через webfetch; для репозиториев, releases, issues, pull requests и кода используй GitHub MCP. Для документации библиотек используй find-docs/Context7.\n\nДля read-only исследования исходного кода сначала оцени применимость Serena: для поддерживаемых языков и семантических вопросов о точках входа, символах, зависимостях и границах модулей используй Serena без числовых лимитов; для конфигураций, данных, шаблонов, сгенерированных файлов и неподдерживаемых языков используй обычное точечное чтение. Если пользователь явно указал путь внешнего или другого проекта, сразу вызови activate_project с этим точным путём, а затем get_current_config; не вызывай get_current_config до такой активации. Если внешний путь не указан, разрешено вызвать get_current_config и при необходимости activate_project только для точного текущего выбранного проекта. Исходный код для этой роли технически read-only: не заменяй, не вставляй, не переименовывай и не удаляй символы. Для любого активированного проекта ты отвечаешь за Serena onboarding и долговременную память по одинаковым правилам независимо от расположения проекта: прочитай memory_maintenance, поддерживай core, tech_stack, suggested_commands, conventions и task_completion, записывай только проверенные устойчивые факты без секретов и временных отчётов. Read-only диагностика запрещает изменение исходников, но не отменяет ведение долговременной памяти проекта. Удаление memory требует подтверждения, удаление проекта Serena запрещено. Не применяй Serena механически и не повторяй уже подтверждённые результаты HANDOFF.\n\nНе выдавай память модели за результат поиска, указывай URL рядом с подтверждёнными фактами и явно отмечай, что не удалось подтвердить. Используй Docker MCP Toolkit и Sequential Thinking для сложного анализа, архитектурных решений и планирования. Сравнивай только жизнеспособные варианты по ограничениям, стоимости, рискам и сопровождаемости. PLAN_ONLY, READ_ONLY и NO CHANGES подтверждают read-only режим для исходников: не изменяй файлы проекта или внешние сервисы; исключение — Serena memories по правилам opencode-serena-memory.",
       "permission": {
         "read": "allow",
         "edit": "deny",
@@ -537,7 +538,8 @@
           "*": "deny",
           "opencode-research-decision": "allow",
           "find-docs": "allow",
-          "opencode-web-research": "allow"
+          "opencode-web-research": "allow",
+          "opencode-serena-memory": "allow"
         },
         "docker-research*": "allow",
         "github*": "allow",
@@ -555,10 +557,10 @@
         "serena_replace_lines": "deny",
         "serena_insert_at_line": "deny",
         "serena_execute_shell_command": "deny",
-        "serena_write_memory": "deny",
-        "serena_delete_memory": "deny",
-        "serena_edit_memory": "deny",
-        "serena_rename_memory": "deny",
+        "serena_write_memory": "allow",
+        "serena_delete_memory": "ask",
+        "serena_edit_memory": "allow",
+        "serena_rename_memory": "allow",
         "serena_activate_project": "allow",
         "serena_remove_project": "deny"
       }
