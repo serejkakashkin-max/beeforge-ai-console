@@ -1,4 +1,4 @@
-Set-StrictMode -Version 2.0
+﻿Set-StrictMode -Version 2.0
 $script:BeeRoot = Split-Path $PSScriptRoot -Parent
 $script:RemoteConfigPath = if($env:BEEFORGE_REMOTE_CONFIG){[IO.Path]::GetFullPath($env:BEEFORGE_REMOTE_CONFIG)}else{Join-Path $script:BeeRoot 'config\remote-access.json'}
 Import-Module (Join-Path $PSScriptRoot 'BeeLlamaManager.Core.psm1')
