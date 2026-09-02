@@ -10,6 +10,7 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'BeeLlamaManager.Core.psm1') -Force
 $paths = Get-BeeLogPaths
 $profile = Get-BeeProfile $ProfileId
+$apiBaseUrl = Get-BeeProfileApiBaseUrl $profile
 $started = Get-Date
 
 function Write-TestJson([string]$Path,$Value) {
@@ -30,7 +31,7 @@ try {
         while($builder.Length-lt$targetCharacters){[void]$builder.Append($seed)}
         $synthetic=$builder.ToString(0,[math]::Min($builder.Length,$targetCharacters))
         $countBody=@{model=[string]$profile.alias;messages=@(@{role='user';content=$synthetic+$instruction});reasoning_effort='none';chat_template_kwargs=@{enable_thinking=$false}}|ConvertTo-Json -Depth 8
-        $countResponse=Invoke-RestMethod -Uri "http://$($profile.host):$($profile.port)/v1/chat/completions/input_tokens" -Method Post -ContentType 'application/json; charset=utf-8' -Body $countBody -TimeoutSec 60
+        $countResponse=Invoke-RestMethod -Uri "$apiBaseUrl/chat/completions/input_tokens" -Method Post -ContentType 'application/json; charset=utf-8' -Body $countBody -TimeoutSec 60
         $measuredInput=[int]$countResponse.input_tokens
         if($measuredInput-le 0){throw 'BeeLlama input_tokens endpoint returned an invalid token count'}
         if([math]::Abs($measuredInput-$PromptTokens)-le[math]::Max(8,$PromptTokens*0.01)){break}
@@ -49,7 +50,7 @@ try {
     } | ConvertTo-Json -Depth 8
     Write-TestJson $paths.BenchmarkStatus ([pscustomobject]@{state='Running';message="Prompt processing / generation; measured input $measuredInput";startedAt=$started.ToString('o');targetPromptTokens=$PromptTokens;measuredInputTokens=$measuredInput;targetOutputTokens=$OutputTokens})
     $watch = [Diagnostics.Stopwatch]::StartNew()
-    $response = Invoke-RestMethod -Uri "http://$($profile.host):$($profile.port)/v1/chat/completions" -Method Post -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec $TimeoutSec
+    $response = Invoke-RestMethod -Uri "$apiBaseUrl/chat/completions" -Method Post -ContentType 'application/json; charset=utf-8' -Body $body -TimeoutSec $TimeoutSec
     $watch.Stop()
     $promptActual = if ($response.timings.prompt_n) {[int]$response.timings.prompt_n} elseif ($response.usage.prompt_tokens) {[int]$response.usage.prompt_tokens} else {$null}
     $outputActual = if ($response.timings.predicted_n) {[int]$response.timings.predicted_n} elseif ($response.usage.completion_tokens) {[int]$response.usage.completion_tokens} else {$null}

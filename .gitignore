@@ -3,6 +3,7 @@ secrets/
 config/profiles.json
 config/telegram.json
 config/opencode.json
+config/remote-access.json
 *.dpapi
 *.key
 *.pem

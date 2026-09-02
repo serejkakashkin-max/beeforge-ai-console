@@ -7,6 +7,7 @@ Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\BeeLlamaMan
 Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\BeeForgeTeam.Core.psm1') -Force
 Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\BeeForgeTelegram.Core.psm1') -Force
 Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\BeeForgeSerenaMemory.Core.psm1') -Force
+Import-Module (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\BeeForgeRemote.Core.psm1') -Force
 try { Invoke-BeeRetention } catch {}
 
 [xml]$xaml = @'
@@ -55,8 +56,9 @@ try { Invoke-BeeRetention } catch {}
        <Label Grid.Row="1" Content="Batch"/><TextBox Grid.Row="1" Grid.Column="1" Name="Batch"/><Label Grid.Row="1" Grid.Column="2" Content="Ubatch"/><TextBox Grid.Row="1" Grid.Column="3" Name="Ubatch"/><CheckBox Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" Name="FlashAttention" Content="Flash Attention"/>
        <Label Grid.Row="2" Content="Threads"/><TextBox Grid.Row="2" Grid.Column="1" Name="Threads"/><Label Grid.Row="2" Grid.Column="2" Content="Threads batch"/><TextBox Grid.Row="2" Grid.Column="3" Name="ThreadsBatch"/><Label Grid.Row="2" Grid.Column="4" Content="Cache reuse"/><TextBox Grid.Row="2" Grid.Column="5" Name="CacheReuse"/>
       </Grid></GroupBox>
-      <GroupBox Name="ApiGroup" Header="API"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="200"/><ColumnDefinition Width="100"/><ColumnDefinition Width="130"/><ColumnDefinition Width="160"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions>
-       <Label Content="Host"/><TextBox Grid.Column="1" Name="Host"/><Label Grid.Column="2" Content="Port"/><TextBox Grid.Column="3" Name="Port"/><CheckBox Grid.Column="4" Name="OpenCodeSync" Content="Обновлять OpenCode"/><TextBox Grid.Column="5" Name="OpenCodeOutput" ToolTip="OpenCode output limit"/>
+      <GroupBox Name="ApiGroup" Header="API и подключение"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="200"/><ColumnDefinition Width="100"/><ColumnDefinition Width="130"/><ColumnDefinition Width="160"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+       <Label Content="Режим"/><ComboBox Grid.Column="1" Name="ConnectionMode"><ComboBoxItem Content="LocalHost"/><ComboBoxItem Content="RemoteClient"/></ComboBox><Label Grid.Column="2" Content="Output"/><TextBox Grid.Column="3" Name="OpenCodeOutput" ToolTip="OpenCode output limit"/><CheckBox Grid.Column="4" Grid.ColumnSpan="2" Name="OpenCodeSync" Content="Обновлять OpenCode"/>
+       <Label Grid.Row="1" Content="Host / URL"/><TextBox Grid.Row="1" Grid.Column="1" Name="Host"/><Label Grid.Row="1" Grid.Column="2" Content="Port"/><TextBox Grid.Row="1" Grid.Column="3" Name="Port"/><TextBox Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" Name="RemoteBaseUrl" ToolTip="HTTPS endpoint Tailscale Serve, оканчивающийся на /v1"/>
       </Grid></GroupBox>
      </StackPanel></ScrollViewer>
     </TabItem>
@@ -177,6 +179,16 @@ try { Invoke-BeeRetention } catch {}
       <TextBlock Name="TestTokens" Text="Input: — | Output: —" Foreground="#C8D0DC" Margin="9,4"/>
       <TextBox Name="TestResult" IsReadOnly="True" Height="190" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas" Text="Тест ещё не запускался."/>
       <TextBlock Text="«Стоп тест» завершает только отдельный benchmark-клиент. BeeLlama server и OpenCode продолжают работать." Foreground="#FFBA69" TextWrapping="Wrap" Margin="8"/>
+     </StackPanel></ScrollViewer>
+    </TabItem>
+    <TabItem Header="Доступ с ноутбука" Name="RemoteAccessTab">
+     <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="12">
+      <TextBlock Text="Удалённая модель через Tailscale" FontSize="20" FontWeight="SemiBold"/>
+      <TextBlock Text="BeeLlama остаётся на 127.0.0.1. Tailscale Serve публикует её только внутри вашего tailnet по HTTPS. Funnel и публичные порты не используются." TextWrapping="Wrap" Foreground="#BFC9D7" Margin="0,6,0,12"/>
+      <Border Background="#18364A" BorderBrush="#3285B5" BorderThickness="1" CornerRadius="6" Padding="12"><StackPanel><TextBlock Name="TailscaleStatus" Text="Проверка Tailscale..." FontWeight="SemiBold"/><TextBlock Name="RemoteAccessStatus" Text="Проверка Serve..." TextWrapping="Wrap" Margin="0,5,0,0"/><TextBlock Name="RemoteAccessUrl" Text="" Foreground="#79D6A3" TextWrapping="Wrap" Margin="0,5,0,0"/></StackPanel></Border>
+      <WrapPanel Margin="0,10"><Button Name="RefreshRemoteAccess" Content="Обновить"/><Button Name="EnableRemoteAccess" Content="Включить доступ" Background="#176B52"/><Button Name="DisableRemoteAccess" Content="Выключить доступ" Background="#713A3A"/><Button Name="CopyRemoteInstall" Content="Скопировать команду для ноутбука"/></WrapPanel>
+      <GroupBox Header="Установка на ноутбуке"><StackPanel><TextBlock Text="1. Установите Tailscale и войдите в тот же аккаунт. 2. Клонируйте репозиторий. 3. Выполните команду ниже в каталоге BeeForge." TextWrapping="Wrap"/><TextBox Name="RemoteInstallCommand" IsReadOnly="True" TextWrapping="Wrap" MinHeight="85" FontFamily="Consolas"/></StackPanel></GroupBox>
+      <Border Background="#302C20" BorderBrush="#8E7937" BorderThickness="1" CornerRadius="6" Padding="11"><TextBlock Text="Модель на основном ПК запускается вручную или Telegram-командой /launch. Telegram на ноутбуке установщик RemoteClient не включает." TextWrapping="Wrap" Foreground="#FFE4A3"/></Border>
      </StackPanel></ScrollViewer>
     </TabItem>
     <TabItem Header="Туториал">
@@ -426,17 +438,32 @@ function Refresh-ProfileList([string]$SelectId) {
     (UI 'ProfileList').SelectedItem = $target
 }
 
+function Set-ProfileModeUi([string]$Mode) {
+    $remote=($Mode-eq'RemoteClient')
+    foreach($name in @('ModelPath','ServerPath','BrowseModel','BrowseRuntime','MmprojPath','BrowseMmproj','VisionOffload','Host','Port')){(UI $name).IsEnabled=-not$remote}
+    foreach($name in @('ComputeGroup','KvGroup','ReasoningGroup','MtpGroup','SamplingGroup','ResourcesTab','AdvancedGrid','AddAdvanced','RemoveAdvanced','OpenLiveLog')){(UI $name).IsEnabled=-not$remote}
+    (UI 'RemoteBaseUrl').IsEnabled=$remote
+    (UI 'ApplyRestart').Content=if($remote){'Проверить подключение'}else{'Применить и перезапустить'}
+    (UI 'StartServer').Content=if($remote){'Подключить и открыть OpenCode'}else{'Сохранить и запустить'}
+    (UI 'StopServer').IsEnabled=-not$remote
+    (UI 'ApplyBeforeTest').IsChecked=if($remote){$false}else{(UI 'ApplyBeforeTest').IsChecked}
+    (UI 'ApplyBeforeTest').IsEnabled=-not$remote
+}
+
 function Load-Profile($Profile) {
     if (-not $Profile) { return }
     $script:currentProfile = $Profile
     $map = @{
-        ProfileName='name'; ModelPath='modelPath'; ServerPath='serverPath'; Alias='alias'; Context='context'; Parallel='parallel'; Batch='batch'; Ubatch='ubatch'; Threads='threads'; ThreadsBatch='threadsBatch'; CacheReuse='cacheReuse'; Host='host'; Port='port'; OpenCodeOutput='openCodeOutput'; KvTailTokens='kvTailTokens'; ReasoningBudget='reasoningBudget'; Temperature='temperature'; TopP='topP'; TopK='topK'; MinP='minP'; RepeatPenalty='repeatPenalty'
+        ProfileName='name'; ModelPath='modelPath'; ServerPath='serverPath'; Alias='alias'; Context='context'; Parallel='parallel'; Batch='batch'; Ubatch='ubatch'; Threads='threads'; ThreadsBatch='threadsBatch'; CacheReuse='cacheReuse'; Host='host'; Port='port'; RemoteBaseUrl='remoteBaseUrl'; OpenCodeOutput='openCodeOutput'; KvTailTokens='kvTailTokens'; ReasoningBudget='reasoningBudget'; Temperature='temperature'; TopP='topP'; TopK='topK'; MinP='minP'; RepeatPenalty='repeatPenalty'
     }
     foreach ($control in $map.Keys) { (UI $control).Text = [string]$Profile.($map[$control]) }
+    $mode=Get-BeeProfileConnectionMode $Profile
+    (UI 'ConnectionMode').SelectedIndex=if($mode-eq'RemoteClient'){1}else{0}
+    Set-ProfileModeUi $mode
     (UI 'VisionEnabled').IsChecked = [bool]($Profile.PSObject.Properties['visionEnabled'] -and $Profile.visionEnabled)
     (UI 'VisionOffload').IsChecked = [bool]($Profile.PSObject.Properties['visionOffload'] -and $Profile.visionOffload)
     (UI 'MmprojPath').Text = if ($Profile.PSObject.Properties['mmprojPath']) { [string]$Profile.mmprojPath } else { '' }
-    Refresh-VisionProjectorList
+    if($mode-eq'LocalHost'-and$env:BEEFORGE_REMOTE_SMOKE_TEST-ne'1'){Refresh-VisionProjectorList}else{Update-VisionHint}
     (UI 'GpuLayers').SelectedItem = [string]$Profile.gpuLayers
     foreach ($pair in @(@('FlashAttention','flashAttention'),@('OpenCodeSync','openCodeSync'),@('ReasoningEnabled','reasoningEnabled'),@('ReasoningPreserve','reasoningPreserve'),@('MtpEnabled','mtpEnabled'))) { (UI $pair[0]).IsChecked = [bool]$Profile.($pair[1]) }
     foreach ($pair in @(@('KvK','kvK'),@('KvV','kvV'),@('KvTailType','kvTailType'),@('MtpNMax','mtpNMax'))) { (UI $pair[0]).SelectedItem = $Profile.($pair[1]) }
@@ -451,13 +478,14 @@ function Load-Profile($Profile) {
 function Get-FormProfile {
     if (-not $script:currentProfile) { throw 'Профиль не выбран' }
     $p = ($script:currentProfile | ConvertTo-Json -Depth 20 | ConvertFrom-Json)
-    foreach ($field in @('visionEnabled','visionOffload','mmprojPath')) {
+    foreach ($field in @('connectionMode','remoteBaseUrl','visionEnabled','visionOffload','mmprojPath')) {
         if (-not $p.PSObject.Properties[$field]) {
-            $defaultValue = if ($field -eq 'mmprojPath') { '' } else { $false }
+            $defaultValue = if ($field -eq 'connectionMode') { 'LocalHost' } elseif($field-in@('mmprojPath','remoteBaseUrl')) { '' } else { $false }
             $p | Add-Member -NotePropertyName $field -NotePropertyValue $defaultValue
         }
     }
     $p.name=(UI 'ProfileName').Text.Trim(); $p.modelPath=(UI 'ModelPath').Text.Trim(); $p.serverPath=(UI 'ServerPath').Text.Trim(); $p.alias=(UI 'Alias').Text.Trim()
+    $p.connectionMode=[string](UI 'ConnectionMode').Text;$p.remoteBaseUrl=(UI 'RemoteBaseUrl').Text.Trim()
     $p.context=[int](UI 'Context').Text; $p.gpuLayers=(UI 'GpuLayers').Text.Trim(); $p.parallel=[int](UI 'Parallel').Text; $p.batch=[int](UI 'Batch').Text; $p.ubatch=[int](UI 'Ubatch').Text; $p.threads=[int](UI 'Threads').Text; $p.threadsBatch=[int](UI 'ThreadsBatch').Text; $p.cacheReuse=[int](UI 'CacheReuse').Text
     $p.flashAttention=[bool](UI 'FlashAttention').IsChecked; $p.host=(UI 'Host').Text.Trim(); $p.port=[int](UI 'Port').Text; $p.openCodeSync=[bool](UI 'OpenCodeSync').IsChecked; $p.openCodeOutput=[int](UI 'OpenCodeOutput').Text
     $p.visionEnabled=[bool](UI 'VisionEnabled').IsChecked; $p.visionOffload=[bool](UI 'VisionOffload').IsChecked; $p.mmprojPath=(UI 'MmprojPath').Text.Trim()
@@ -484,6 +512,7 @@ function Get-KvMemoryFactor([string]$Type) {
 function Update-ResourceEstimate {
     try {
         $p = Get-FormProfile
+        if((Get-BeeProfileConnectionMode $p)-eq'RemoteClient'){throw 'Удалённый профиль использует ресурсы основного ПК; локальная оценка VRAM/RAM неприменима.'}
         if (-not (Test-Path -LiteralPath $p.modelPath -PathType Leaf)) { throw 'Сначала выберите существующий GGUF-файл' }
         $modelMiB = (Get-Item -LiteralPath $p.modelPath).Length / 1MB
         $visionMiB = 0.0
@@ -591,6 +620,11 @@ function Save-CurrentProfile([switch]$Quiet) {
     $script:currentProfile = $p
     Refresh-ProfileList $p.id
     if ([bool]$p.openCodeSync) {
+        if((Get-BeeProfileConnectionMode $p)-eq'RemoteClient'){
+            Update-BeeOpenCode $p|Out-Null
+            (UI 'StatusLine').Text="Удалённый профиль сохранён и OpenCode настроен: $(Get-BeeProfileApiBaseUrl $p)"
+            return $p
+        }
         $runningMatch = Test-BeeRunningProfileMatch $p
         if ([bool]$p.visionEnabled -and -not $runningMatch) {
             (UI 'StatusLine').Text = "Vision-профиль сохранён. OpenCode останется text-only до успешного запуска с projector; нажмите «Применить и перезапустить»."
@@ -606,16 +640,49 @@ function Save-CurrentProfile([switch]$Quiet) {
     return $p
 }
 
-function Start-SelectedProfile([bool]$SaveFirst) {
+function Start-SelectedProfile([bool]$SaveFirst,[bool]$OpenRemote=$false) {
     try {
         $p = if ($SaveFirst) { Save-CurrentProfile } else { Get-BeeProfile $script:currentProfile.id }
         if (-not $p) { return }
+        if((Get-BeeProfileConnectionMode $p)-eq'RemoteClient'){
+            $connection=Connect-BeeRemoteProfile $p.id
+            (UI 'StatusLine').Text="READY | удалённая модель $($p.alias) | $($connection.BaseUrl)"
+            if($OpenRemote){
+                $launcher=Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\Start-OpenCode.ps1'
+                Start-Process powershell.exe -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "'+$launcher+'"') -WindowStyle Hidden|Out-Null
+            }
+            return
+        }
         if (-not $SaveFirst) { $v=Test-BeeProfile $p; if(-not $v.Valid){throw($v.Errors -join "`n")}; if(-not (Confirm-Warnings $v)){return} }
         (UI 'StatusLine').Text = "Запуск $($p.name): проверка runtime и ожидание /health до 120 секунд..."
         $manager = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\server-manager.ps1'
         $line = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Action Start -ProfileId "{1}"' -f $manager,$p.id
         Start-Process -FilePath 'powershell.exe' -ArgumentList $line -WindowStyle Hidden | Out-Null
     } catch { Show-Message $_.Exception.Message 'Запуск невозможен' Error }
+}
+
+function Refresh-RemoteAccessView {
+    try{
+        $tailscale=Get-BeeTailscaleStatus;$state=Get-BeeRemoteAccessState
+        (UI 'TailscaleStatus').Text="$($tailscale.Message) | $($tailscale.DnsName) | $($tailscale.Ip)"
+        (UI 'RemoteAccessStatus').Text=$state.Message
+        (UI 'RemoteAccessUrl').Text=if($state.BaseUrl){"OpenCode endpoint: $($state.BaseUrl)"}else{'Удалённый endpoint ещё не создан.'}
+        (UI 'EnableRemoteAccess').IsEnabled=$tailscale.Connected-and-not$state.ServeConfigured
+        (UI 'DisableRemoteAccess').IsEnabled=$state.Managed-and$state.ServeConfigured
+        try{(UI 'RemoteInstallCommand').Text=Get-BeeRemoteClientInstallCommand (Get-FormProfile)}catch{(UI 'RemoteInstallCommand').Text='Сначала выберите локальный профиль и включите доступ.'}
+    }catch{(UI 'RemoteAccessStatus').Text="Ошибка: $($_.Exception.Message)"}
+}
+
+function Enable-RemoteAccessFromUi {
+    try{
+        $profile=Get-FormProfile;$validation=Test-BeeProfile $profile
+        if(-not$validation.Valid){throw($validation.Errors-join"`n")}
+        [void](Enable-BeeRemoteAccess $profile);Refresh-RemoteAccessView
+    }catch{Show-Message $_.Exception.Message 'Tailscale Serve' Error}
+}
+
+function Disable-RemoteAccessFromUi {
+    try{[void](Disable-BeeRemoteAccess);Refresh-RemoteAccessView}catch{Show-Message $_.Exception.Message 'Tailscale Serve' Error}
 }
 
 function Get-SafeTestInput([int]$Context,[int]$OutputTokens) {
@@ -933,9 +1000,9 @@ foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionO
 (UI 'TestOutputTokens').Add_SelectionChanged({ Update-TestLimitHint })
 (UI 'TestOutputTokens').Add_LostKeyboardFocus({ Update-TestLimitHint })
 (UI 'SaveProfile').Add_Click({ try { Save-CurrentProfile | Out-Null } catch { Show-Message $_.Exception.Message 'Ошибка сохранения' Error } })
-(UI 'ApplyRestart').Add_Click({ Start-SelectedProfile $true })
-(UI 'StartServer').Add_Click({ Start-SelectedProfile $true })
-(UI 'StopServer').Add_Click({ try { $r=Stop-BeeServer;(UI 'StatusLine').Text=$r.Message } catch { Show-Message $_.Exception.Message 'Ошибка остановки' Error } })
+(UI 'ApplyRestart').Add_Click({ Start-SelectedProfile $true $false })
+(UI 'StartServer').Add_Click({ Start-SelectedProfile $true $true })
+(UI 'StopServer').Add_Click({ try {if((Get-BeeProfileConnectionMode (Get-FormProfile))-eq'RemoteClient'){throw 'Удалённый клиент не может остановить модель основного ПК.'};$r=Stop-BeeServer;(UI 'StatusLine').Text=$r.Message } catch { Show-Message $_.Exception.Message 'Ошибка остановки' Error } })
 (UI 'StartTest').Add_Click({ Begin-Benchmark })
 (UI 'StopTest').Add_Click({ End-Benchmark })
 (UI 'TeamAgentList').Add_SelectionChanged({if((UI 'TeamAgentList').SelectedItem){Load-TeamAgent (UI 'TeamAgentList').SelectedItem}})
@@ -963,6 +1030,11 @@ foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionO
 (UI 'TelegramRemoveProject').Add_Click({$selected=(UI 'TelegramProjects').SelectedItem;if($null-ne$selected){[void]$telegramProjects.Remove($selected)}})
 (UI 'OpenLiveLog').Add_Click({ try { Open-BeeLiveLog } catch { Show-Message $_.Exception.Message 'Live log' Error } })
 (UI 'OpenLogs').Add_Click({ Start-Process explorer.exe -ArgumentList ('"'+(Get-BeeLogPaths).Directory+'"') })
+(UI 'RefreshRemoteAccess').Add_Click({Refresh-RemoteAccessView})
+(UI 'EnableRemoteAccess').Add_Click({Enable-RemoteAccessFromUi})
+(UI 'DisableRemoteAccess').Add_Click({Disable-RemoteAccessFromUi})
+(UI 'CopyRemoteInstall').Add_Click({try{$command=Get-BeeRemoteClientInstallCommand (Get-FormProfile);[Windows.Clipboard]::SetText($command);(UI 'RemoteInstallCommand').Text=$command;(UI 'StatusLine').Text='Команда установки скопирована.'}catch{Show-Message $_.Exception.Message 'Команда для ноутбука' Error}})
+(UI 'ConnectionMode').Add_SelectionChanged({if($script:currentProfile){Set-ProfileModeUi ([string](UI 'ConnectionMode').Text);Update-Preview}})
 (UI 'NewProfile').Add_Click({ try { $base=Get-BeeNewProfileTemplate;$base.id='profile-'+[guid]::NewGuid().ToString('N').Substring(0,10);$base.name='Новый профиль';$base.protected=$false;$s=Get-BeeProfileStore;$s.profiles=@($s.profiles)+$base;Save-BeeProfileStore $s;Refresh-ProfileList $base.id } catch { Show-Message $_.Exception.Message 'Ошибка' Error } })
 (UI 'CloneProfile').Add_Click({ try { $p=Get-FormProfile;$p.id='profile-'+[guid]::NewGuid().ToString('N').Substring(0,10);$p.name=$p.name+' — копия';$p.protected=$false;$s=Get-BeeProfileStore;$s.profiles=@($s.profiles)+$p;Save-BeeProfileStore $s;Refresh-ProfileList $p.id } catch { Show-Message $_.Exception.Message 'Ошибка' Error } })
 (UI 'DeleteProfile').Add_Click({ try { $p=$script:currentProfile;$s=Get-BeeProfileStore;if(@($s.profiles).Count-le1){throw 'Нельзя удалить единственный профиль. Сначала создайте или импортируйте другой.'};if([Windows.MessageBox]::Show($window,"Удалить профиль $($p.name)?",'Подтверждение','YesNo','Warning')-eq'Yes'){$s.profiles=@($s.profiles|Where-Object{$_.id-ne$p.id});$nextId=[string]@($s.profiles)[0].id;if($s.activeProfileId-eq$p.id){$s.activeProfileId=$nextId};if($s.lastGoodProfileId-eq$p.id){$s.lastGoodProfileId=$nextId};Save-BeeProfileStore $s;Refresh-ProfileList $nextId} } catch { Show-Message $_.Exception.Message 'Удаление' Error } })
@@ -978,6 +1050,7 @@ foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionO
     if ($sender.SelectedItem -eq (UI 'TeamTab')) { Refresh-TeamView }
     if ($sender.SelectedItem -eq (UI 'SerenaMemoryTab')) { Refresh-SerenaMemoryView }
     if ($sender.SelectedItem -eq (UI 'TelegramTab')) { Refresh-TelegramView }
+    if ($sender.SelectedItem -eq (UI 'RemoteAccessTab')) { Refresh-RemoteAccessView }
 })
 
 $timer = New-Object Windows.Threading.DispatcherTimer
@@ -1014,14 +1087,14 @@ $timer.Add_Tick({
         $mcpTest=Get-BeeMcpTestStatus;$mcpSignature="$($mcpTest.state)|$($mcpTest.mcp)|$($mcpTest.message)"
         if($mcpSignature-ne$script:lastMcpTestSignature){$script:lastMcpTestSignature=$mcpSignature;$stateText=([string]$mcpTest.state).ToUpperInvariant();(UI 'TeamMcpTestStatus').Text="$stateText | $($mcpTest.mcp) | $($mcpTest.message)"}
         Update-TelegramStatus
-        $state=if($s.Ready){'READY'}elseif($s.Running){'LOADING'}else{'STOPPED'}
-        (UI 'HeaderStatus').Text="$state | PID $($s.Pid) | uptime $($s.Uptime)"
+        $state=if($s.Ready){'READY'}elseif($s.Remote){'OFFLINE'}elseif($s.Running){'LOADING'}else{'STOPPED'}
+        (UI 'HeaderStatus').Text=if($s.Remote){"$state | удалённая модель | $($s.BaseUrl)"}else{"$state | PID $($s.Pid) | uptime $($s.Uptime)"}
         $vram=if($null-ne$s.VramUsedMiB){"$($s.VramUsedMiB)/$($s.VramTotalMiB) MiB"}else{'n/a'}
         $pt=if($null-ne$s.PromptTPS){"$($s.PromptTPS) tok/s"}else{'n/a'};$dt=if($null-ne$s.DecodeTPS){"$($s.DecodeTPS) tok/s"}else{'n/a'}
-        (UI 'StatusLine').Text="$state | $($s.Profile) | ctx $($s.Context) | VRAM $vram | Shared $($s.SharedVram) | RAM $($s.RamUsedGiB) GiB | prompt $pt | decode $dt"
-        (UI 'ActualVram').Text=if($null-ne$s.VramUsedMiB){'{0:N2} / {1:N2} GiB' -f ($s.VramUsedMiB/1024.0),($s.VramTotalMiB/1024.0)}else{'н/д'}
-        (UI 'ActualRam').Text=if($null-ne$s.RamUsedGiB){'{0:N1} / {1:N1} GiB' -f $s.RamUsedGiB,$s.RamTotalGiB}else{'н/д'}
-        if(-not$s.Running){$ef=Join-Path (Get-BeeLogPaths).Directory 'manager-error.log';if(Test-Path $ef){$e=(Get-Content -Raw -LiteralPath $ef);if($e){(UI 'StatusLine').Text="ОШИБКА: $e"}}}
+        (UI 'StatusLine').Text=if($s.Remote){"$state | $($s.Profile) | ctx $($s.Context) | $($s.Message)"}else{"$state | $($s.Profile) | ctx $($s.Context) | VRAM $vram | Shared $($s.SharedVram) | RAM $($s.RamUsedGiB) GiB | prompt $pt | decode $dt"}
+        (UI 'ActualVram').Text=if($s.Remote){'на основном ПК'}elseif($null-ne$s.VramUsedMiB){'{0:N2} / {1:N2} GiB' -f ($s.VramUsedMiB/1024.0),($s.VramTotalMiB/1024.0)}else{'н/д'}
+        (UI 'ActualRam').Text=if($s.Remote){'на основном ПК'}elseif($null-ne$s.RamUsedGiB){'{0:N1} / {1:N1} GiB' -f $s.RamUsedGiB,$s.RamTotalGiB}else{'н/д'}
+        if(-not$s.Remote-and-not$s.Running){$ef=Join-Path (Get-BeeLogPaths).Directory 'manager-error.log';if(Test-Path $ef){$e=(Get-Content -Raw -LiteralPath $ef);if($e){(UI 'StatusLine').Text="ОШИБКА: $e"}}}
     } catch { (UI 'HeaderStatus').Text='Ошибка статуса' }
 })
 $telegramWatchdogTimer = New-Object Windows.Threading.DispatcherTimer
@@ -1043,8 +1116,10 @@ $telegramWatchdogTimer.Add_Tick({
     }
 })
 $window.Add_Closed({ $timer.Stop(); $telegramWatchdogTimer.Stop(); $resourceDebounce.Stop(); try{[void](Stop-BeeMcpTest)}catch{} })
-Refresh-ModelList
-Refresh-ProfileList (Get-BeeProfileStore).activeProfileId
+$startupStore=Get-BeeProfileStore
+$startupProfile=Get-BeeProfile $startupStore.activeProfileId
+if((Get-BeeProfileConnectionMode $startupProfile)-eq'LocalHost'-and$env:BEEFORGE_REMOTE_SMOKE_TEST-ne'1'){Refresh-ModelList}
+Refresh-ProfileList $startupStore.activeProfileId
 $script:telegramManualStop=$false
 $script:lastTelegramRestartAt=$null
 Refresh-TelegramView
@@ -1063,6 +1138,21 @@ if($env:BEEFORGE_SERENA_SMOKE_TEST-eq'1'){
     if(-not(UI 'SerenaMemoryGrid').Items.Count){throw 'Список проектов Serena пуст'}
     if(-not(UI 'SerenaMemorySummary').Text-or(UI 'SerenaMemorySummary').Text-like'*Загрузка*'){throw 'Сводка памяти Serena не загрузилась'}
     Write-Output ("SERENA_TAB_SMOKE_OK | {0} projects | {1}" -f (UI 'SerenaMemoryGrid').Items.Count,(UI 'SerenaMemorySummary').Text)
+    $window.Close();return
+}
+if($env:BEEFORGE_REMOTE_SMOKE_TEST-eq'1'){
+    (UI 'Tabs').SelectedItem=(UI 'RemoteAccessTab')
+    Refresh-RemoteAccessView
+    if((UI 'Tabs').SelectedItem-ne(UI 'RemoteAccessTab')){throw 'Вкладка удалённого доступа не стала активной'}
+    if(-not(UI 'TailscaleStatus').Text-or(UI 'TailscaleStatus').Text-like'*Проверка*'){throw 'Статус Tailscale не загрузился'}
+    if(-not(UI 'RemoteAccessStatus').Text){throw 'Статус Tailscale Serve пуст'}
+    if((Get-BeeProfileConnectionMode (Get-FormProfile))-eq'RemoteClient'){
+        if((UI 'StopServer').IsEnabled){throw 'RemoteClient must not enable local Stop'}
+        if(-not(UI 'RemoteBaseUrl').IsEnabled){throw 'RemoteClient endpoint field is disabled'}
+        if((UI 'ResourcesTab').IsEnabled){throw 'RemoteClient local resource tab is enabled'}
+        if((UI 'StartServer').Content-ne'Подключить и открыть OpenCode'){throw 'RemoteClient start action is incorrect'}
+    }
+    Write-Output ("REMOTE_TAB_SMOKE_OK | {0} | {1}" -f (UI 'TailscaleStatus').Text,(UI 'RemoteAccessStatus').Text)
     $window.Close();return
 }
 if($env:BEEFORGE_TEAM_SMOKE_TEST-eq'1'){

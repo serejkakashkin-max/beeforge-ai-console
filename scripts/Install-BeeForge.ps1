@@ -1,10 +1,18 @@
 [CmdletBinding()]
 param(
+    [ValidateSet('LocalHost','RemoteClient')]
+    [string]$Mode = 'LocalHost',
     [string]$ProjectRoot = 'C:\AI\Projects',
     [string]$ModelRoot = (Join-Path $env:USERPROFILE '.lmstudio\models'),
     [string]$LlamaServerPath = '',
     [string]$TelegramUserId = '',
     [string]$TelegramChatId = '',
+    [string]$OpenCodeRoot = '',
+    [string]$RemoteBaseUrl = '',
+    [string]$RemoteModelAlias = '',
+    [int]$RemoteContext = 162000,
+    [int]$RemoteOutput = 65528,
+    [switch]$RemoteVision,
     [switch]$ConfigureOpenCode,
     [switch]$SkipDependencies,
     [switch]$Force
@@ -12,7 +20,17 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $script:Root = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$script:OpenCodeRoot = Join-Path $env:USERPROFILE '.config\opencode'
+$script:OpenCodeRoot = if($OpenCodeRoot){[IO.Path]::GetFullPath($OpenCodeRoot)}else{Join-Path $env:USERPROFILE '.config\opencode'}
+
+function Normalize-RemoteBaseUrl([string]$Value) {
+    $trimmed=$Value.Trim().TrimEnd('/')
+    $uri=$null
+    if(-not[Uri]::TryCreate($trimmed,[UriKind]::Absolute,[ref]$uri)-or$uri.Scheme-ne'https'){throw 'RemoteBaseUrl должен быть корректным HTTPS URL.'}
+    if(-not$uri.DnsSafeHost.EndsWith('.ts.net',[StringComparison]::OrdinalIgnoreCase)){throw 'RemoteBaseUrl должен использовать приватное имя Tailscale *.ts.net.'}
+    if($uri.AbsolutePath-eq'/'-or[string]::IsNullOrWhiteSpace($uri.AbsolutePath)){$trimmed+='/v1'}
+    elseif($uri.AbsolutePath.TrimEnd('/')-notmatch'/v1$'){throw 'RemoteBaseUrl должен оканчиваться на /v1.'}
+    return $trimmed
+}
 
 function Write-Step([string]$Message) {
     Write-Host "`n==> $Message" -ForegroundColor Cyan
@@ -75,6 +93,15 @@ function Install-VerifiedArchive([string]$Url, [string]$Sha256, [string]$TargetD
 }
 
 if ($env:OS -ne 'Windows_NT') { throw 'BeeForge AI Console поддерживает Windows.' }
+if($Mode-eq'RemoteClient'){
+    $RemoteBaseUrl=Normalize-RemoteBaseUrl $RemoteBaseUrl
+    if($RemoteModelAlias-notmatch'^[A-Za-z0-9._-]+$'){throw 'RemoteModelAlias обязателен и может содержать буквы, цифры, точку, дефис и подчёркивание.'}
+    if($RemoteContext-lt2-or$RemoteOutput-lt1-or$RemoteOutput-ge$RemoteContext){throw 'RemoteContext и RemoteOutput заданы некорректно.'}
+    $tailscale=Get-Command tailscale.exe -ErrorAction SilentlyContinue
+    if(-not$tailscale){throw 'На ноутбуке не найден Tailscale. Установите его и войдите в тот же tailnet.'}
+    try{$tailscaleState=(& $tailscale.Source status --json 2>$null|ConvertFrom-Json).BackendState}catch{$tailscaleState='Unknown'}
+    if($tailscaleState-ne'Running'){throw "Tailscale не подключён: $tailscaleState"}
+}
 foreach ($directory in 'config','logs','backups','runtime','secrets') {
     New-Item -ItemType Directory -Path (Join-Path $script:Root $directory) -Force | Out-Null
 }
@@ -92,6 +119,24 @@ if ($Force -or -not (Test-Path -LiteralPath $profilesPath)) {
         if ($oldModelRoot -and $profile.modelPath) { $profile.modelPath = ([string]$profile.modelPath).Replace($oldModelRoot, [IO.Path]::GetFullPath($ModelRoot)) }
         if ($LlamaServerPath) { $profile.serverPath = [IO.Path]::GetFullPath($LlamaServerPath) }
     }
+    if($Mode-eq'RemoteClient'){
+        $remote=$profiles.profiles|Select-Object -First 1
+        $remote.id='remote-'+$RemoteModelAlias.ToLowerInvariant()
+        $remote.name="Удалённая модель — $RemoteModelAlias"
+        $remote.connectionMode='RemoteClient'
+        $remote.remoteBaseUrl=$RemoteBaseUrl
+        $remote.modelPath=''
+        $remote.serverPath=''
+        $remote.alias=$RemoteModelAlias
+        $remote.context=$RemoteContext
+        $remote.openCodeOutput=$RemoteOutput
+        $remote.visionEnabled=[bool]$RemoteVision
+        $remote.visionOffload=$false
+        $remote.mmprojPath=''
+        $profiles.profiles=@($remote)
+        $profiles.activeProfileId=$remote.id
+        $profiles.lastGoodProfileId=''
+    }
     Write-JsonUtf8 $profilesPath $profiles
 }
 
@@ -101,6 +146,7 @@ if ($Force -or -not (Test-Path -LiteralPath $telegramPath)) {
     $telegram = Expand-PortableValue $template
     $telegram.allowedUserId = $TelegramUserId
     $telegram.allowedChatId = $TelegramChatId
+    if($Mode-eq'RemoteClient'){$telegram.enabled=$false}
     Write-JsonUtf8 $telegramPath $telegram
 }
 
@@ -121,14 +167,16 @@ if (-not $SkipDependencies) {
         Invoke-Checked 'uv.exe' @('pip', 'install', '--python', $serenaPython, 'serena-agent @ git+https://github.com/oraios/serena.git@v1.7.0')
     }
 
-    Write-Step 'Установка локального распознавания голоса'
-    if (-not (Get-Command py.exe -ErrorAction SilentlyContinue)) { throw 'Не найден Python Launcher (py.exe). Установите Python 3.11–3.13.' }
-    $voiceRoot = Join-Path $script:Root 'runtime\telegram\voice'
-    $voicePython = Join-Path $voiceRoot '.venv\Scripts\python.exe'
-    if (-not (Test-Path -LiteralPath $voicePython)) {
-        New-Item -ItemType Directory -Path $voiceRoot -Force | Out-Null
-        Invoke-Checked 'py.exe' @('-3', '-m', 'venv', (Join-Path $voiceRoot '.venv'))
-        Invoke-Checked $voicePython @('-m', 'pip', 'install', '--disable-pip-version-check', '-r', (Join-Path $script:Root 'tools\telegram-bridge\v1.0.0\voice-requirements.txt'))
+    if($Mode-eq'LocalHost'){
+        Write-Step 'Установка локального распознавания голоса'
+        if (-not (Get-Command py.exe -ErrorAction SilentlyContinue)) { throw 'Не найден Python Launcher (py.exe). Установите Python 3.11–3.13.' }
+        $voiceRoot = Join-Path $script:Root 'runtime\telegram\voice'
+        $voicePython = Join-Path $voiceRoot '.venv\Scripts\python.exe'
+        if (-not (Test-Path -LiteralPath $voicePython)) {
+            New-Item -ItemType Directory -Path $voiceRoot -Force | Out-Null
+            Invoke-Checked 'py.exe' @('-3', '-m', 'venv', (Join-Path $voiceRoot '.venv'))
+            Invoke-Checked $voicePython @('-m', 'pip', 'install', '--disable-pip-version-check', '-r', (Join-Path $script:Root 'tools\telegram-bridge\v1.0.0\voice-requirements.txt'))
+        }
     }
 
     Write-Step 'Загрузка проверенных Windows MCP и GitHub MCP'
@@ -145,15 +193,28 @@ if ($ConfigureOpenCode) {
         Copy-Item -LiteralPath $openCodePath -Destination "$openCodePath.before-beeforge-$stamp" -Force
     }
     $openCodeTemplate = Get-Content -LiteralPath (Join-Path $script:Root 'opencode\opencode.template.json') -Raw | ConvertFrom-Json
-    Write-JsonUtf8 $openCodePath (Expand-PortableValue $openCodeTemplate)
+    $openCodeConfig=Expand-PortableValue $openCodeTemplate
+    if($Mode-eq'RemoteClient'){
+        $openCodeConfig.model="beellama/$RemoteModelAlias"
+        $openCodeConfig.provider.beellama.options.baseURL=$RemoteBaseUrl
+        $model=[pscustomobject]@{name=$RemoteModelAlias;reasoning=$true;attachment=[bool]$RemoteVision;modalities=[pscustomobject]@{input=@('text')+$(if($RemoteVision){@('image')}else{@()});output=@('text')};interleaved=[pscustomobject]@{field='reasoning_content'};limit=[pscustomobject]@{context=$RemoteContext;output=$RemoteOutput}}
+        $openCodeConfig.provider.beellama.models=[pscustomobject]@{}
+        $openCodeConfig.provider.beellama.models|Add-Member -NotePropertyName $RemoteModelAlias -NotePropertyValue $model
+        foreach($agent in $openCodeConfig.agent.PSObject.Properties){if($agent.Value){if($agent.Value.PSObject.Properties['model']){$agent.Value.model="beellama/$RemoteModelAlias"}else{$agent.Value|Add-Member -NotePropertyName model -NotePropertyValue "beellama/$RemoteModelAlias"}}}
+    }
+    Write-JsonUtf8 $openCodePath $openCodeConfig
     Copy-Item -LiteralPath (Join-Path $script:Root 'opencode\AGENTS.md') -Destination (Join-Path $script:OpenCodeRoot 'AGENTS.md') -Force
     $skillTarget = Join-Path $env:USERPROFILE '.agents\skills'
     New-Item -ItemType Directory -Path $skillTarget -Force | Out-Null
     Get-ChildItem -LiteralPath (Join-Path $script:Root 'opencode\skills') -Directory | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $skillTarget $_.Name) -Recurse -Force }
-    $pluginSource = Join-Path $script:Root 'tools\telegram-bridge\v1.0.0\plugin.mjs'
-    $pluginUri = ([uri]$pluginSource).AbsoluteUri
-    $pluginText = (Get-Content -LiteralPath (Join-Path $script:Root 'opencode\plugin\beeforge-telegram.js.template') -Raw).Replace('__BEEFORGE_PLUGIN_URI__', $pluginUri)
-    [IO.File]::WriteAllText((Join-Path $script:OpenCodeRoot 'plugin\beeforge-telegram.js'), $pluginText, [Text.UTF8Encoding]::new($false))
+    if($Mode-eq'LocalHost'){
+        $pluginSource = Join-Path $script:Root 'tools\telegram-bridge\v1.0.0\plugin.mjs'
+        $pluginUri = ([uri]$pluginSource).AbsoluteUri
+        $pluginText = (Get-Content -LiteralPath (Join-Path $script:Root 'opencode\plugin\beeforge-telegram.js.template') -Raw).Replace('__BEEFORGE_PLUGIN_URI__', $pluginUri)
+        [IO.File]::WriteAllText((Join-Path $script:OpenCodeRoot 'plugin\beeforge-telegram.js'), $pluginText, [Text.UTF8Encoding]::new($false))
+    } else {
+        Remove-Item -LiteralPath (Join-Path $script:OpenCodeRoot 'plugin\beeforge-telegram.js') -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Write-Step 'Проверка установки'
@@ -168,6 +229,7 @@ if ($missing) { throw "Не созданы обязательные файлы: 
 Get-Content -LiteralPath $profilesPath -Raw | ConvertFrom-Json | Out-Null
 Get-Content -LiteralPath $telegramPath -Raw | ConvertFrom-Json | Out-Null
 
-Write-Host "`nBeeForge подготовлен: $script:Root" -ForegroundColor Green
-Write-Host 'Откройте BEEFORGE-AI.cmd, выберите llama-server и GGUF, затем сохраните Telegram-токен в интерфейсе.'
+Write-Host "`nBeeForge подготовлен: $script:Root | режим: $Mode" -ForegroundColor Green
+if($Mode-eq'RemoteClient'){Write-Host "Запустите BEEFORGE-AI.cmd, проверьте удалённое подключение и откройте локальный проект в OpenCode."}
+else{Write-Host 'Откройте BEEFORGE-AI.cmd, выберите llama-server и GGUF, затем сохраните Telegram-токен в интерфейсе.'}
 if (-not $ConfigureOpenCode) { Write-Host 'Для установки командной конфигурации OpenCode повторите скрипт с -ConfigureOpenCode.' }

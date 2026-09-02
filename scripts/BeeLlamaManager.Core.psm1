@@ -1,6 +1,6 @@
 ﻿Set-StrictMode -Version 2.0
 $script:BeeRoot = Split-Path $PSScriptRoot -Parent
-$script:ConfigPath = Join-Path $script:BeeRoot 'config\profiles.json'
+$script:ConfigPath = if($env:BEEFORGE_PROFILE_STORE){[IO.Path]::GetFullPath($env:BEEFORGE_PROFILE_STORE)}else{Join-Path $script:BeeRoot 'config\profiles.json'}
 $script:LogDir = Join-Path $script:BeeRoot 'logs'
 $script:PidPath = Join-Path $script:LogDir 'qwen38-server.pid'
 $script:RunPath = Join-Path $script:LogDir 'current-run.json'
@@ -68,6 +68,8 @@ function Initialize-BeeProfileSchema($Profile) {
     # Add new fields instead of assigning to missing PSCustomObject properties,
     # which is an error under Set-StrictMode in Windows PowerShell 5.1.
     $defaults = [ordered]@{
+        connectionMode = 'LocalHost'
+        remoteBaseUrl = ''
         visionEnabled = $false
         visionOffload = $false
         mmprojPath = ''
@@ -105,7 +107,7 @@ function Save-BeeProfileStore([Parameter(Mandatory=$true)]$Store) {
 
 function Get-BeeNewProfileTemplate {
     [pscustomobject]@{
-        id='qwen38-daily-162k'; name='Qwen38 Daily 162K'; protected=$false
+        id='qwen38-daily-162k'; name='Qwen38 Daily 162K'; protected=$false; connectionMode='LocalHost'; remoteBaseUrl=''
         modelPath=(Join-Path $env:USERPROFILE '.lmstudio\models\zerodigest\Qwen3.8-27B-Uncensored-YMQ-MTP-GGUF\Qwen3.8-27B-Uncensored-YMQ-S-Pro.gguf')
         serverPath=(Join-Path $script:BeeRoot 'runtime\beellama-v0.4.3-cuda13.1\llama-server.exe')
         alias='qwen38-ymq-s-pro'; context=162000; gpuLayers='all'; batch=2048; ubatch=512
@@ -116,6 +118,32 @@ function Get-BeeNewProfileTemplate {
         minP=0.0; repeatPenalty=1.0; host='127.0.0.1'; port=8080
         openCodeSync=$true; openCodeOutput=32764; visionEnabled=$false; visionOffload=$false; mmprojPath=''; advancedArgs=@()
     }
+}
+
+function Get-BeeProfileConnectionMode([Parameter(Mandatory=$true)]$Profile) {
+    $mode = if ($Profile.PSObject.Properties['connectionMode']) { [string]$Profile.connectionMode } else { 'LocalHost' }
+    if ($mode -notin @('LocalHost','RemoteClient')) { throw "Unknown profile connection mode: $mode" }
+    return $mode
+}
+
+function ConvertTo-BeeApiBaseUrl([Parameter(Mandatory=$true)][string]$Value) {
+    $trimmed = $Value.Trim().TrimEnd('/')
+    if ([string]::IsNullOrWhiteSpace($trimmed)) { throw 'Remote API URL is required' }
+    $uri = $null
+    if (-not [Uri]::TryCreate($trimmed,[UriKind]::Absolute,[ref]$uri)) { throw 'Remote API URL is invalid' }
+    if ($uri.Scheme -ne 'https') { throw 'Remote API URL must use HTTPS' }
+    if (-not $uri.DnsSafeHost.EndsWith('.ts.net',[StringComparison]::OrdinalIgnoreCase)) { throw 'Remote API URL must use a Tailscale *.ts.net hostname' }
+    if (-not [string]::IsNullOrWhiteSpace($uri.Query) -or -not [string]::IsNullOrWhiteSpace($uri.Fragment)) { throw 'Remote API URL cannot contain a query or fragment' }
+    if ($uri.AbsolutePath -eq '/' -or [string]::IsNullOrWhiteSpace($uri.AbsolutePath)) { $trimmed += '/v1' }
+    elseif ($uri.AbsolutePath.TrimEnd('/') -notmatch '/v1$') { throw 'Remote API URL path must end with /v1' }
+    return $trimmed
+}
+
+function Get-BeeProfileApiBaseUrl([Parameter(Mandatory=$true)]$Profile) {
+    if ((Get-BeeProfileConnectionMode $Profile) -eq 'RemoteClient') {
+        return ConvertTo-BeeApiBaseUrl ([string]$Profile.remoteBaseUrl)
+    }
+    return "http://$($Profile.host):$($Profile.port)/v1"
 }
 
 function Get-BeeProfile([string]$ProfileId) {
@@ -181,11 +209,19 @@ function Get-BeeSupportedHelp([string]$ServerPath) {
 function Test-BeeProfile([Parameter(Mandatory=$true)]$Profile, [switch]$SkipHelp) {
     $errors = New-Object System.Collections.Generic.List[string]
     $warnings = New-Object System.Collections.Generic.List[string]
+    $mode = Get-BeeProfileConnectionMode $Profile
+    if ([string]::IsNullOrWhiteSpace([string]$Profile.name)) { $errors.Add('Profile name is required') }
+    if ([string]$Profile.alias -notmatch '^[A-Za-z0-9._-]+$') { $errors.Add('Alias may contain only letters, digits, dot, underscore, and dash') }
+    if ([int]$Profile.context -lt 1) { $errors.Add('Context must be a positive integer') }
+    if ([int]$Profile.openCodeOutput -lt 1 -or [int]$Profile.openCodeOutput -ge [int]$Profile.context) { $errors.Add('OpenCode output must be positive and smaller than context') }
+    if ($mode -eq 'RemoteClient') {
+        try { [void](ConvertTo-BeeApiBaseUrl ([string]$Profile.remoteBaseUrl)) } catch { $errors.Add($_.Exception.Message) }
+        return [pscustomobject]@{ Valid=($errors.Count -eq 0); Errors=@($errors); Warnings=@($warnings) }
+    }
     if (-not (Test-Path -LiteralPath $Profile.modelPath -PathType Leaf)) { $errors.Add("GGUF model not found: $($Profile.modelPath)") }
     elseif ([IO.Path]::GetExtension([string]$Profile.modelPath) -ne '.gguf') { $errors.Add('Model must be a .gguf file') }
     if (-not (Test-Path -LiteralPath $Profile.serverPath -PathType Leaf)) { $errors.Add("llama-server.exe not found: $($Profile.serverPath)") }
     elseif ([IO.Path]::GetFileName([string]$Profile.serverPath) -ne 'llama-server.exe') { $errors.Add('Runtime path must point to llama-server.exe') }
-    if ([int]$Profile.context -lt 1) { $errors.Add('Context must be a positive integer') }
     if ([int]$Profile.context -ge 180000) { $warnings.Add('180K context has very small VRAM headroom on this GPU') }
     if ([int]$Profile.port -lt 1 -or [int]$Profile.port -gt 65535) { $errors.Add('Port must be between 1 and 65535') }
     if ([int]$Profile.batch -lt 1 -or [int]$Profile.ubatch -lt 1) { $errors.Add('Batch and ubatch must be positive') }
@@ -194,7 +230,6 @@ function Test-BeeProfile([Parameter(Mandatory=$true)]$Profile, [switch]$SkipHelp
     if ([int]$Profile.parallel -lt 1) { $errors.Add('Parallel must be at least 1') }
     if ([int]$Profile.reasoningBudget -lt 0) { $errors.Add('Reasoning budget cannot be negative') }
     if ([int]$Profile.mtpNMax -lt 2 -or [int]$Profile.mtpNMax -gt 4) { $errors.Add('MTP n-max must be 2, 3, or 4') }
-    if ([string]$Profile.alias -notmatch '^[A-Za-z0-9._-]+$') { $errors.Add('Alias may contain only letters, digits, dot, underscore, and dash') }
     if ([string]$Profile.host -notin @('127.0.0.1','localhost')) { $warnings.Add('Non-local host exposes the API beyond localhost') }
 
     $helpText = $null
@@ -265,6 +300,9 @@ function Get-BeeArguments([Parameter(Mandatory=$true)]$Profile) {
 }
 
 function Get-BeeCommandPreview([Parameter(Mandatory=$true)]$Profile) {
+    if ((Get-BeeProfileConnectionMode $Profile) -eq 'RemoteClient') {
+        return "Remote OpenCode provider: $(Get-BeeProfileApiBaseUrl $Profile) | model=$($Profile.alias) | no local process"
+    }
     $parts = @('"' + ([string]$Profile.serverPath).Replace('"','\"') + '"')
     foreach ($arg in @(Get-BeeArguments $Profile)) {
         if ($arg -match '[\s"]') { $parts += '"' + $arg.Replace('"','\"') + '"' } else { $parts += $arg }
@@ -360,7 +398,7 @@ function Update-BeeOpenCode([Parameter(Mandatory=$true)]$Profile) {
     $alias = [string]$Profile.alias
     Set-BeeJsonProperty $config 'model' "beellama/$alias"
     if (-not $config.provider -or -not $config.provider.beellama) { throw 'OpenCode provider.beellama is missing' }
-    Set-BeeJsonProperty $config.provider.beellama.options 'baseURL' "http://$($Profile.host):$($Profile.port)/v1"
+    Set-BeeJsonProperty $config.provider.beellama.options 'baseURL' (Get-BeeProfileApiBaseUrl $Profile)
     if (-not $config.provider.beellama.options.extraBody) { Set-BeeJsonProperty $config.provider.beellama.options 'extraBody' ([pscustomobject]@{}) }
     if (-not $config.provider.beellama.options.extraBody.chat_template_kwargs) { Set-BeeJsonProperty $config.provider.beellama.options.extraBody 'chat_template_kwargs' ([pscustomobject]@{}) }
     $templateArgs = $config.provider.beellama.options.extraBody.chat_template_kwargs
@@ -391,9 +429,8 @@ function Update-BeeOpenCode([Parameter(Mandatory=$true)]$Profile) {
         Set-BeeJsonProperty $config.agent.build 'top_k' ([int]$Profile.topK)
     }
     if ($config.agent) {
-        foreach ($agentName in @('team-lead','operator','web-operator','browser-debug','github','research','docker')) {
-            $agentProperty = $config.agent.PSObject.Properties[$agentName]
-            if ($agentProperty -and $agentProperty.Value) { Set-BeeJsonProperty $agentProperty.Value 'model' "beellama/$alias" }
+        foreach ($agentProperty in $config.agent.PSObject.Properties) {
+            if ($agentProperty.Value) { Set-BeeJsonProperty $agentProperty.Value 'model' "beellama/$alias" }
         }
     }
     if (-not $config.command) { Set-BeeJsonProperty $config 'command' ([pscustomobject]@{}) }
@@ -432,6 +469,7 @@ function Test-BeeRunningProfileMatch([Parameter(Mandatory=$true)]$Profile) {
 function Start-BeeServer([string]$ProfileId) {
     Initialize-BeeFolders
     $profile = Get-BeeProfile $ProfileId
+    if ((Get-BeeProfileConnectionMode $profile) -eq 'RemoteClient') { throw 'Remote client profiles do not start a local model. Use Test-BeeRemoteConnection.' }
     $validation = Test-BeeProfile $profile
     if (-not $validation.Valid) { throw ($validation.Errors -join [Environment]::NewLine) }
     Stop-BeeBenchmark | Out-Null
@@ -511,7 +549,7 @@ function Start-BeeBenchmark([string]$ProfileId,[int]$PromptTokens=4096,[int]$Out
     $profile = Get-BeeProfile $ProfileId
     $server = Get-BeeServerStatus
     if (-not $server.Ready) { throw 'BeeLlama server is not ready. Start the selected profile first.' }
-    if (Test-Path -LiteralPath $script:RunPath) {
+    if ((Get-BeeProfileConnectionMode $profile) -eq 'LocalHost' -and (Test-Path -LiteralPath $script:RunPath)) {
         $activeRun = $null
         try { $activeRun = Get-Content -Raw -LiteralPath $script:RunPath | ConvertFrom-Json } catch {}
         if (-not $activeRun -or $activeRun.profileId -ne $profile.id) { throw 'The selected profile is not the running server profile. Enable apply/restart before the test.' }
@@ -558,9 +596,51 @@ function Get-BeeLatestTiming {
     return [pscustomobject]$result
 }
 
+function Test-BeeRemoteConnection([Parameter(Mandatory=$true)]$Profile,[int]$TimeoutSec=5) {
+    if ((Get-BeeProfileConnectionMode $Profile) -ne 'RemoteClient') { throw 'The selected profile is not a remote client profile.' }
+    $baseUrl = Get-BeeProfileApiBaseUrl $Profile
+    $serviceUrl = $baseUrl.Substring(0,$baseUrl.Length-3).TrimEnd('/')
+    $result = [ordered]@{ Ready=$false; BaseUrl=$baseUrl; Model=[string]$Profile.alias; Message='OFFLINE'; Models=@() }
+    try {
+        [void](Invoke-RestMethod -Uri "$serviceUrl/health" -TimeoutSec $TimeoutSec)
+        $models = Invoke-RestMethod -Uri "$baseUrl/models" -TimeoutSec $TimeoutSec
+        $ids = @($models.data | ForEach-Object { [string]$_.id } | Where-Object { $_ })
+        $result.Models = $ids
+        if ($ids.Count -gt 0 -and $ids -notcontains [string]$Profile.alias) {
+            $result.Message = "ONLINE, but model '$($Profile.alias)' is not active. Available: $($ids -join ', ')"
+        } else {
+            $result.Ready = $true
+            $result.Message = 'READY'
+        }
+    } catch { $result.Message = "OFFLINE: $($_.Exception.Message)" }
+    return [pscustomobject]$result
+}
+
+function Connect-BeeRemoteProfile([string]$ProfileId) {
+    $profile = Get-BeeProfile $ProfileId
+    $validation = Test-BeeProfile $profile -SkipHelp
+    if (-not $validation.Valid) { throw ($validation.Errors -join [Environment]::NewLine) }
+    $connection = Test-BeeRemoteConnection $profile
+    if (-not $connection.Ready) { throw $connection.Message }
+    Update-BeeOpenCode $profile | Out-Null
+    $store = Get-BeeProfileStore
+    $store.activeProfileId = $profile.id
+    Save-BeeProfileStore $store
+    return $connection
+}
+
 function Get-BeeServerStatus {
     Initialize-BeeFolders
-    $status = [ordered]@{ Running=$false; Ready=$false; Pid=$null; Profile=''; Model=''; Context=$null; Uptime=''; VramUsedMiB=$null; VramTotalMiB=$null; GpuUtil=$null; RamUsedGiB=$null; RamTotalGiB=$null; RamAvailableGiB=$null; SharedVram='n/a'; PromptTPS=$null; DecodeTPS=$null; PromptTokens=$null; DecodedTokens=$null; Message='Stopped' }
+    $status = [ordered]@{ Running=$false; Ready=$false; Remote=$false; BaseUrl=''; Pid=$null; Profile=''; Model=''; Context=$null; Uptime=''; VramUsedMiB=$null; VramTotalMiB=$null; GpuUtil=$null; RamUsedGiB=$null; RamTotalGiB=$null; RamAvailableGiB=$null; SharedVram='n/a'; PromptTPS=$null; DecodeTPS=$null; PromptTokens=$null; DecodedTokens=$null; Message='Stopped' }
+    try {
+        $activeProfile = Get-BeeProfile
+        if ((Get-BeeProfileConnectionMode $activeProfile) -eq 'RemoteClient') {
+            $remote = Test-BeeRemoteConnection $activeProfile -TimeoutSec 2
+            $status.Remote=$true; $status.BaseUrl=$remote.BaseUrl; $status.Profile=$activeProfile.name; $status.Model=$activeProfile.alias; $status.Context=$activeProfile.context
+            $status.Running=$remote.Ready; $status.Ready=$remote.Ready; $status.Message=$remote.Message
+            return [pscustomobject]$status
+        }
+    } catch {}
     $run = $null
     if (Test-Path -LiteralPath $script:RunPath) {
         try { $run = Get-Content -Raw -LiteralPath $script:RunPath | ConvertFrom-Json; $status.Profile=$run.profileName; $status.Model=[IO.Path]::GetFileName($run.modelPath); $status.Context=$run.context } catch {}
@@ -597,4 +677,4 @@ function Open-BeeLiveLog {
     Start-Process -FilePath 'powershell.exe' -ArgumentList (ConvertTo-BeeArgumentLine $arguments) -WindowStyle Normal | Out-Null
 }
 
-Export-ModuleMember -Function Initialize-BeeFolders,Invoke-BeeRetention,Get-BeeRoot,Get-BeeLogPaths,Get-BeeProfileStore,Save-BeeProfileStore,Get-BeeNewProfileTemplate,Get-BeeProfile,Get-BeeModelFiles,Get-BeeVisionProjectorFiles,Get-BeeSupportedHelp,Test-BeeProfile,Get-BeeArguments,Get-BeeCommandPreview,Start-BeeServer,Stop-BeeServer,Get-BeeServerStatus,Open-BeeLiveLog,Update-BeeOpenCode,Test-BeeRunningProfileMatch,Resolve-BeeBenchmarkRequest,Start-BeeBenchmark,Stop-BeeBenchmark,Get-BeeBenchmarkStatus
+Export-ModuleMember -Function Initialize-BeeFolders,Invoke-BeeRetention,Get-BeeRoot,Get-BeeLogPaths,Get-BeeProfileStore,Save-BeeProfileStore,Get-BeeNewProfileTemplate,Get-BeeProfile,Get-BeeProfileConnectionMode,ConvertTo-BeeApiBaseUrl,Get-BeeProfileApiBaseUrl,Get-BeeModelFiles,Get-BeeVisionProjectorFiles,Get-BeeSupportedHelp,Test-BeeProfile,Get-BeeArguments,Get-BeeCommandPreview,Start-BeeServer,Stop-BeeServer,Get-BeeServerStatus,Test-BeeRemoteConnection,Connect-BeeRemoteProfile,Open-BeeLiveLog,Update-BeeOpenCode,Test-BeeRunningProfileMatch,Resolve-BeeBenchmarkRequest,Start-BeeBenchmark,Stop-BeeBenchmark,Get-BeeBenchmarkStatus
