@@ -129,7 +129,7 @@ function Set-BeeSerenaProjectConfigMode([string]$ProjectPath,[bool]$Managed) {
     if(-not$found){$lines.Add("read_only: $value")}
     $prompt='BeeForge project: use durable Serena memories for every activated project; read memory_maintenance first; never store secrets or transient task logs.'
     $escaped=$prompt.Replace('"','\"');$found=$false
-    for($i=0;$i-lt$lines.Count;$i++){if($lines[$i]-match '^initial_prompt:'){$lines[$i]="initial_prompt: `"$escaped`"";$found=$true;break}}
+    for($i=0;$i-lt$lines.Count;$i++){if($lines[$i]-match '^initial_prompt:'){$lines[$i]="initial_prompt: `"$escaped`"";$found=$true;$next=$i+1;while($next-lt$lines.Count-and$lines[$next]-match'^\s+\S'-and$lines[$next]-notmatch'^\s*#'){$lines.RemoveAt($next)};break}}
     if(-not$found){$lines.Add("initial_prompt: `"$escaped`"")}
     [IO.File]::WriteAllLines($file,$lines,[Text.UTF8Encoding]::new($false))
 }
@@ -138,7 +138,7 @@ function Enable-BeeSerenaProjectMemory {
     [CmdletBinding()]param([Parameter(Mandatory)][string]$ProjectPath)
     $full=Get-BeeCanonicalProjectPath $ProjectPath;if(-not(Test-BeeSafeProjectPath $full)){throw "Недопустимый или отсутствующий каталог проекта: $ProjectPath"}
     $paths=Get-BeeSerenaMemoryPaths
-    if(-not(Test-Path -LiteralPath (Join-Path $full '.serena\project.yml'))){& $paths.EnsureScript -ProjectPath $full|Out-Null}
+    if(Test-Path -LiteralPath $paths.EnsureScript -PathType Leaf){& $paths.EnsureScript -ProjectPath $full|Out-Null}
     if(-not(Test-Path -LiteralPath (Join-Path $full '.serena\project.yml'))){if((Invoke-BeeSerenaCli @('project','create',$full))-ne0){throw 'Serena не смогла создать конфигурацию проекта'}}
     Set-BeeSerenaProjectConfigMode $full $true
     Register-BeeSerenaProject $full

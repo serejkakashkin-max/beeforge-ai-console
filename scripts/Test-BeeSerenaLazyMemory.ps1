@@ -21,6 +21,12 @@ if ($software.permission.'serena*' -ne 'allow') {
 if ($teamLead.prompt -notmatch 'Serena memory' -or $teamLead.prompt -notmatch 'Solution Architect' -or $teamLead.prompt -notmatch 'Software Engineer') {
     throw 'Team Lead still lacks the direct implementation routing rule'
 }
+if ($teamLead.prompt -notmatch 'manifest/README' -or $teamLead.prompt -notmatch '\.serena' -or $teamLead.prompt -notmatch 'Software Engineer') {
+    throw 'Team Lead may still duplicate specialist project inspection'
+}
+if ([string]$teamLead.permission.'*' -ne 'deny' -or [string]$teamLead.permission.task.'software-engineer' -ne 'allow' -or [string]$teamLead.permission.skill.'opencode-team-coordination' -ne 'allow') {
+    throw 'Team Lead is not technically restricted to coordination tools'
+}
 if ($software.prompt -notmatch 'memory_maintenance' -or $software.prompt -notmatch '5/5' -or $software.prompt -notmatch 'HANDOFF') {
     throw 'Software Engineer lacks lazy memory maintenance rules'
 }

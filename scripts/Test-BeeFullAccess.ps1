@@ -12,6 +12,7 @@ try {
         permission=[pscustomobject]@{read='allow';bash='ask';task='deny'}
         mcp=[pscustomobject]@{serena=[pscustomobject]@{enabled=$true};github=[pscustomobject]@{enabled=$true}}
         agent=[pscustomobject]@{
+            'team-lead'=[pscustomobject]@{permission=[pscustomobject]@{read='allow';bash='deny';skill=[pscustomobject]@{'*'='deny';'opencode-team-coordination'='allow'};task=[pscustomobject]@{'*'='deny';alpha='allow'};todowrite='allow'}}
             alpha=[pscustomobject]@{permission=[pscustomobject]@{read='allow';edit='ask';skill=[pscustomobject]@{'*'='deny';'diagnosing-bugs'='allow'};'serena*'='allow';'github*'='deny';task=[pscustomobject]@{'*'='deny';beta='allow'}}}
             beta=[pscustomobject]@{description='no permission initially'}
         }
@@ -30,6 +31,10 @@ try {
     }
     if([string]$during.agent.alpha.permission.skill.'*'-ne'allow'-or[string]$during.agent.alpha.permission.skill.'diagnosing-bugs'-ne'allow'-or[string]$during.agent.alpha.permission.'serena*'-ne'allow'-or$during.agent.alpha.permission.PSObject.Properties['github*']){throw 'Selected skill/MCP metadata was not preserved while enabling full access'}
     if([string]$during.permission.task-ne'deny'-or[string]$during.agent.alpha.permission.task.'*'-ne'deny'-or[string]$during.agent.alpha.permission.task.beta-ne'allow'-or$during.agent.alpha.permission.task.PSObject.Properties['explore']){throw 'Team routing was not preserved while enabling full access'}
+    $leadRules=@($during.agent.'team-lead'.permission.PSObject.Properties)
+    if($leadRules[0].Name-ne'*'-or[string]$leadRules[0].Value-ne'deny'-or[string]$during.agent.'team-lead'.permission.task.alpha-ne'allow'-or[string]$during.agent.'team-lead'.permission.skill.'opencode-team-coordination'-ne'allow'){
+        throw 'Full access leaked project tools to Team Lead instead of preserving coordination-only access'
+    }
 
     $during.marker='changed-during-full-access'
     $during.permission | Add-Member -NotePropertyName 'external_directory' -NotePropertyValue 'deny'
@@ -63,6 +68,7 @@ try {
     $after=[IO.File]::ReadAllText($openCodePath,[Text.UTF8Encoding]::new($false))|ConvertFrom-Json
     if($after.marker-ne'changed-during-full-access'){throw 'A non-permission config change was lost during restore'}
     if($after.permission.PSObject.Properties['*']-or$after.agent.alpha.permission.PSObject.Properties['*']-or$after.agent.beta.PSObject.Properties['permission']){throw 'Original permission shape was not restored'}
+    if([string]$after.agent.'team-lead'.permission.'*'-ne'deny'-or[string]$after.agent.'team-lead'.permission.task.alpha-ne'allow'){throw 'Disabling full access restored obsolete project access to Team Lead'}
     if([string]$after.permission.bash-ne'ask'-or[string]$after.permission.task-ne'deny'-or[string]$after.agent.alpha.permission.edit-ne'ask'-or[string]$after.agent.alpha.permission.task.beta-ne'allow'){throw 'Original permission values or routing were not restored'}
     if($after.agent.alpha.permission.skill.PSObject.Properties['diagnosing-bugs']-or[string]$after.agent.alpha.permission.skill.'find-docs'-ne'allow'-or$after.agent.alpha.permission.PSObject.Properties['serena*']-or[string]$after.agent.alpha.permission.'github*'-ne'allow'){throw 'Updated skill/MCP assignments were not restored after disabling full access'}
 

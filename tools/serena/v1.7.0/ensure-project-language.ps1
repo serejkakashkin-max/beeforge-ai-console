@@ -87,6 +87,11 @@ function Get-DetectedLanguageServers {
     elseif ((Test-SourceFile @('*.ts','*.tsx','*.js','*.jsx','*.mts','*.cts','*.mjs','*.cjs')) -or
             (Test-ProjectMarker @('package.json','tsconfig.json','jsconfig.json'))) { $servers.Add('typescript') }
 
+    # Serena's HTML support is experimental and must be explicitly enabled.
+    # It supplies in-file navigation for standalone HTML applications, including
+    # projects whose JavaScript lives inside <script> tags.
+    if (Test-SourceFile @('*.html','*.htm')) { $servers.Add('html') }
+
     if ((Test-SourceFile @('*.py','*.pyi')) -or (Test-ProjectMarker @('pyproject.toml','setup.py','setup.cfg','requirements.txt','Pipfile'))) { $servers.Add('python') }
     if ((Test-SourceFile @('*.go')) -or (Test-ProjectMarker @('go.mod'))) { $servers.Add('go') }
     if ((Test-SourceFile @('*.rs')) -or (Test-ProjectMarker @('Cargo.toml'))) { $servers.Add('rust') }
@@ -161,6 +166,34 @@ function Set-ScalarValue {
         }
     }
     $Lines.Add("$Name`: $Value")
+    return $true
+}
+
+function Set-SingleLineScalarValue {
+    param(
+        [System.Collections.Generic.List[string]]$Lines,
+        [string]$Name,
+        [string]$Value
+    )
+    $replacement = "$Name`: $Value"
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ($Lines[$i] -notmatch "^$([regex]::Escape($Name)):") { continue }
+        $changed = $Lines[$i] -ne $replacement
+        $Lines[$i] = $replacement
+
+        # `initial_prompt` is intentionally a quoted single-line scalar. A
+        # historic preflight version could leave an indented continuation line
+        # behind, which makes the whole project YAML invalid. Remove only such
+        # non-comment continuations; leave the following top-level setting and
+        # all comments intact.
+        $next = $i + 1
+        while ($next -lt $Lines.Count -and $Lines[$next] -match '^\s+\S' -and $Lines[$next] -notmatch '^\s*#') {
+            $Lines.RemoveAt($next)
+            $changed = $true
+        }
+        return $changed
+    }
+    $Lines.Add($replacement)
     return $true
 }
 
@@ -240,7 +273,7 @@ if ($languagesChanged) {
 }
 $lineEndingChanged = Set-UnsetScalar -Lines $lines -Name 'line_ending' -Value $lineEnding
 $memoryReadOnlyChanged = Set-ScalarValue -Lines $lines -Name 'read_only' -Value 'false'
-$memoryPromptChanged = Set-ScalarValue -Lines $lines -Name 'initial_prompt' -Value '"BeeForge project: use durable Serena memories for every activated project; read memory_maintenance first; never store secrets or transient task logs."'
+$memoryPromptChanged = Set-SingleLineScalarValue -Lines $lines -Name 'initial_prompt' -Value '"BeeForge project: use durable Serena memories for every activated project; read memory_maintenance first; never store secrets or transient task logs."'
 
 if ($languagesChanged -or $lineEndingChanged -or $memoryReadOnlyChanged -or $memoryPromptChanged) {
     [IO.File]::WriteAllLines($projectYml, $lines, [Text.UTF8Encoding]::new($true))
