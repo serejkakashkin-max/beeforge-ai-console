@@ -362,7 +362,19 @@ for (let attempt = 0; attempt < 80; attempt++) {
       return file?.name === "concurrent-screenshot.png";
     });
     if (concurrentUploads.length !== 1) throw new Error(`Concurrent assistant/idle events uploaded one screenshot ${concurrentUploads.length} times`);
-    console.log("BRIDGE_CALLBACK_SELF_TEST_OK | always,retry-after-failure,env-cleanup-noncritical,destructive-second-confirmation,confirmed,new-session-menu,project-discovery,offline-selectable,focus,mute-unmute,create-project,create-project-dialog,opencode-registration,opencode-deep-link,console,last-model-launch,model-status,lifecycle-confirmation,full-access-double-confirmation,full-access-disable,team-lead-final-verdict,inbound-attachment,outbound-attachment");
+    const remoteAccessPath = path.join(root, "remote-access.json");
+    fs.writeFileSync(remoteAccessPath, JSON.stringify({ Enabled: true, Managed: true }), "utf8");
+    const leaseMessageStart = sentMessages.length;
+    pendingUpdates.push({ update_id: updateId++, message: { message_id: 305, from: { id: Number(realConfig.allowedUserId) }, chat: { id: Number(realConfig.allowedChatId), type: "private" }, text: "REMOTE_LEASE_SENTINEL" } });
+    for (let leaseAttempt = 0; leaseAttempt < 80 && !sentMessages.slice(leaseMessageStart).some((item) => item.text?.includes("передана ноутбуку")); leaseAttempt++) await new Promise((resolve) => setTimeout(resolve, 25));
+    const leasedCommands = (await local("/commands?instanceId=instance-attachment")).commands || [];
+    if (leasedCommands.some((item) => item.prompt === "REMOTE_LEASE_SENTINEL")) throw new Error("Telegram queued a local model prompt while the model was leased to the notebook");
+    if (!sentMessages.slice(leaseMessageStart).some((item) => item.text?.includes("передана ноутбуку"))) throw new Error("Telegram did not explain the active remote lease");
+    pendingUpdates.push({ update_id: updateId++, message: { message_id: 306, from: { id: Number(realConfig.allowedUserId) }, chat: { id: Number(realConfig.allowedChatId), type: "private" }, text: "/modelstart" } });
+    for (let leaseAttempt = 0; leaseAttempt < 80 && !sentMessages.slice(leaseMessageStart).some((item) => item.text?.includes("Тестовый запуск последней модели")); leaseAttempt++) await new Promise((resolve) => setTimeout(resolve, 25));
+    if (!sentMessages.slice(leaseMessageStart).some((item) => item.text?.includes("Тестовый запуск последней модели"))) throw new Error("Telegram model lifecycle command was blocked by the remote lease");
+    fs.unlinkSync(remoteAccessPath);
+    console.log("BRIDGE_CALLBACK_SELF_TEST_OK | always,retry-after-failure,env-cleanup-noncritical,destructive-second-confirmation,confirmed,new-session-menu,project-discovery,offline-selectable,focus,mute-unmute,create-project,create-project-dialog,opencode-registration,opencode-deep-link,console,last-model-launch,model-status,lifecycle-confirmation,full-access-double-confirmation,full-access-disable,team-lead-final-verdict,inbound-attachment,outbound-attachment,remote-exclusive-lease");
     process.exit(0);
   }
 }

@@ -9,7 +9,8 @@ $failures = [Collections.Generic.List[string]]::new()
 # remote-access module contains Russian UI messages and is imported before the
 # window is shown, so losing its BOM makes the application exit at parse time.
 $windowsPowerShellUtf8Files = @(
-    'scripts\BeeForgeRemote.Core.psm1'
+    'scripts\BeeForgeRemote.Core.psm1',
+    'scripts\Start-OpenCode.ps1'
 )
 foreach ($relativePath in $windowsPowerShellUtf8Files) {
     $bytes = [IO.File]::ReadAllBytes((Join-Path $Root $relativePath))

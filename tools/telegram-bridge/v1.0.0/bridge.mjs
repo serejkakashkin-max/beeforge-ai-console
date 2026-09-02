@@ -64,6 +64,15 @@ let voiceServiceProcess = null;
 const bridgeStatePath = path.join(path.dirname(args.status), "bridge-state.json");
 const modelStatusPath = path.join(path.dirname(args.status), "model-start.status.json");
 const fullAccessStatePath = path.resolve(path.dirname(args.status), "..", "access", "full-access.json");
+const remoteAccessStatePath = path.join(path.dirname(args.config), "remote-access.json");
+const remoteLeaseMessage = "🔒 Модель сейчас передана ноутбуку. Выключите удалённый доступ в BeeForge на основном ПК, чтобы снова отправлять локальные задачи.";
+
+function localModelLeased() {
+  try {
+    const state = readJson(remoteAccessStatePath);
+    return state?.Enabled === true && state?.Managed === true;
+  } catch { return false; }
+}
 
 try {
   const saved = readJson(bridgeStatePath);
@@ -537,7 +546,8 @@ async function waitForModelReady(directory, source = "existing") {
 }
 
 async function startLastModel(openCodeDirectory = "", requestedProfileId = "") {
-  const directory = openCodeDirectory ? path.win32.resolve(openCodeDirectory) : "";
+  const leased = localModelLeased();
+  const directory = leased ? "" : (openCodeDirectory ? path.win32.resolve(openCodeDirectory) : "");
   if (process.env.BEEFORGE_BRIDGE_SELF_TEST === "1") return send(`✅ Тестовый запуск последней модели${directory ? " и OpenCode" : ""}.`);
   if (modelStartProcess) return send("⏳ Модель уже запускается. Я сообщу, когда она станет READY.");
   try {
@@ -723,6 +733,11 @@ async function runScheduledTasks() {
     if (task.enabled === false) continue;
     const due = new Date(task.nextRunAt || nextScheduledAt(task.schedule, new Date(now.getTime() - 60000)).toISOString());
     if (!Number.isFinite(due.getTime()) || due > now) continue;
+    if (localModelLeased()) {
+      task.nextRunAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+      audit("scheduled_task_postponed_remote_lease", { taskId: task.id, directory: task.directory });
+      continue;
+    }
     const instance = [...instances.values()].find((item) => canonical(item.directory) === canonical(task.directory));
     if (!instance) {
       launchOpenCode(task.directory);
@@ -1027,6 +1042,7 @@ async function answerCallback(id, text) {
 }
 
 function queue(instanceId, command) {
+  if (localModelLeased() && ["new_session", "prompt"].includes(command?.type)) throw new Error(remoteLeaseMessage);
   if (!instances.has(instanceId)) throw new Error("Экземпляр OpenCode недоступен");
   const item = { id: crypto.randomUUID(), createdAt: Date.now(), ...command };
   const list = commands.get(instanceId) || [];
@@ -1424,6 +1440,7 @@ async function handleEvent(event) {
 function buildStatusText() {
   pruneInstances();
   const accessLine = readFullAccessStatus().enabled ? "Полный доступ: 🟠 ВКЛЮЧЁН" : "Полный доступ: 🟢 выключен";
+  const ownerLine = localModelLeased() ? "Использование модели: 🔒 передано ноутбуку" : "Использование модели: 🖥 только основной ПК";
   let modelLine = "Модель: состояние недоступно";
   try {
     const model = readModelStatus();
@@ -1456,7 +1473,7 @@ function buildStatusText() {
     const projects = countBy(waiting, (item) => item.projectName).slice(0, 4).map(([name, count]) => `${name}: ${count}`).join(", ");
     lines.push(`Ожидают: ${waitingMain.length} основных сессий${waitingTeam.length ? `, команда: ${waitingTeam.length}` : ""}.\nРоли: ${roles}\nПроекты: ${projects}`);
   } else lines.push("Ожидающих сессий нет.");
-  return cleanText(`BeeForge Telegram Bridge\nСостояние: работает\n${modelLine}\n${accessLine}\nOpenCode: ${instances.size} подключено\nАвтоматические сводки: выключены${focus}\n\nКоманда:\n${lines.join("\n\n")}\n\nbusy / «выполняет задачу» означает, что модель сейчас обрабатывает запрос или инструмент.`, 3900);
+  return cleanText(`BeeForge Telegram Bridge\nСостояние: работает\n${modelLine}\n${ownerLine}\n${accessLine}\nOpenCode: ${instances.size} подключено\nАвтоматические сводки: выключены${focus}\n\nКоманда:\n${lines.join("\n\n")}\n\nbusy / «выполняет задачу» означает, что модель сейчас обрабатывает запрос или инструмент.`, 3900);
 }
 
 function schedulePinnedStatus(delayMs = 1500) {
@@ -1535,6 +1552,7 @@ async function handleMessage(message) {
   const text = cleanText(message.text || message.caption || "", 3500);
   const incomingAttachment = telegramAttachmentFromMessage(message);
   if (!text && !incomingAttachment) return;
+  if (incomingAttachment && localModelLeased()) return send(remoteLeaseMessage);
   if (message.reply_to_message && text && !incomingAttachment) {
     const pending = [...pendingQuestions.values()].find((item) => Number(item.telegramMessageId) === Number(message.reply_to_message.message_id));
     if (pending) {
@@ -1561,6 +1579,7 @@ async function handleMessage(message) {
   if (command === "/model") return showModelStatus();
   if (command === "/modelstart") return startLastModel();
   if (command === "/launch") {
+    if (localModelLeased()) return startLastModel();
     const directory = selectedDirectory || currentInstance()?.directory || "";
     if (!directory) return send("Сначала выберите проект через /projects.");
     return startLastModel(directory);
@@ -1677,6 +1696,7 @@ async function handleMessage(message) {
     } catch (error) { return send(`❌ Не удалось отправить файл\n${cleanText(error.message, 1400)}`); }
   }
   if (command === "/new") {
+    if (localModelLeased()) return send(remoteLeaseMessage);
     pendingProjectCreation = null;
     saveBridgeState();
     const prompt = rest.join(" ").trim();
@@ -1693,6 +1713,7 @@ async function handleMessage(message) {
     return send("Запрос на остановку задачи отправлен.");
   }
   if (pendingNewSessionInstance) {
+    if (localModelLeased()) { pendingNewSessionInstance = null; saveBridgeState(); return send(remoteLeaseMessage); }
     const target = instances.get(pendingNewSessionInstance);
     pendingNewSessionInstance = null;
     if (!target) return send("Проект отключился. Выберите его снова через /projects.");
@@ -1701,6 +1722,7 @@ async function handleMessage(message) {
   }
   if (hasBlockingInteraction()) return send("Сейчас открыт вопрос или запрос разрешения. Сначала ответьте на него кнопкой или ответом на соответствующее сообщение; затем обычный текст снова продолжит Team Lead.");
   if (!selectedSession) return send("Сначала создайте основную сессию через /new или выберите её через /sessions.");
+  if (localModelLeased()) return send(remoteLeaseMessage);
   const result = enqueuePrompt(instance.id, { type: "prompt", sessionId: selectedSession, prompt: text, agent: "team-lead" });
   await send(result.queued ? `🕓 Team Lead занят. Сообщение добавлено в очередь · позиция ${result.position}.` : "Сообщение передано Team Lead.");
 }
@@ -1868,6 +1890,7 @@ async function handleCallback(query) {
     item.used = true;
     if (action === "launch") { await startLastModel(item.directory); return answerCallback(query.id, "Запуск модели начат"); }
     if (action === "open") {
+      if (localModelLeased()) { await send(remoteLeaseMessage); return answerCallback(query.id, "Модель передана ноутбуку"); }
       const opened = launchOpenCode(item.directory);
       await send(opened ? "✅ OpenCode открыт с выбранным проектом." : "❌ OpenCode.exe не найден.");
       return answerCallback(query.id, opened ? "OpenCode запускается" : "OpenCode не найден");

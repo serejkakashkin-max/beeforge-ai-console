@@ -1,10 +1,16 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$OpenCodeArguments
 )
 
 $ErrorActionPreference = 'Stop'
+$coreModule = Join-Path $PSScriptRoot 'BeeLlamaManager.Core.psm1'
+Import-Module $coreModule -Force
+$activeProfile = Get-BeeProfile
+if ((Get-BeeProfileConnectionMode $activeProfile) -eq 'LocalHost' -and (Test-BeeLocalModelLeased)) {
+    throw 'Модель передана ноутбуку. Выключите удалённый доступ в BeeForge, чтобы открыть локальный OpenCode.'
+}
 $openCodeExe = Join-Path $env:LOCALAPPDATA 'Programs\@opencode-aidesktop\OpenCode.exe'
 $openCodeTemp = Join-Path $env:LOCALAPPDATA 'Temp\opencode'
 

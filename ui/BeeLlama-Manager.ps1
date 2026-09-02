@@ -184,7 +184,7 @@ try { Invoke-BeeRetention } catch {}
     <TabItem Header="Доступ с ноутбука" Name="RemoteAccessTab">
      <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="12">
       <TextBlock Text="Удалённая модель через Tailscale" FontSize="20" FontWeight="SemiBold"/>
-      <TextBlock Text="BeeLlama остаётся на 127.0.0.1. Tailscale Serve публикует её только внутри вашего tailnet по HTTPS. Funnel и публичные порты не используются." TextWrapping="Wrap" Foreground="#BFC9D7" Margin="0,6,0,12"/>
+      <TextBlock Text="BeeLlama остаётся на 127.0.0.1. При включении модель передаётся ноутбуку: локальные OpenCode, benchmark и Telegram-задачи блокируются. При выключении доступ возвращается только этому ПК. Funnel и публичные порты не используются." TextWrapping="Wrap" Foreground="#BFC9D7" Margin="0,6,0,12"/>
       <Border Background="#18364A" BorderBrush="#3285B5" BorderThickness="1" CornerRadius="6" Padding="12"><StackPanel><TextBlock Name="TailscaleStatus" Text="Проверка Tailscale..." FontWeight="SemiBold"/><TextBlock Name="RemoteAccessStatus" Text="Проверка Serve..." TextWrapping="Wrap" Margin="0,5,0,0"/><TextBlock Name="RemoteAccessUrl" Text="" Foreground="#79D6A3" TextWrapping="Wrap" Margin="0,5,0,0"/></StackPanel></Border>
       <WrapPanel Margin="0,10"><Button Name="RefreshRemoteAccess" Content="Обновить"/><Button Name="EnableRemoteAccess" Content="Включить доступ" Background="#176B52"/><Button Name="DisableRemoteAccess" Content="Выключить доступ" Background="#713A3A"/><Button Name="CopyRemoteInstall" Content="Скопировать команду для ноутбука"/></WrapPanel>
       <GroupBox Header="Установка на ноутбуке"><StackPanel><TextBlock Text="1. Установите Tailscale и войдите в тот же аккаунт. 2. Клонируйте репозиторий. 3. Выполните команду ниже в каталоге BeeForge." TextWrapping="Wrap"/><TextBox Name="RemoteInstallCommand" IsReadOnly="True" TextWrapping="Wrap" MinHeight="85" FontFamily="Consolas"/></StackPanel></GroupBox>
@@ -668,7 +668,11 @@ function Refresh-RemoteAccessView {
         (UI 'RemoteAccessStatus').Text=$state.Message
         (UI 'RemoteAccessUrl').Text=if($state.BaseUrl){"OpenCode endpoint: $($state.BaseUrl)"}else{'Удалённый endpoint ещё не создан.'}
         (UI 'EnableRemoteAccess').IsEnabled=$tailscale.Connected-and-not$state.ServeConfigured
-        (UI 'DisableRemoteAccess').IsEnabled=$state.Managed-and$state.ServeConfigured
+        # Also allow clearing a BeeForge-owned saved state if Serve disappeared
+        # outside the application. When Serve is active, Disable-BeeRemoteAccess
+        # verifies the exact managed configuration before resetting it.
+        (UI 'DisableRemoteAccess').IsEnabled=Test-BeeRemoteAccessCanDisable $state
+        (UI 'StartTest').IsEnabled=-not(Test-BeeLocalModelLeased)
         try{(UI 'RemoteInstallCommand').Text=Get-BeeRemoteClientInstallCommand (Get-FormProfile)}catch{(UI 'RemoteInstallCommand').Text='Сначала выберите локальный профиль и включите доступ.'}
     }catch{(UI 'RemoteAccessStatus').Text="Ошибка: $($_.Exception.Message)"}
 }
@@ -677,12 +681,18 @@ function Enable-RemoteAccessFromUi {
     try{
         $profile=Get-FormProfile;$validation=Test-BeeProfile $profile
         if(-not$validation.Valid){throw($validation.Errors-join"`n")}
-        [void](Enable-BeeRemoteAccess $profile);Refresh-RemoteAccessView
+        $confirmation=[Windows.MessageBox]::Show($window,'Передать модель ноутбуку? Локальный OpenCode будет закрыт, а новые Telegram-задачи и benchmark на этом ПК будут заблокированы до выключения доступа.','Передача модели ноутбуку',[Windows.MessageBoxButton]::YesNo,[Windows.MessageBoxImage]::Warning)
+        if($confirmation-ne[Windows.MessageBoxResult]::Yes){return}
+        [void](Enable-BeeRemoteAccess $profile)
+        $stopper=Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts\Stop-BeeForgeApps.ps1'
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $stopper -Action OpenCode | Out-Null
+        Refresh-RemoteAccessView
+        (UI 'StatusLine').Text='Модель передана ноутбуку. Локальный OpenCode закрыт; Telegram принимает только команды управления моделью.'
     }catch{Show-Message $_.Exception.Message 'Tailscale Serve' Error}
 }
 
 function Disable-RemoteAccessFromUi {
-    try{[void](Disable-BeeRemoteAccess);Refresh-RemoteAccessView}catch{Show-Message $_.Exception.Message 'Tailscale Serve' Error}
+    try{[void](Disable-BeeRemoteAccess);Refresh-RemoteAccessView;(UI 'StatusLine').Text='Удалённый доступ выключен. Локальный OpenCode и benchmark снова доступны.'}catch{Show-Message $_.Exception.Message 'Tailscale Serve' Error}
 }
 
 function Get-SafeTestInput([int]$Context,[int]$OutputTokens) {
@@ -1088,7 +1098,9 @@ $timer.Add_Tick({
         if($mcpSignature-ne$script:lastMcpTestSignature){$script:lastMcpTestSignature=$mcpSignature;$stateText=([string]$mcpTest.state).ToUpperInvariant();(UI 'TeamMcpTestStatus').Text="$stateText | $($mcpTest.mcp) | $($mcpTest.message)"}
         Update-TelegramStatus
         $state=if($s.Ready){'READY'}elseif($s.Remote){'OFFLINE'}elseif($s.Running){'LOADING'}else{'STOPPED'}
-        (UI 'HeaderStatus').Text=if($s.Remote){"$state | удалённая модель | $($s.BaseUrl)"}else{"$state | PID $($s.Pid) | uptime $($s.Uptime)"}
+        $leased=Test-BeeLocalModelLeased
+        (UI 'StartTest').IsEnabled=-not$leased
+        (UI 'HeaderStatus').Text=if($s.Remote){"$state | удалённая модель | $($s.BaseUrl)"}elseif($leased){"$state | МОДЕЛЬ ПЕРЕДАНА НОУТБУКУ | PID $($s.Pid) | uptime $($s.Uptime)"}else{"$state | PID $($s.Pid) | uptime $($s.Uptime)"}
         $vram=if($null-ne$s.VramUsedMiB){"$($s.VramUsedMiB)/$($s.VramTotalMiB) MiB"}else{'n/a'}
         $pt=if($null-ne$s.PromptTPS){"$($s.PromptTPS) tok/s"}else{'n/a'};$dt=if($null-ne$s.DecodeTPS){"$($s.DecodeTPS) tok/s"}else{'n/a'}
         (UI 'StatusLine').Text=if($s.Remote){"$state | $($s.Profile) | ctx $($s.Context) | $($s.Message)"}else{"$state | $($s.Profile) | ctx $($s.Context) | VRAM $vram | Shared $($s.SharedVram) | RAM $($s.RamUsedGiB) GiB | prompt $pt | decode $dt"}
@@ -1118,6 +1130,9 @@ $telegramWatchdogTimer.Add_Tick({
 $window.Add_Closed({ $timer.Stop(); $telegramWatchdogTimer.Stop(); $resourceDebounce.Stop(); try{[void](Stop-BeeMcpTest)}catch{} })
 $startupStore=Get-BeeProfileStore
 $startupProfile=Get-BeeProfile $startupStore.activeProfileId
+if((Get-BeeProfileConnectionMode $startupProfile)-eq'LocalHost'-and(Test-BeeLocalModelLeased)){
+    try{Update-BeeOpenCode $startupProfile -Force|Out-Null}catch{(UI 'StatusLine').Text="Не удалось применить блокировку локального OpenCode: $($_.Exception.Message)"}
+}
 if((Get-BeeProfileConnectionMode $startupProfile)-eq'LocalHost'-and$env:BEEFORGE_REMOTE_SMOKE_TEST-ne'1'){Refresh-ModelList}
 Refresh-ProfileList $startupStore.activeProfileId
 $script:telegramManualStop=$false

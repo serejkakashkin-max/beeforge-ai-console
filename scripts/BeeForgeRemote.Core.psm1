@@ -36,6 +36,19 @@ function Get-BeeTailscaleStatus {
 
 function ConvertTo-BeeCanonicalJson($Value){return($Value|ConvertTo-Json -Depth 100 -Compress)}
 
+function Test-BeeTailscaleServeConfiguration($Value) {
+    if ($null -eq $Value) { return $false }
+    return (@($Value.PSObject.Properties).Count -gt 0)
+}
+
+function Test-BeeRemoteAccessCanDisable($State) {
+    if ($null -eq $State) { return $false }
+    # Enabled marks a route that BeeForge created and recorded. This also lets
+    # the user clear a stale saved state after the route disappeared externally,
+    # while never offering to remove an unrelated Tailscale Serve setup.
+    return ([bool]$State.Managed -and [bool]$State.Enabled)
+}
+
 function Get-BeeRemoteAccessState {
     $state = [ordered]@{ Enabled=$false; Managed=$false; Port=$null; DnsName=''; BaseUrl=''; ServeStatusJson=''; ServeConfigured=$false; CurrentServeStatusJson=''; Message='Удалённый доступ выключен' }
     if (Test-Path -LiteralPath $script:RemoteConfigPath -PathType Leaf) {
@@ -46,9 +59,11 @@ function Get-BeeRemoteAccessState {
     }
     try {
         $serveText=Invoke-BeeTailscale @('serve','status','--json') -AllowFailure
-        if($serveText){$serve=$serveText|ConvertFrom-Json;$state.ServeConfigured=($serve.PSObject.Properties.Count -gt 0);$state.CurrentServeStatusJson=ConvertTo-BeeCanonicalJson $serve}
+        if($serveText){$serve=$serveText|ConvertFrom-Json;$state.ServeConfigured=Test-BeeTailscaleServeConfiguration $serve;$state.CurrentServeStatusJson=ConvertTo-BeeCanonicalJson $serve}
     } catch {}
     if($state.Enabled){$state.Message=if($state.ServeConfigured){'Tailscale Serve включён'}else{'Настройка сохранена, но Tailscale Serve не активен'}}
+    elseif($state.ServeConfigured){$state.Message='Обнаружена сторонняя конфигурация Tailscale Serve. BeeForge не будет её изменять.'}
+    else{$state.Message='Доступ с ноутбука выключен. Модель доступна только на этом ПК через 127.0.0.1.'}
     return [pscustomobject]$state
 }
 
@@ -87,11 +102,21 @@ function Enable-BeeRemoteAccess([Parameter(Mandatory=$true)]$Profile) {
     $existing=Get-BeeRemoteAccessState
     if($existing.ServeConfigured-and-not$existing.Managed){throw 'На этом ПК уже есть чужая конфигурация Tailscale Serve. BeeForge не будет её перезаписывать.'}
     [void](Start-BeeTailscaleServe -Port ([int]$Profile.port))
-    $baseUrl="https://$($tailscale.DnsName)/v1"
-    $serve=Invoke-BeeTailscale @('serve','status','--json')|ConvertFrom-Json
-    $state=[ordered]@{Enabled=$true;Managed=$true;Port=[int]$Profile.port;DnsName=$tailscale.DnsName;BaseUrl=$baseUrl;ServeStatusJson=(ConvertTo-BeeCanonicalJson $serve);UpdatedAt=(Get-Date).ToString('o')}
-    Save-BeeRemoteAccessState $state
-    return Get-BeeRemoteAccessState
+    try {
+        $baseUrl="https://$($tailscale.DnsName)/v1"
+        $serve=Invoke-BeeTailscale @('serve','status','--json')|ConvertFrom-Json
+        $state=[ordered]@{Enabled=$true;Managed=$true;Port=[int]$Profile.port;DnsName=$tailscale.DnsName;BaseUrl=$baseUrl;ServeStatusJson=(ConvertTo-BeeCanonicalJson $serve);UpdatedAt=(Get-Date).ToString('o')}
+        Save-BeeRemoteAccessState $state
+        # The lease becomes active before OpenCode is synchronized, so its
+        # local provider is atomically replaced with an unreachable loopback URL.
+        Update-BeeOpenCode $Profile -Force | Out-Null
+        return Get-BeeRemoteAccessState
+    } catch {
+        try { [void](Invoke-BeeTailscale @('serve','reset') -AllowFailure) } catch {}
+        Save-BeeRemoteAccessState ([ordered]@{Enabled=$false;Managed=$true;Port=$null;DnsName='';BaseUrl='';ServeStatusJson='';UpdatedAt=(Get-Date).ToString('o')})
+        try { Update-BeeOpenCode $Profile -Force | Out-Null } catch {}
+        throw
+    }
 }
 
 function Disable-BeeRemoteAccess {
@@ -102,6 +127,12 @@ function Disable-BeeRemoteAccess {
         [void](Invoke-BeeTailscale @('serve','reset'))
     }
     Save-BeeRemoteAccessState ([ordered]@{Enabled=$false;Managed=$true;Port=$null;DnsName='';BaseUrl='';ServeStatusJson='';UpdatedAt=(Get-Date).ToString('o')})
+    try {
+        $profile=Get-BeeProfile
+        if((Get-BeeProfileConnectionMode $profile)-eq'LocalHost'){Update-BeeOpenCode $profile -Force|Out-Null}
+    } catch {
+        throw "Удалённый маршрут выключен, но не удалось восстановить локальный OpenCode endpoint: $($_.Exception.Message)"
+    }
     return Get-BeeRemoteAccessState
 }
 
@@ -114,4 +145,4 @@ function Get-BeeRemoteClientInstallCommand([Parameter(Mandatory=$true)]$Profile)
     return ($parts-join' ')
 }
 
-Export-ModuleMember -Function Get-BeeTailscaleStatus,Get-BeeRemoteAccessState,Enable-BeeRemoteAccess,Disable-BeeRemoteAccess,Get-BeeRemoteClientInstallCommand
+Export-ModuleMember -Function Get-BeeTailscaleStatus,Get-BeeRemoteAccessState,Test-BeeTailscaleServeConfiguration,Test-BeeRemoteAccessCanDisable,Enable-BeeRemoteAccess,Disable-BeeRemoteAccess,Get-BeeRemoteClientInstallCommand

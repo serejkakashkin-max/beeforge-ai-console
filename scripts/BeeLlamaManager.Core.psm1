@@ -1,6 +1,8 @@
 ﻿Set-StrictMode -Version 2.0
 $script:BeeRoot = Split-Path $PSScriptRoot -Parent
 $script:ConfigPath = if($env:BEEFORGE_PROFILE_STORE){[IO.Path]::GetFullPath($env:BEEFORGE_PROFILE_STORE)}else{Join-Path $script:BeeRoot 'config\profiles.json'}
+$script:RemoteAccessPath = if($env:BEEFORGE_REMOTE_CONFIG){[IO.Path]::GetFullPath($env:BEEFORGE_REMOTE_CONFIG)}else{Join-Path $script:BeeRoot 'config\remote-access.json'}
+$script:BlockedLocalBaseUrl = 'http://127.0.0.1:1/v1'
 $script:LogDir = Join-Path $script:BeeRoot 'logs'
 $script:PidPath = Join-Path $script:LogDir 'qwen38-server.pid'
 $script:RunPath = Join-Path $script:LogDir 'current-run.json'
@@ -59,6 +61,21 @@ function Invoke-BeeRetention {
 }
 
 function Get-BeeRoot { return $script:BeeRoot }
+
+function Test-BeeLocalModelLeased {
+    try {
+        if (-not (Test-Path -LiteralPath $script:RemoteAccessPath -PathType Leaf)) { return $false }
+        $state = [IO.File]::ReadAllText($script:RemoteAccessPath,[Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
+        return ([bool]$state.Enabled -and [bool]$state.Managed)
+    } catch { return $false }
+}
+
+function Get-BeeOpenCodeProfileBaseUrl([Parameter(Mandatory=$true)]$Profile) {
+    if ((Get-BeeProfileConnectionMode $Profile) -eq 'LocalHost' -and (Test-BeeLocalModelLeased)) {
+        return $script:BlockedLocalBaseUrl
+    }
+    return Get-BeeProfileApiBaseUrl $Profile
+}
 function Get-BeeLogPaths {
     [pscustomobject]@{ Directory=$script:LogDir; Pid=$script:PidPath; Run=$script:RunPath; Stdout=$script:StdoutPath; Stderr=$script:StderrPath; BenchmarkPid=$script:BenchmarkPidPath; BenchmarkStatus=$script:BenchmarkStatusPath; BenchmarkResult=$script:BenchmarkResultPath }
 }
@@ -381,8 +398,8 @@ function Set-BeeJsonProperty($Object, [string]$Name, $Value) {
     else { $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $Value }
 }
 
-function Update-BeeOpenCode([Parameter(Mandatory=$true)]$Profile) {
-    if (-not [bool]$Profile.openCodeSync) { return [pscustomobject]@{Updated=$false;Message='OpenCode sync is disabled for this profile';Backup=$null} }
+function Update-BeeOpenCode([Parameter(Mandatory=$true)]$Profile,[switch]$Force) {
+    if (-not [bool]$Profile.openCodeSync -and -not $Force) { return [pscustomobject]@{Updated=$false;Message='OpenCode sync is disabled for this profile';Backup=$null} }
     $store = Get-BeeProfileStore
     $path = [string]$store.openCodeConfigPath
     if (-not (Test-Path -LiteralPath $path)) { throw "OpenCode config not found: $path" }
@@ -398,7 +415,7 @@ function Update-BeeOpenCode([Parameter(Mandatory=$true)]$Profile) {
     $alias = [string]$Profile.alias
     Set-BeeJsonProperty $config 'model' "beellama/$alias"
     if (-not $config.provider -or -not $config.provider.beellama) { throw 'OpenCode provider.beellama is missing' }
-    Set-BeeJsonProperty $config.provider.beellama.options 'baseURL' (Get-BeeProfileApiBaseUrl $Profile)
+    Set-BeeJsonProperty $config.provider.beellama.options 'baseURL' (Get-BeeOpenCodeProfileBaseUrl $Profile)
     if (-not $config.provider.beellama.options.extraBody) { Set-BeeJsonProperty $config.provider.beellama.options 'extraBody' ([pscustomobject]@{}) }
     if (-not $config.provider.beellama.options.extraBody.chat_template_kwargs) { Set-BeeJsonProperty $config.provider.beellama.options.extraBody 'chat_template_kwargs' ([pscustomobject]@{}) }
     $templateArgs = $config.provider.beellama.options.extraBody.chat_template_kwargs
@@ -547,6 +564,9 @@ function Resolve-BeeBenchmarkRequest([int]$Context,[int]$PromptTokens,[int]$Outp
 function Start-BeeBenchmark([string]$ProfileId,[int]$PromptTokens=4096,[int]$OutputTokens=256,[int]$TimeoutSec=900) {
     Initialize-BeeFolders
     $profile = Get-BeeProfile $ProfileId
+    if ((Get-BeeProfileConnectionMode $profile) -eq 'LocalHost' -and (Test-BeeLocalModelLeased)) {
+        throw 'Модель передана ноутбуку. Выключите удалённый доступ, чтобы запустить локальный benchmark.'
+    }
     $server = Get-BeeServerStatus
     if (-not $server.Ready) { throw 'BeeLlama server is not ready. Start the selected profile first.' }
     if ((Get-BeeProfileConnectionMode $profile) -eq 'LocalHost' -and (Test-Path -LiteralPath $script:RunPath)) {
@@ -677,4 +697,4 @@ function Open-BeeLiveLog {
     Start-Process -FilePath 'powershell.exe' -ArgumentList (ConvertTo-BeeArgumentLine $arguments) -WindowStyle Normal | Out-Null
 }
 
-Export-ModuleMember -Function Initialize-BeeFolders,Invoke-BeeRetention,Get-BeeRoot,Get-BeeLogPaths,Get-BeeProfileStore,Save-BeeProfileStore,Get-BeeNewProfileTemplate,Get-BeeProfile,Get-BeeProfileConnectionMode,ConvertTo-BeeApiBaseUrl,Get-BeeProfileApiBaseUrl,Get-BeeModelFiles,Get-BeeVisionProjectorFiles,Get-BeeSupportedHelp,Test-BeeProfile,Get-BeeArguments,Get-BeeCommandPreview,Start-BeeServer,Stop-BeeServer,Get-BeeServerStatus,Test-BeeRemoteConnection,Connect-BeeRemoteProfile,Open-BeeLiveLog,Update-BeeOpenCode,Test-BeeRunningProfileMatch,Resolve-BeeBenchmarkRequest,Start-BeeBenchmark,Stop-BeeBenchmark,Get-BeeBenchmarkStatus
+Export-ModuleMember -Function Initialize-BeeFolders,Invoke-BeeRetention,Get-BeeRoot,Get-BeeLogPaths,Get-BeeProfileStore,Save-BeeProfileStore,Get-BeeNewProfileTemplate,Get-BeeProfile,Get-BeeProfileConnectionMode,ConvertTo-BeeApiBaseUrl,Get-BeeProfileApiBaseUrl,Test-BeeLocalModelLeased,Get-BeeOpenCodeProfileBaseUrl,Get-BeeModelFiles,Get-BeeVisionProjectorFiles,Get-BeeSupportedHelp,Test-BeeProfile,Get-BeeArguments,Get-BeeCommandPreview,Start-BeeServer,Stop-BeeServer,Get-BeeServerStatus,Test-BeeRemoteConnection,Connect-BeeRemoteProfile,Open-BeeLiveLog,Update-BeeOpenCode,Test-BeeRunningProfileMatch,Resolve-BeeBenchmarkRequest,Start-BeeBenchmark,Stop-BeeBenchmark,Get-BeeBenchmarkStatus
