@@ -19,7 +19,7 @@ jobs:
       - name: Apply hardening patch
         shell: pwsh
         run: python tools/apply-runtime-hardening.py
-      - name: Finalize exports and test encoding
+      - name: Finalize exports, projector family matching and test encoding
         shell: pwsh
         run: |
           $corePath = 'scripts/BeeLlamaManager.Core.psm1'
@@ -28,6 +28,10 @@ jobs:
           $new = 'Update-BeeOpenCode,Test-BeeRunningProfileMatch,Test-BeeVisionProjectorCompatibility,Get-BeeProfileRuntimeFingerprint,Resolve-BeeBenchmarkRequest'
           if (-not $core.Contains($old)) { throw 'Export-ModuleMember anchor not found' }
           $core = $core.Replace($old,$new)
+          $familyOld = '$name = if ([string]::IsNullOrWhiteSpace($Path)) { '''' } else { [IO.Path]::GetFileName($Path) }'
+          $familyNew = '$name = if ([string]::IsNullOrWhiteSpace($Path)) { '''' } else { [string]$Path }'
+          if (-not $core.Contains($familyOld)) { throw 'Vision family anchor not found' }
+          $core = $core.Replace($familyOld,$familyNew)
           [IO.File]::WriteAllText((Resolve-Path $corePath),$core,[Text.UTF8Encoding]::new($true))
 
           $testPath = 'tests/RuntimeProfile.Smoke.ps1'
