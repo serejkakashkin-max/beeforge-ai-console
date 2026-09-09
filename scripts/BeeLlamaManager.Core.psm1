@@ -20,7 +20,7 @@ $script:ManagedFlags = @(
     '-ub','--ubatch-size','-t','--threads','-tb','--threads-batch','-ctk','--cache-type-k',
     '-ctv','--cache-type-v','--kv-tail-tokens','--kv-tail-type','-fa','--flash-attn',
     '--fit','-np','--parallel','--cache-reuse','--reasoning','--reasoning-budget',
-    '--reasoning-loop-guard','--reasoning-preserve','--cpu-moe','-cmoe','--n-cpu-moe','-ncmoe','--spec-type','--spec-draft-n-max',
+    '--reasoning-loop-guard','--reasoning-preserve','--cpu-moe','-cmoe','--n-cpu-moe','-ncmoe','-ot','--override-tensor','--no-mmap','--mmap','--spec-type','--spec-draft-n-max',
     '--temp','--top-p','--top-k','--min-p','--repeat-penalty','--host','--port',
     '--log-colors'
 )
@@ -95,6 +95,8 @@ function Initialize-BeeProfileSchema($Profile) {
         moeLayerCount = 0
         moeExpertWeightFraction = 0.0
         modelLayerCount = 0
+        tensorOverride = ''
+        noMmap = $false
         advancedArgs = @()
     }
     foreach ($entry in $defaults.GetEnumerator()) {
@@ -120,6 +122,8 @@ function Initialize-BeeProfileSchema($Profile) {
         $cleanAdvanced += $advancedEntry
     }
     $Profile.advancedArgs = @($cleanAdvanced)
+    # Correct the old template typo without rewriting deliberate custom limits.
+    if ($Profile.PSObject.Properties['openCodeOutput'] -and [int]$Profile.openCodeOutput -eq 32764) { $Profile.openCodeOutput = 32768 }
     # Profiles are user-defined; no profile has a privileged or undeletable role.
     if ($Profile.PSObject.Properties['protected']) { $Profile.protected = $false }
     else { $Profile | Add-Member -NotePropertyName 'protected' -NotePropertyValue $false }
@@ -154,11 +158,11 @@ function Get-BeeNewProfileTemplate {
         alias='qwen38-ymq-s-pro'; context=162000; gpuLayers='all'; batch=2048; ubatch=512
         threads=16; threadsBatch=16; flashAttention=$true; kvK='kvarn4'; kvV='kvarn4'
         kvTailTokens=1024; kvTailType='f16'; cacheReuse=256; parallel=1
-        cpuMoeLayers=0; cpuMoeAll=$false; moeLayerCount=0; moeExpertWeightFraction=0.0; modelLayerCount=0
+        cpuMoeLayers=0; cpuMoeAll=$false; moeLayerCount=0; moeExpertWeightFraction=0.0; modelLayerCount=0; tensorOverride=''; noMmap=$false
         reasoningEnabled=$true; reasoningBudget=32768; reasoningPreserve=$true
         mtpEnabled=$false; mtpNMax=4; temperature=1.0; topP=0.95; topK=20
         minP=0.0; repeatPenalty=1.0; host='127.0.0.1'; port=8080
-        openCodeSync=$true; openCodeOutput=32764; visionEnabled=$false; visionOffload=$false; mmprojPath=''; advancedArgs=@()
+        openCodeSync=$true; openCodeOutput=32768; visionEnabled=$false; visionOffload=$false; mmprojPath=''; advancedArgs=@()
     }
 }
 
@@ -223,6 +227,37 @@ function Get-BeeVisionProjectorFiles([string]$ModelPath) {
     return @($items | Sort-Object @{Expression={ if ($modelDirectory -and (Split-Path -Parent $_) -eq $modelDirectory) { 0 } else { 1 } }}, @{Expression={ $_ }})
 }
 
+
+function Get-BeeModelFamilyToken([string]$Path) {
+    $name = if ([string]::IsNullOrWhiteSpace($Path)) { '' } else { [string]$Path }
+    if ($name -match '(?i)(Ornith|Tiel-Coder)') { return 'ornith' }
+    if ($name -match '(?i)KAT-Coder') { return 'kat-coder' }
+    if ($name -match '(?i)Qwen3[._-]?8') { return 'qwen38' }
+    if ($name -match '(?i)Qwen3[._-]?[56]') { return 'qwen3x' }
+    if ($name -match '(?i)Gemma4') { return 'gemma4' }
+    return ''
+}
+
+function Test-BeeVisionProjectorCompatibility([string]$ModelPath,[string]$ProjectorPath) {
+    if ([string]::IsNullOrWhiteSpace($ModelPath) -or [string]::IsNullOrWhiteSpace($ProjectorPath)) {
+        return [pscustomobject]@{ Compatible=$false; Certain=$false; Message='Model or projector path is empty' }
+    }
+    $sameFolder = $false
+    try { $sameFolder = ([IO.Path]::GetFullPath((Split-Path -Parent $ModelPath)) -eq [IO.Path]::GetFullPath((Split-Path -Parent $ProjectorPath))) } catch {}
+    if ($sameFolder) {
+        return [pscustomobject]@{ Compatible=$true; Certain=$true; Message='Projector is stored next to the model' }
+    }
+    $modelFamily = Get-BeeModelFamilyToken $ModelPath
+    $projectorFamily = Get-BeeModelFamilyToken $ProjectorPath
+    if ($modelFamily -and $projectorFamily -and $modelFamily -ne $projectorFamily) {
+        return [pscustomobject]@{ Compatible=$false; Certain=$true; Message="Projector family '$projectorFamily' does not match model family '$modelFamily'" }
+    }
+    if ($modelFamily -and $projectorFamily -and $modelFamily -eq $projectorFamily) {
+        return [pscustomobject]@{ Compatible=$true; Certain=$true; Message="Projector matches model family '$modelFamily'" }
+    }
+    return [pscustomobject]@{ Compatible=$true; Certain=$false; Message='Projector is outside the model folder and family could not be proven; verify manually' }
+}
+
 function Test-BeeVisionProfile([Parameter(Mandatory=$true)]$Profile, [string]$HelpText) {
     $enabledProperty = $Profile.PSObject.Properties['visionEnabled']
     $enabled = ($enabledProperty -and [bool]$Profile.visionEnabled)
@@ -237,8 +272,10 @@ function Test-BeeVisionProfile([Parameter(Mandatory=$true)]$Profile, [string]$He
     if ($HelpText -and $HelpText -notmatch [regex]::Escape('-mm')) { $errors.Add('Runtime does not support the -mm / --mmproj vision flag') }
     if ($HelpText -and $HelpText -notmatch [regex]::Escape('--no-mmproj-offload')) { $errors.Add('Runtime does not support projector offload control') }
     if ($HelpText -and $HelpText -notmatch [regex]::Escape('--image-min-tokens')) { $errors.Add('Runtime does not support image token limits') }
-    if ($mmprojPath -and $mmprojPath -ne $Profile.modelPath -and (Split-Path -Parent $mmprojPath) -ne (Split-Path -Parent $Profile.modelPath)) {
-        $warnings.Add('Projector is outside the model folder; verify that it matches this model family before launch')
+    if ($mmprojPath -and $Profile.modelPath) {
+        $compatibility = Test-BeeVisionProjectorCompatibility ([string]$Profile.modelPath) $mmprojPath
+        if (-not $compatibility.Compatible -and $compatibility.Certain) { $errors.Add("Vision projector is incompatible: $($compatibility.Message)") }
+        elseif (-not $compatibility.Certain) { $warnings.Add([string]$compatibility.Message) }
     }
     return [pscustomobject]@{ Enabled=$true; Valid=($errors.Count -eq 0); Errors=@($errors); Warnings=@($warnings) }
 }
@@ -256,6 +293,7 @@ function Test-BeeProfile([Parameter(Mandatory=$true)]$Profile, [switch]$SkipHelp
     if ([string]$Profile.alias -notmatch '^[A-Za-z0-9._-]+$') { $errors.Add('Alias may contain only letters, digits, dot, underscore, and dash') }
     if ([int]$Profile.context -lt 1) { $errors.Add('Context must be a positive integer') }
     if ([int]$Profile.openCodeOutput -lt 1 -or [int]$Profile.openCodeOutput -ge [int]$Profile.context) { $errors.Add('OpenCode output must be positive and smaller than context') }
+    elseif ([int]$Profile.openCodeOutput -gt 32768) { $warnings.Add('OpenCode output above 32768 rarely helps agentic work and may reduce usable history before compaction; 32768 is the recommended reasoning-model default') }
     if ($mode -eq 'RemoteClient') {
         try { [void](ConvertTo-BeeApiBaseUrl ([string]$Profile.remoteBaseUrl)) } catch { $errors.Add($_.Exception.Message) }
         return [pscustomobject]@{ Valid=($errors.Count -eq 0); Errors=@($errors); Warnings=@($warnings) }
@@ -279,12 +317,19 @@ function Test-BeeProfile([Parameter(Mandatory=$true)]$Profile, [switch]$SkipHelp
     $moeLayerCount = if ($Profile.PSObject.Properties['moeLayerCount']) { [int]$Profile.moeLayerCount } else { 0 }
     $moeExpertWeightFraction = if ($Profile.PSObject.Properties['moeExpertWeightFraction']) { [double]$Profile.moeExpertWeightFraction } else { 0.0 }
     $modelLayerCount = if ($Profile.PSObject.Properties['modelLayerCount']) { [int]$Profile.modelLayerCount } else { 0 }
+    $tensorOverride = if ($Profile.PSObject.Properties['tensorOverride']) { [string]$Profile.tensorOverride } else { '' }
+    $noMmap = ($Profile.PSObject.Properties['noMmap'] -and [bool]$Profile.noMmap)
     if ($cpuMoeLayers -lt 0) { $errors.Add('CPU MoE layers must be 0 or greater') }
     if ($cpuMoeAll -and $cpuMoeLayers -gt 0) { $errors.Add('Use either all CPU MoE or a numeric CPU MoE layer count, not both') }
     if ($moeLayerCount -lt 0) { $errors.Add('MoE layer count must be 0 or greater') }
     if ($modelLayerCount -lt 0) { $errors.Add('Model layer count must be 0 or greater') }
     if ($moeExpertWeightFraction -lt 0.0 -or $moeExpertWeightFraction -gt 1.0) { $errors.Add('MoE expert weight fraction must be between 0 and 1') }
     if ($cpuMoeLayers -gt 0 -and $moeLayerCount -gt 0 -and $cpuMoeLayers -gt $moeLayerCount) { $warnings.Add("CPU MoE layers ($cpuMoeLayers) exceed configured MoE layers ($moeLayerCount); runtime behavior will be authoritative") }
+    if ($tensorOverride -match "[`r`n`0]") { $errors.Add('Tensor override must be a single command-line value without newline or NUL') }
+    if ($tensorOverride -and $tensorOverride -notmatch '=') { $errors.Add('Tensor override must use llama.cpp pattern=backend syntax, for example blk.(24-39).ffn_.*_exps.weight=CPU') }
+    if ($tensorOverride -and ($cpuMoeAll -or $cpuMoeLayers -gt 0)) { $warnings.Add('Both CPU MoE and tensor override are enabled. Prefer one offload strategy unless the combination was intentionally benchmarked.') }
+    $modelNameForWarnings = if ($Profile.modelPath) { [IO.Path]::GetFileName([string]$Profile.modelPath) } else { '' }
+    if ([int]$Profile.cacheReuse -gt 0 -and $modelNameForWarnings -match '(?i)(Ornith|Tiel-Coder)') { $warnings.Add('Cache reuse is not supported by the Ornith/Tiel hybrid-attention context in current BeeLlama builds; set Cache reuse = 0 to avoid a runtime disable warning') }
 
     $helpText = $null
     if (-not $SkipHelp -and (Test-Path -LiteralPath $Profile.serverPath -PathType Leaf)) {
@@ -301,6 +346,8 @@ function Test-BeeProfile([Parameter(Mandatory=$true)]$Profile, [switch]$SkipHelp
         if ([bool]$Profile.mtpEnabled) { $requiredFlags += @('--spec-type','--spec-draft-n-max') }
         if ($cpuMoeAll) { $requiredFlags += '--cpu-moe' }
         elseif ($cpuMoeLayers -gt 0) { $requiredFlags += '--n-cpu-moe' }
+        if ($tensorOverride) { $requiredFlags += '-ot' }
+        if ($noMmap) { $requiredFlags += '--no-mmap' }
         foreach ($requiredFlag in $requiredFlags) {
             if ($helpText -notmatch [regex]::Escape($requiredFlag)) { $errors.Add("Runtime does not support required flag: $requiredFlag") }
         }
@@ -354,6 +401,9 @@ function Get-BeeArguments([Parameter(Mandatory=$true)]$Profile) {
     elseif ($cpuMoeLayers -gt 0) {
         foreach ($value in @('--n-cpu-moe',[string]$cpuMoeLayers)) { $args.Add($value) }
     }
+    $tensorOverride = if ($Profile.PSObject.Properties['tensorOverride']) { [string]$Profile.tensorOverride } else { '' }
+    if (-not [string]::IsNullOrWhiteSpace($tensorOverride)) { foreach ($value in @('-ot',$tensorOverride.Trim())) { $args.Add([string]$value) } }
+    if ($Profile.PSObject.Properties['noMmap'] -and [bool]$Profile.noMmap) { $args.Add('--no-mmap') }
     foreach ($entry in @($Profile.advancedArgs)) {
         $args.Add([string]$entry.flag)
         if (-not [string]::IsNullOrEmpty([string]$entry.value)) { $args.Add([string]$entry.value) }
@@ -512,11 +562,23 @@ function Update-BeeOpenCode([Parameter(Mandatory=$true)]$Profile,[switch]$Force)
     return [pscustomobject]@{Updated=$true;Message="OpenCode updated: beellama/$alias";Backup=$backupPath}
 }
 
+
+function Get-BeeProfileRuntimeFingerprint([Parameter(Mandatory=$true)]$Profile) {
+    $payload = (@(Get-BeeArguments $Profile) -join [char]0)
+    $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+}
+
 function Test-BeeRunningProfileMatch([Parameter(Mandatory=$true)]$Profile) {
     $status = Get-BeeServerStatus
     if (-not $status.Ready -or -not (Test-Path -LiteralPath $script:RunPath)) { return $false }
     try {
         $run = Get-Content -Raw -LiteralPath $script:RunPath | ConvertFrom-Json
+        if ($run.PSObject.Properties['runtimeFingerprint']) {
+            return ([string]$run.profileId -eq [string]$Profile.id -and [string]$run.runtimeFingerprint -eq (Get-BeeProfileRuntimeFingerprint $Profile))
+        }
         return ($run.profileId -eq $Profile.id -and
             [IO.Path]::GetFullPath([string]$run.modelPath) -eq [IO.Path]::GetFullPath([string]$Profile.modelPath) -and
             [string]$run.alias -eq [string]$Profile.alias -and
@@ -549,7 +611,7 @@ function Start-BeeServer([string]$ProfileId) {
     $argumentLine = ConvertTo-BeeArgumentLine $arguments
     $process = Start-Process -FilePath $profile.serverPath -ArgumentList $argumentLine -RedirectStandardOutput $script:StdoutPath -RedirectStandardError $script:StderrPath -PassThru -WindowStyle Hidden
     Set-Content -LiteralPath $script:PidPath -Value $process.Id -Encoding ASCII
-    [pscustomobject]@{ profileId=$profile.id; profileName=$profile.name; alias=$profile.alias; modelPath=$profile.modelPath; serverPath=$profile.serverPath; context=$profile.context; cpuMoeLayers=[int]$(if ($profile.PSObject.Properties['cpuMoeLayers']) { $profile.cpuMoeLayers } else { 0 }); cpuMoeAll=[bool]($profile.PSObject.Properties['cpuMoeAll'] -and $profile.cpuMoeAll); visionEnabled=[bool]($profile.PSObject.Properties['visionEnabled'] -and $profile.visionEnabled); visionOffload=[bool]($profile.PSObject.Properties['visionOffload'] -and $profile.visionOffload); mmprojPath=[string]$(if ($profile.PSObject.Properties['mmprojPath']) { $profile.mmprojPath } else { '' }); host=$profile.host; port=$profile.port; pid=$process.Id; startedAt=(Get-Date).ToString('o') } |
+    [pscustomobject]@{ profileId=$profile.id; profileName=$profile.name; alias=$profile.alias; modelPath=$profile.modelPath; serverPath=$profile.serverPath; context=$profile.context; runtimeFingerprint=(Get-BeeProfileRuntimeFingerprint $profile); cpuMoeLayers=[int]$(if ($profile.PSObject.Properties['cpuMoeLayers']) { $profile.cpuMoeLayers } else { 0 }); cpuMoeAll=[bool]($profile.PSObject.Properties['cpuMoeAll'] -and $profile.cpuMoeAll); visionEnabled=[bool]($profile.PSObject.Properties['visionEnabled'] -and $profile.visionEnabled); visionOffload=[bool]($profile.PSObject.Properties['visionOffload'] -and $profile.visionOffload); mmprojPath=[string]$(if ($profile.PSObject.Properties['mmprojPath']) { $profile.mmprojPath } else { '' }); host=$profile.host; port=$profile.port; pid=$process.Id; startedAt=(Get-Date).ToString('o') } |
         ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $script:RunPath -Encoding UTF8
     $ready = $false
     for ($attempt=0; $attempt -lt 60; $attempt++) {
@@ -744,4 +806,4 @@ function Open-BeeLiveLog {
     Start-Process -FilePath 'powershell.exe' -ArgumentList (ConvertTo-BeeArgumentLine $arguments) -WindowStyle Normal | Out-Null
 }
 
-Export-ModuleMember -Function Initialize-BeeFolders,Invoke-BeeRetention,Get-BeeRoot,Get-BeeLogPaths,Get-BeeProfileStore,Save-BeeProfileStore,Get-BeeNewProfileTemplate,Get-BeeProfile,Get-BeeProfileConnectionMode,ConvertTo-BeeApiBaseUrl,Get-BeeProfileApiBaseUrl,Test-BeeLocalModelLeased,Get-BeeOpenCodeProfileBaseUrl,Get-BeeModelFiles,Get-BeeVisionProjectorFiles,Get-BeeSupportedHelp,Test-BeeProfile,Get-BeeArguments,Get-BeeCommandPreview,Start-BeeServer,Stop-BeeServer,Get-BeeServerStatus,Test-BeeRemoteConnection,Connect-BeeRemoteProfile,Open-BeeLiveLog,Update-BeeOpenCode,Test-BeeRunningProfileMatch,Resolve-BeeBenchmarkRequest,Start-BeeBenchmark,Stop-BeeBenchmark,Get-BeeBenchmarkStatus
+Export-ModuleMember -Function Initialize-BeeFolders,Invoke-BeeRetention,Get-BeeRoot,Get-BeeLogPaths,Get-BeeProfileStore,Save-BeeProfileStore,Get-BeeNewProfileTemplate,Get-BeeProfile,Get-BeeProfileConnectionMode,ConvertTo-BeeApiBaseUrl,Get-BeeProfileApiBaseUrl,Test-BeeLocalModelLeased,Get-BeeOpenCodeProfileBaseUrl,Get-BeeModelFiles,Get-BeeVisionProjectorFiles,Get-BeeSupportedHelp,Test-BeeProfile,Get-BeeArguments,Get-BeeCommandPreview,Start-BeeServer,Stop-BeeServer,Get-BeeServerStatus,Test-BeeRemoteConnection,Connect-BeeRemoteProfile,Open-BeeLiveLog,Update-BeeOpenCode,Test-BeeRunningProfileMatch,Test-BeeVisionProjectorCompatibility,Get-BeeProfileRuntimeFingerprint,Resolve-BeeBenchmarkRequest,Start-BeeBenchmark,Stop-BeeBenchmark,Get-BeeBenchmarkStatus

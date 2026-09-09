@@ -40,7 +40,7 @@
       "host": "127.0.0.1",
       "port": 8080,
       "openCodeSync": true,
-      "openCodeOutput": 32764,
+      "openCodeOutput": 32768,
       "advancedArgs": [],
       "visionEnabled": false,
       "mmprojPath": "",
@@ -49,7 +49,9 @@
       "cpuMoeAll": false,
       "moeLayerCount": 0,
       "moeExpertWeightFraction": 0.0,
-      "modelLayerCount": 0
+      "modelLayerCount": 0,
+      "tensorOverride": "",
+      "noMmap": false
     },
     {
       "id": "profile-b453573d18",
@@ -86,7 +88,7 @@
       "host": "127.0.0.1",
       "port": 8080,
       "openCodeSync": true,
-      "openCodeOutput": 65528,
+      "openCodeOutput": 32768,
       "advancedArgs": [],
       "visionEnabled": true,
       "mmprojPath": "__USERPROFILE__\\.lmstudio\\models\\unsloth\\Qwen3.8-27B-GGUF\\mmproj-F16.gguf",
@@ -95,7 +97,9 @@
       "cpuMoeAll": false,
       "moeLayerCount": 0,
       "moeExpertWeightFraction": 0.0,
-      "modelLayerCount": 0
+      "modelLayerCount": 0,
+      "tensorOverride": "",
+      "noMmap": false
     }
   ]
 }

@@ -337,3 +337,8 @@ shell, интернет и MCP, поэтому его следует включ�
 не останавливает BeeLlama или OpenCode, а закрытие UI не завершает уже запущенный
 мост. После изменения настроек запущенный мост перезапускается безопасно; после
 включения глобального плагина OpenCode требуется перезапустить один раз.
+
+
+## Runtime tuning
+
+Для различий `Threads decode` / `Threads prefill`, OpenCode Output, безопасного vision projector, MoE CPU offload и tensor override см. [`docs/MODEL-RUNTIME-TUNING.md`](docs/MODEL-RUNTIME-TUNING.md).
