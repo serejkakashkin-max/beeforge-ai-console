@@ -54,10 +54,10 @@ try { Invoke-BeeRetention } catch {}
       <GroupBox Name="ComputeGroup" Header="Контекст и вычисления"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="140"/><ColumnDefinition Width="150"/><ColumnDefinition Width="140"/><ColumnDefinition Width="150"/><ColumnDefinition Width="140"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
        <Label Content="Context"/><TextBox Grid.Column="1" Name="Context"/><Label Grid.Column="2" Content="GPU layers"/><ComboBox Grid.Column="3" Name="GpuLayers" MaxDropDownHeight="390" ToolTip="all — все слои; числа — уменьшение GPU offload"/><Label Grid.Column="4" Content="Parallel"/><TextBox Grid.Column="5" Name="Parallel"/>
        <Label Grid.Row="1" Content="Batch"/><TextBox Grid.Row="1" Grid.Column="1" Name="Batch"/><Label Grid.Row="1" Grid.Column="2" Content="Ubatch"/><TextBox Grid.Row="1" Grid.Column="3" Name="Ubatch"/><CheckBox Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" Name="FlashAttention" Content="Flash Attention"/>
-       <Label Grid.Row="2" Content="Threads"/><TextBox Grid.Row="2" Grid.Column="1" Name="Threads"/><Label Grid.Row="2" Grid.Column="2" Content="Threads batch"/><TextBox Grid.Row="2" Grid.Column="3" Name="ThreadsBatch"/><Label Grid.Row="2" Grid.Column="4" Content="Cache reuse"/><TextBox Grid.Row="2" Grid.Column="5" Name="CacheReuse"/>
+       <Label Grid.Row="2" Content="Threads decode"/><TextBox Grid.Row="2" Grid.Column="1" Name="Threads"/><Label Grid.Row="2" Grid.Column="2" Content="Threads prefill"/><TextBox Grid.Row="2" Grid.Column="3" Name="ThreadsBatch"/><Label Grid.Row="2" Grid.Column="4" Content="Cache reuse"/><TextBox Grid.Row="2" Grid.Column="5" Name="CacheReuse"/>
       </Grid></GroupBox>
       <GroupBox Name="ApiGroup" Header="API и подключение"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="200"/><ColumnDefinition Width="100"/><ColumnDefinition Width="130"/><ColumnDefinition Width="160"/><ColumnDefinition Width="130"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-       <Label Content="Режим"/><ComboBox Grid.Column="1" Name="ConnectionMode"><ComboBoxItem Content="LocalHost"/><ComboBoxItem Content="RemoteClient"/></ComboBox><Label Grid.Column="2" Content="Output"/><TextBox Grid.Column="3" Name="OpenCodeOutput" ToolTip="OpenCode output limit"/><CheckBox Grid.Column="4" Grid.ColumnSpan="2" Name="OpenCodeSync" Content="Обновлять OpenCode"/>
+       <Label Content="Режим"/><ComboBox Grid.Column="1" Name="ConnectionMode"><ComboBoxItem Content="LocalHost"/><ComboBoxItem Content="RemoteClient"/></ComboBox><Label Grid.Column="2" Content="Output (OpenCode)"/><TextBox Grid.Column="3" Name="OpenCodeOutput" ToolTip="Максимум output tokens, рекламируемый OpenCode. На скорость/VRAM llama-server не влияет; для reasoning-моделей обычно 32768."/><CheckBox Grid.Column="4" Grid.ColumnSpan="2" Name="OpenCodeSync" Content="Обновлять OpenCode"/>
        <Label Grid.Row="1" Content="Host / URL"/><TextBox Grid.Row="1" Grid.Column="1" Name="Host"/><Label Grid.Row="1" Grid.Column="2" Content="Port"/><TextBox Grid.Row="1" Grid.Column="3" Name="Port"/><TextBox Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" Name="RemoteBaseUrl" ToolTip="HTTPS endpoint Tailscale Serve, оканчивающийся на /v1"/>
       </Grid></GroupBox>
      </StackPanel></ScrollViewer>
@@ -68,10 +68,11 @@ try { Invoke-BeeRetention } catch {}
        <Label Content="KV K"/><ComboBox Grid.Column="1" Name="KvK"/><Label Grid.Column="2" Content="KV V"/><ComboBox Grid.Column="3" Name="KvV"/>
        <Label Grid.Row="1" Content="KV tail tokens"/><TextBox Grid.Row="1" Grid.Column="1" Name="KvTailTokens"/><Label Grid.Row="1" Grid.Column="2" Content="KV tail type"/><ComboBox Grid.Row="1" Grid.Column="3" Name="KvTailType"/>
       </Grid></GroupBox>
-      <GroupBox Name="MoeGroup" Header="MoE / CPU offload"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="140"/><ColumnDefinition Width="180"/><ColumnDefinition Width="150"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-       <Label Content="CPU MoE layers"/><TextBox Grid.Column="1" Name="CpuMoeLayers" ToolTip="0 = не переносить routed experts принудительно; N = --n-cpu-moe N"/><CheckBox Grid.Column="2" Grid.ColumnSpan="2" Name="CpuMoeAll" Content="Все MoE experts на CPU (--cpu-moe)"/>
-       <Label Grid.Row="1" Content="MoE layers"/><TextBox Grid.Row="1" Grid.Column="1" Name="MoeLayerCount" ToolTip="Для оценки памяти. 0 = неизвестно/авто по известному имени модели"/><Label Grid.Row="1" Grid.Column="2" Content="Expert weights %"/><TextBox Grid.Row="1" Grid.Column="3" Name="MoeExpertWeightPercent" ToolTip="Доля GGUF, приходящаяся на routed experts. Например Ornith ≈ 93%."/>
-       <Label Grid.Row="2" Content="Model layers"/><TextBox Grid.Row="2" Grid.Column="1" Name="ModelLayerCount" ToolTip="Используется для списка GPU layers и оценки. 0 = авто по известному имени модели"/><TextBlock Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="2" Name="MoeHint" Text="Параметры MoE определятся после выбора модели" Foreground="#8FC8EA" TextWrapping="Wrap" Margin="8,5"/>
+      <GroupBox Name="MoeGroup" Header="MoE / CPU offload"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="160"/><ColumnDefinition Width="180"/><ColumnDefinition Width="190"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+       <Label Content="CPU MoE layers"/><TextBox Grid.Column="1" Name="CpuMoeLayers" ToolTip="0 = не переносить routed experts принудительно; N = --n-cpu-moe N. Это способ уместить модель, но он может резко снизить decode."/><CheckBox Grid.Column="2" Grid.ColumnSpan="2" Name="CpuMoeAll" Content="Все MoE experts на CPU (--cpu-moe)"/>
+       <Label Grid.Row="1" Content="Tensor override"/><TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Name="TensorOverride" ToolTip="Точечный llama.cpp -ot/--override-tensor, например blk.(24-39).ffn_.*_exps.weight=CPU. Используйте только проверенный рецепт."/><CheckBox Grid.Row="1" Grid.Column="3" Name="NoMmap" Content="--no-mmap" ToolTip="Не memory-map GGUF. Может быть полезно при тяжёлом CPU offload и достаточном объёме RAM; обычно выключено."/>
+       <Label Grid.Row="2" Content="MoE layers"/><TextBox Grid.Row="2" Grid.Column="1" Name="MoeLayerCount" ToolTip="Для оценки памяти. 0 = неизвестно/авто по известному имени модели"/><Label Grid.Row="2" Grid.Column="2" Content="Expert weights %"/><TextBox Grid.Row="2" Grid.Column="3" Name="MoeExpertWeightPercent" ToolTip="Доля GGUF, приходящаяся на routed experts. Например Ornith ≈ 93%."/>
+       <Label Grid.Row="3" Content="Model layers"/><TextBox Grid.Row="3" Grid.Column="1" Name="ModelLayerCount" ToolTip="Используется для списка GPU layers и оценки. 0 = авто по известному имени модели"/><TextBlock Grid.Row="3" Grid.Column="2" Grid.ColumnSpan="2" Name="MoeHint" Text="Параметры MoE определятся после выбора модели" Foreground="#8FC8EA" TextWrapping="Wrap" Margin="8,5"/>
       </Grid></GroupBox>
       <GroupBox Name="ReasoningGroup" Header="Reasoning"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="160"/><ColumnDefinition Width="200"/><ColumnDefinition Width="160"/></Grid.ColumnDefinitions>
        <CheckBox Name="ReasoningEnabled" Content="Reasoning включён"/><TextBox Grid.Column="1" Name="ReasoningBudget" ToolTip="Hard reasoning budget"/><CheckBox Grid.Column="2" Name="ReasoningPreserve" Content="Preserve reasoning"/>
@@ -255,14 +256,14 @@ $tooltips = [ordered]@{
     Batch='Максимальный logical batch для обработки prompt. Большее значение может ускорить prefill, но требует больше памяти.'
     Ubatch='Физический micro-batch вычислений. Не должен превышать Batch; увеличение может ускорить prefill ценой VRAM.'
     FlashAttention='Использовать Flash Attention. Обычно ускоряет длинный контекст и уменьшает расход памяти, если runtime и GPU поддерживают его.'
-    Threads='Число CPU-потоков при генерации и операциях, выполняемых на CPU.'
-    ThreadsBatch='Число CPU-потоков для пакетной обработки prompt.'
-    CacheReuse='Минимальный объём совпавшего префикса для повторного использования prompt cache. Для multimodal runtime может отключить эту функцию.'
+    Threads='CPU-потоки для decode/генерации и операций, оставшихся на CPU. Больше логических потоков не всегда быстрее; для 16-ядерного CPU разумный старт — 16.'
+    ThreadsBatch='CPU-потоки для prompt processing/prefill. Это отдельный параметр от Threads decode.'
+    CacheReuse='Минимальный объём совпавшего префикса для повторного использования prompt cache. 0 отключает. Для Ornith/Tiel hybrid-attention текущий BeeLlama отключает cache reuse автоматически.'
     ApiGroup='Сетевой адрес BeeLlama и параметры интеграции с OpenCode.'
     Host='Адрес прослушивания API. 127.0.0.1 оставляет сервер доступным только на этом ПК.'
     Port='TCP-порт OpenAI-compatible API. Он должен быть свободен перед запуском.'
     OpenCodeSync='Автоматически обновлять alias, endpoint, context и возможности модели в конфигурации OpenCode при сохранении.'
-    OpenCodeOutput='Максимум output tokens, который OpenCode считает доступным. Он должен быть меньше физического context.'
+    OpenCodeOutput='Максимум output tokens, который BeeForge сообщает OpenCode. Это НЕ VRAM и не reasoning budget llama-server. Для очень думающих моделей рекомендуемый default — 32768; значения выше обычно не дают пользы и могут раньше приблизить compaction.'
     KvGroup='Формат KV cache определяет расход памяти, скорость и точность сохранения длинного контекста.'
     KvK='Тип квантования K-cache. Меньшая разрядность экономит VRAM, но может ухудшить качество.'
     KvV='Тип квантования V-cache. Меньшая разрядность экономит VRAM, но может сильнее влиять на качество ответа.'
@@ -274,7 +275,9 @@ $tooltips = [ordered]@{
     ReasoningPreserve='Сохранять reasoning_content в истории запроса, если это поддерживается моделью и клиентом.'
     MtpGroup='Speculative decoding с нативной MTP-головой модели. Эффект по скорости зависит от конкретной модели и требует A/B-теста.'
     MtpEnabled='Включить native MTP speculative decoding, если выбранная модель и runtime его поддерживают.'
-    MtpNMax='Максимальное число speculative tokens за шаг. Большее значение не гарантирует ускорение и может увеличить расход памяти.'
+    MtpNMax='Максимальное число speculative tokens за шаг. Основной прирост VRAM возникает от самого включения MTP; 2/3/4 обычно меняют память мало, а скорость зависит от acceptance rate.'
+    TensorOverride='Точечный tensor-level offload через -ot. Предпочтительнее грубого CPU MoE, если для конкретной модели опубликован проверенный рецепт.'
+    NoMmap='Передать --no-mmap. Это не универсальное ускорение: используйте при CPU offload только после A/B-теста и при достаточном объёме RAM.'
     SamplingGroup='Параметры случайности и отбора следующего токена.'
     Temperature='Случайность генерации. Меньше — стабильнее и предсказуемее; больше — разнообразнее.'
     TopP='Nucleus sampling: модель выбирает из токенов с суммарной вероятностью до этого порога.'
@@ -382,16 +385,19 @@ $serenaMemoryProjects = New-Object 'System.Collections.ObjectModel.ObservableCol
 
 function Get-MoEPreset([string]$ModelPath) {
     $name = if ([string]::IsNullOrWhiteSpace($ModelPath)) { '' } else { [IO.Path]::GetFileName($ModelPath) }
-    if ($name -match '(?i)(Ornith|Tiel-Coder|KAT-Coder|Qwen3[._-]?6.*35B.*A3B)') {
-        return [pscustomobject]@{ IsMoe=$true; MoeLayers=40; ModelLayers=40; ExpertPercent=93.0; Label='Qwen35MoE/Ornith family: 40 layers, routed experts ≈93% of main weights' }
+    if ($name -match '(?i)(Ornith|Tiel-Coder)') {
+        return [pscustomobject]@{ IsMoe=$true; MoeLayers=40; ModelLayers=40; ExpertPercent=93.0; CacheReuseDefault=0; Label='Ornith/Tiel: 40 layers, 256 experts / 8 active; routed experts ≈93%. Hybrid attention: cache reuse выключайте. CPU MoE — capacity fallback, не free speed.' }
+    }
+    if ($name -match '(?i)(KAT-Coder|Qwen3[._-]?6.*35B.*A3B)') {
+        return [pscustomobject]@{ IsMoe=$true; MoeLayers=40; ModelLayers=40; ExpertPercent=93.0; CacheReuseDefault=$null; Label='Qwen 35B-A3B/KAT family: 40 MoE layers; expert share ≈93% heuristic. Для скорости предпочитайте проверенный tensor override или quant, почти помещающийся в VRAM.' }
     }
     if ($name -match '(?i)Gemma4.*26B.*A4B') {
-        return [pscustomobject]@{ IsMoe=$true; MoeLayers=30; ModelLayers=30; ExpertPercent=90.0; Label='Gemma4 26B-A4B: 30 layers; expert share uses a conservative 90% heuristic' }
+        return [pscustomobject]@{ IsMoe=$true; MoeLayers=30; ModelLayers=30; ExpertPercent=90.0; CacheReuseDefault=$null; Label='Gemma4 26B-A4B: 30 MoE layers; expert share = conservative 90% heuristic.' }
     }
     if ($name -match '(?i)Qwen3[._-]?8.*27B') {
-        return [pscustomobject]@{ IsMoe=$false; MoeLayers=0; ModelLayers=64; ExpertPercent=0.0; Label='Qwen3.8-27B Dense preset: 64 layers' }
+        return [pscustomobject]@{ IsMoe=$false; MoeLayers=0; ModelLayers=64; ExpertPercent=0.0; CacheReuseDefault=$null; Label='Qwen3.8-27B Dense: 64 layers. CPU MoE не используется.' }
     }
-    return [pscustomobject]@{ IsMoe=$false; MoeLayers=0; ModelLayers=0; ExpertPercent=0.0; Label='Неизвестная архитектура: при MoE укажите MoE layers / Expert weights % вручную' }
+    return [pscustomobject]@{ IsMoe=$false; MoeLayers=0; ModelLayers=0; ExpertPercent=0.0; CacheReuseDefault=$null; Label='Неизвестная архитектура: при MoE укажите MoE layers / Expert weights % вручную; estimator остаётся консервативным.' }
 }
 
 function Update-GpuLayerChoices {
@@ -407,15 +413,25 @@ function Update-GpuLayerChoices {
     if (-not [string]::IsNullOrWhiteSpace($current)) { (UI 'GpuLayers').Text = $current }
 }
 
-function Update-MoEHint([switch]$ApplyDefaults) {
+function Update-MoEHint([switch]$ApplyDefaults,[switch]$ForcePreset) {
     $preset = Get-MoEPreset (UI 'ModelPath').Text
     if ($ApplyDefaults) {
-        $value = 0
-        if ([int]::TryParse((UI 'ModelLayerCount').Text,[ref]$value) -and $value -eq 0 -and $preset.ModelLayers -gt 0) { (UI 'ModelLayerCount').Text = [string]$preset.ModelLayers }
-        $value = 0
-        if ([int]::TryParse((UI 'MoeLayerCount').Text,[ref]$value) -and $value -eq 0 -and $preset.MoeLayers -gt 0) { (UI 'MoeLayerCount').Text = [string]$preset.MoeLayers }
-        $percent = 0.0
-        if ([double]::TryParse((UI 'MoeExpertWeightPercent').Text.Replace(',','.'),[Globalization.NumberStyles]::Float,[Globalization.CultureInfo]::InvariantCulture,[ref]$percent) -and $percent -eq 0.0 -and $preset.ExpertPercent -gt 0) { (UI 'MoeExpertWeightPercent').Text = [string]$preset.ExpertPercent }
+        if ($ForcePreset) {
+            # Offload recipes are model-specific. Never carry CPU MoE / -ot / no-mmap
+            # from the previous GGUF into a newly selected model.
+            (UI 'CpuMoeLayers').Text='0'; (UI 'CpuMoeAll').IsChecked=$false; (UI 'TensorOverride').Text=''; (UI 'NoMmap').IsChecked=$false
+            (UI 'ModelLayerCount').Text = if ($preset.ModelLayers -gt 0) { [string]$preset.ModelLayers } else { '0' }
+            (UI 'MoeLayerCount').Text = if ($preset.MoeLayers -gt 0) { [string]$preset.MoeLayers } else { '0' }
+            (UI 'MoeExpertWeightPercent').Text = if ($preset.ExpertPercent -gt 0) { [string]$preset.ExpertPercent } else { '0' }
+        } else {
+            $value = 0
+            if ($preset.ModelLayers -gt 0 -and [int]::TryParse((UI 'ModelLayerCount').Text,[ref]$value) -and $value -eq 0) { (UI 'ModelLayerCount').Text = [string]$preset.ModelLayers }
+            $value = 0
+            if ($preset.MoeLayers -gt 0 -and [int]::TryParse((UI 'MoeLayerCount').Text,[ref]$value) -and $value -eq 0) { (UI 'MoeLayerCount').Text = [string]$preset.MoeLayers }
+            $percent = 0.0
+            if ($preset.ExpertPercent -gt 0 -and [double]::TryParse((UI 'MoeExpertWeightPercent').Text.Replace(',','.'),[Globalization.NumberStyles]::Float,[Globalization.CultureInfo]::InvariantCulture,[ref]$percent) -and $percent -eq 0.0) { (UI 'MoeExpertWeightPercent').Text = [string]$preset.ExpertPercent }
+        }
+        if ($ForcePreset -and $null -ne $preset.CacheReuseDefault -and (UI 'CacheReuse').Text -eq '256') { (UI 'CacheReuse').Text=[string]$preset.CacheReuseDefault }
     }
     (UI 'MoeHint').Text = [string]$preset.Label
     Update-GpuLayerChoices
@@ -454,7 +470,16 @@ function Refresh-VisionProjectorList([switch]$PreferDetected) {
         $current = (UI 'MmprojPath').Text.Trim()
         $items = @(Get-BeeVisionProjectorFiles $modelPath)
         (UI 'MmprojPath').ItemsSource = $items
-        if ($PreferDetected -and $items.Count -gt 0) { $current = $items[0] }
+        if ($PreferDetected) {
+            $modelDirectory = if ($modelPath) { Split-Path -Parent $modelPath } else { '' }
+            $sameFolder = @($items | Where-Object { $modelDirectory -and (Split-Path -Parent $_) -eq $modelDirectory } | Select-Object -First 1)
+            if ($sameFolder.Count) { $current = [string]$sameFolder[0] }
+            else {
+                # Never carry a projector from the previous model into a new family.
+                $current = ''
+                (UI 'VisionEnabled').IsChecked = $false
+            }
+        }
         (UI 'MmprojPath').Text = $current
         Update-VisionHint
     } catch { (UI 'VisionHint').Text = "Не удалось найти projector: $($_.Exception.Message)" }
@@ -468,11 +493,12 @@ function Update-VisionHint {
     if (-not $enabled) { (UI 'VisionHint').Foreground='#98A4B5'; (UI 'VisionHint').Text='Выключено: OpenCode будет работать только с текстом'; return }
     if ([string]::IsNullOrWhiteSpace($mmprojPath)) { (UI 'VisionHint').Foreground='#FFBA69'; (UI 'VisionHint').Text='Выберите mmproj*.gguf — запуск будет заблокирован до выбора'; return }
     if (-not (Test-Path -LiteralPath $mmprojPath -PathType Leaf)) { (UI 'VisionHint').Foreground='#FF7B7B'; (UI 'VisionHint').Text='Projector-файл не найден'; return }
-    $sameFolder = ((Split-Path -Parent $modelPath) -eq (Split-Path -Parent $mmprojPath))
+    $compatibility = Test-BeeVisionProjectorCompatibility $modelPath $mmprojPath
     $sizeMiB = (Get-Item -LiteralPath $mmprojPath).Length / 1MB
-    (UI 'VisionHint').Foreground = if ($sameFolder) { '#79D6A3' } else { '#FFBA69' }
     $placement = if ($offload) { "GPU: +$([math]::Round($sizeMiB)) MiB VRAM" } else { "RAM: +$([math]::Round($sizeMiB)) MiB (рекомендуется)" }
-    (UI 'VisionHint').Text = if ($sameFolder) { "Найден рядом с моделью; $placement" } else { "Вне папки модели: проверьте совместимость; $placement" }
+    if (-not $compatibility.Compatible -and $compatibility.Certain) { (UI 'VisionHint').Foreground='#FF7B7B'; (UI 'VisionHint').Text="НЕСОВМЕСТИМ: $($compatibility.Message)"; return }
+    if ($compatibility.Certain) { (UI 'VisionHint').Foreground='#79D6A3'; (UI 'VisionHint').Text="$($compatibility.Message); $placement" }
+    else { (UI 'VisionHint').Foreground='#FFBA69'; (UI 'VisionHint').Text="$($compatibility.Message); $placement" }
 }
 
 function Refresh-ProfileList([string]$SelectId) {
@@ -500,7 +526,7 @@ function Load-Profile($Profile) {
     if (-not $Profile) { return }
     $script:currentProfile = $Profile
     $map = @{
-        ProfileName='name'; ModelPath='modelPath'; ServerPath='serverPath'; Alias='alias'; Context='context'; Parallel='parallel'; Batch='batch'; Ubatch='ubatch'; Threads='threads'; ThreadsBatch='threadsBatch'; CacheReuse='cacheReuse'; Host='host'; Port='port'; RemoteBaseUrl='remoteBaseUrl'; OpenCodeOutput='openCodeOutput'; KvTailTokens='kvTailTokens'; ReasoningBudget='reasoningBudget'; Temperature='temperature'; TopP='topP'; TopK='topK'; MinP='minP'; RepeatPenalty='repeatPenalty'; CpuMoeLayers='cpuMoeLayers'; MoeLayerCount='moeLayerCount'; ModelLayerCount='modelLayerCount'
+        ProfileName='name'; ModelPath='modelPath'; ServerPath='serverPath'; Alias='alias'; Context='context'; Parallel='parallel'; Batch='batch'; Ubatch='ubatch'; Threads='threads'; ThreadsBatch='threadsBatch'; CacheReuse='cacheReuse'; Host='host'; Port='port'; RemoteBaseUrl='remoteBaseUrl'; OpenCodeOutput='openCodeOutput'; KvTailTokens='kvTailTokens'; ReasoningBudget='reasoningBudget'; Temperature='temperature'; TopP='topP'; TopK='topK'; MinP='minP'; RepeatPenalty='repeatPenalty'; CpuMoeLayers='cpuMoeLayers'; MoeLayerCount='moeLayerCount'; ModelLayerCount='modelLayerCount'; TensorOverride='tensorOverride'
     }
     foreach ($control in $map.Keys) { (UI $control).Text = [string]$Profile.($map[$control]) }
     $mode=Get-BeeProfileConnectionMode $Profile
@@ -511,7 +537,7 @@ function Load-Profile($Profile) {
     (UI 'MmprojPath').Text = if ($Profile.PSObject.Properties['mmprojPath']) { [string]$Profile.mmprojPath } else { '' }
     if($mode-eq'LocalHost'-and$env:BEEFORGE_REMOTE_SMOKE_TEST-ne'1'){Refresh-VisionProjectorList}else{Update-VisionHint}
     (UI 'GpuLayers').SelectedItem = [string]$Profile.gpuLayers
-    foreach ($pair in @(@('FlashAttention','flashAttention'),@('OpenCodeSync','openCodeSync'),@('ReasoningEnabled','reasoningEnabled'),@('ReasoningPreserve','reasoningPreserve'),@('MtpEnabled','mtpEnabled'),@('CpuMoeAll','cpuMoeAll'))) { (UI $pair[0]).IsChecked = [bool]$Profile.($pair[1]) }
+    foreach ($pair in @(@('FlashAttention','flashAttention'),@('OpenCodeSync','openCodeSync'),@('ReasoningEnabled','reasoningEnabled'),@('ReasoningPreserve','reasoningPreserve'),@('MtpEnabled','mtpEnabled'),@('CpuMoeAll','cpuMoeAll'),@('NoMmap','noMmap'))) { (UI $pair[0]).IsChecked = [bool]$Profile.($pair[1]) }
     (UI 'MoeExpertWeightPercent').Text = ('{0:0.##}' -f ([double]$Profile.moeExpertWeightFraction * 100.0))
     foreach ($pair in @(@('KvK','kvK'),@('KvV','kvV'),@('KvTailType','kvTailType'),@('MtpNMax','mtpNMax'))) { (UI $pair[0]).SelectedItem = $Profile.($pair[1]) }
     $advanced.Clear()
@@ -526,9 +552,9 @@ function Load-Profile($Profile) {
 function Get-FormProfile {
     if (-not $script:currentProfile) { throw 'Профиль не выбран' }
     $p = ($script:currentProfile | ConvertTo-Json -Depth 20 | ConvertFrom-Json)
-    foreach ($field in @('connectionMode','remoteBaseUrl','visionEnabled','visionOffload','mmprojPath')) {
+    foreach ($field in @('connectionMode','remoteBaseUrl','visionEnabled','visionOffload','mmprojPath','tensorOverride','noMmap')) {
         if (-not $p.PSObject.Properties[$field]) {
-            $defaultValue = if ($field -eq 'connectionMode') { 'LocalHost' } elseif($field-in@('mmprojPath','remoteBaseUrl')) { '' } else { $false }
+            $defaultValue = if ($field -eq 'connectionMode') { 'LocalHost' } elseif($field-in@('mmprojPath','remoteBaseUrl','tensorOverride')) { '' } else { $false }
             $p | Add-Member -NotePropertyName $field -NotePropertyValue $defaultValue
         }
     }
@@ -538,7 +564,7 @@ function Get-FormProfile {
     $p.flashAttention=[bool](UI 'FlashAttention').IsChecked; $p.host=(UI 'Host').Text.Trim(); $p.port=[int](UI 'Port').Text; $p.openCodeSync=[bool](UI 'OpenCodeSync').IsChecked; $p.openCodeOutput=[int](UI 'OpenCodeOutput').Text
     $p.visionEnabled=[bool](UI 'VisionEnabled').IsChecked; $p.visionOffload=[bool](UI 'VisionOffload').IsChecked; $p.mmprojPath=(UI 'MmprojPath').Text.Trim()
     $p.kvK=[string](UI 'KvK').SelectedItem; $p.kvV=[string](UI 'KvV').SelectedItem; $p.kvTailTokens=[int](UI 'KvTailTokens').Text; $p.kvTailType=[string](UI 'KvTailType').SelectedItem
-    $p.cpuMoeLayers=[int](UI 'CpuMoeLayers').Text; $p.cpuMoeAll=[bool](UI 'CpuMoeAll').IsChecked; $p.moeLayerCount=[int](UI 'MoeLayerCount').Text; $p.modelLayerCount=[int](UI 'ModelLayerCount').Text
+    $p.cpuMoeLayers=[int](UI 'CpuMoeLayers').Text; $p.cpuMoeAll=[bool](UI 'CpuMoeAll').IsChecked; $p.moeLayerCount=[int](UI 'MoeLayerCount').Text; $p.modelLayerCount=[int](UI 'ModelLayerCount').Text; $p.tensorOverride=(UI 'TensorOverride').Text.Trim(); $p.noMmap=[bool](UI 'NoMmap').IsChecked
     $moePercent=[double]::Parse((UI 'MoeExpertWeightPercent').Text.Replace(',','.'),[Globalization.CultureInfo]::InvariantCulture); $p.moeExpertWeightFraction=$moePercent/100.0
     $p.reasoningEnabled=[bool](UI 'ReasoningEnabled').IsChecked; $p.reasoningBudget=[int](UI 'ReasoningBudget').Text; $p.reasoningPreserve=[bool](UI 'ReasoningPreserve').IsChecked; $p.mtpEnabled=[bool](UI 'MtpEnabled').IsChecked; $p.mtpNMax=[int](UI 'MtpNMax').SelectedItem
     $culture=[Globalization.CultureInfo]::InvariantCulture
@@ -566,9 +592,7 @@ function Update-ResourceEstimate {
         if (-not (Test-Path -LiteralPath $p.modelPath -PathType Leaf)) { throw 'Сначала выберите существующий GGUF-файл' }
         $modelMiB = (Get-Item -LiteralPath $p.modelPath).Length / 1MB
         $visionMiB = 0.0
-        if ([bool]$p.visionEnabled -and -not [string]::IsNullOrWhiteSpace([string]$p.mmprojPath) -and (Test-Path -LiteralPath $p.mmprojPath -PathType Leaf)) {
-            $visionMiB = (Get-Item -LiteralPath $p.mmprojPath).Length / 1MB
-        }
+        if ([bool]$p.visionEnabled -and -not [string]::IsNullOrWhiteSpace([string]$p.mmprojPath) -and (Test-Path -LiteralPath $p.mmprojPath -PathType Leaf)) { $visionMiB = (Get-Item -LiteralPath $p.mmprojPath).Length / 1MB }
         $visionGpuMiB = if ([bool]$p.visionOffload) { $visionMiB } else { 0.0 }
         $visionRamMiB = if ([bool]$p.visionOffload) { 0.0 } else { $visionMiB }
         $status = Get-BeeServerStatus
@@ -586,19 +610,20 @@ function Update-ResourceEstimate {
         $cpuMoeLayers = [math]::Max(0,[int]$p.cpuMoeLayers)
         $moeLayerCount = [math]::Max(0,[int]$p.moeLayerCount)
         $moeWeightFraction = [math]::Max(0.0,[math]::Min(1.0,[double]$p.moeExpertWeightFraction))
+        $tensorOverride = [string]$p.tensorOverride
+        $fineOverride = -not [string]::IsNullOrWhiteSpace($tensorOverride)
         $cpuMoeWeightFraction = 0.0
         if ([bool]$p.cpuMoeAll -and $moeWeightFraction -gt 0) { $cpuMoeWeightFraction = $moeWeightFraction }
-        elseif ($cpuMoeLayers -gt 0 -and $moeLayerCount -gt 0 -and $moeWeightFraction -gt 0) {
-            $cpuMoeWeightFraction = $moeWeightFraction * [math]::Min(1.0,$cpuMoeLayers/[double]$moeLayerCount)
-        }
+        elseif ($cpuMoeLayers -gt 0 -and $moeLayerCount -gt 0 -and $moeWeightFraction -gt 0) { $cpuMoeWeightFraction = $moeWeightFraction * [math]::Min(1.0,$cpuMoeLayers/[double]$moeLayerCount) }
         $effectiveGpuWeightFraction = [math]::Max(0.0,[math]::Min(1.0,$gpuFraction * (1.0-$cpuMoeWeightFraction)))
-        $moeNote = if ([bool]$p.cpuMoeAll) { "все routed MoE experts на CPU; оценочная доля experts $('{0:P0}' -f $moeWeightFraction)" } elseif ($cpuMoeLayers -gt 0) { "CPU MoE $cpuMoeLayers/$moeLayerCount; оценочно в RAM уходит $('{0:P0}' -f $cpuMoeWeightFraction) весов" } else { 'CPU MoE выключен' }
+        $moeNote = if ($fineOverride) { "tensor override активен: $tensorOverride; точную долю CPU/GPU estimator не знает" } elseif ([bool]$p.cpuMoeAll) { "все routed MoE experts на CPU; оценочная доля experts $('{0:P0}' -f $moeWeightFraction)" } elseif ($cpuMoeLayers -gt 0) { "CPU MoE $cpuMoeLayers/$moeLayerCount; оценочно в RAM уходит $('{0:P0}' -f $cpuMoeWeightFraction) весов" } else { 'CPU MoE выключен' }
 
         $context = [double]$p.context
         $tail = [math]::Min([double]$p.kvTailTokens,$context)
         $mainFactor = ((Get-KvMemoryFactor ([string]$p.kvK)) + (Get-KvMemoryFactor ([string]$p.kvV))) / 2.0
         $tailFactor = Get-KvMemoryFactor ([string]$p.kvTailType)
         $effectiveKvFactor = if ($context -gt 0) { ((($context-$tail)*$mainFactor)+($tail*$tailFactor))/$context } else { 1.0 }
+        # Conservative Qwen38-calibrated upper estimate. Hybrid/linear attention may use materially less classic KV.
         $kvMiB = 2306.0 * ($context / 162000.0) * $effectiveKvFactor
         $weightVramMiB = $modelMiB * 1.02 * $effectiveGpuWeightFraction
         $bufferScale = [math]::Sqrt(([math]::Max(1,[double]$p.batch)/2048.0) * ([math]::Max(1,[double]$p.ubatch)/512.0))
@@ -609,25 +634,29 @@ function Update-ResourceEstimate {
         $estimateMiB = $idleMiB + $weightVramMiB + $kvMiB + $buffersMiB
         $headroomMiB = $gpuTotalMiB - $estimateMiB
         $ramSpillMiB = $modelMiB * (1.0-$effectiveGpuWeightFraction) * 1.05 + $visionRamMiB
-        $riskHeadroomMiB = $headroomMiB
-        $measurementNote = ''
-        if ($status.Running -and [int]$status.Context -eq [int]$p.context -and $status.Model -eq [IO.Path]::GetFileName($p.modelPath) -and $status.VramUsedMiB) {
-            $actualHeadroomMiB = [double]$status.VramTotalMiB - [double]$status.VramUsedMiB
-            $riskHeadroomMiB = [math]::Min($riskHeadroomMiB,$actualHeadroomMiB)
-            $measurementNote = " Фактический запас текущего запуска: $([math]::Round($actualHeadroomMiB)) MiB."
-        }
+        $runningMatch = $false
+        try { $runningMatch = [bool](Test-BeeRunningProfileMatch $p) } catch {}
+        $actualHeadroomMiB = $null
+        if ($runningMatch -and $status.VramUsedMiB) { $actualHeadroomMiB = [double]$status.VramTotalMiB - [double]$status.VramUsedMiB }
+        $ramAvailableMiB = if ($status.RamAvailableGiB) { [double]$status.RamAvailableGiB * 1024.0 } else { 0.0 }
+        # Before launch, projected CPU/offloaded weights need physical RAM in addition
+        # to the currently running Windows/apps. Keep 2 GiB reserve to avoid paging.
+        $ramRisk = (-not $runningMatch -and -not $fineOverride -and $ramSpillMiB -gt 0 -and $ramAvailableMiB -gt 0 -and ($ramSpillMiB + 2048.0) -gt $ramAvailableMiB)
+        $runningRamRisk = ($runningMatch -and $ramAvailableMiB -gt 0 -and $ramAvailableMiB -lt 2048.0)
+        $ramPressureNote = if ($ramRisk) { "RAM risk: ожидаемый CPU/RAM spill $('{0:N2}'-f($ramSpillMiB/1024.0)) GiB при доступных сейчас $('{0:N2}'-f($ramAvailableMiB/1024.0)) GiB. Освободите RAM, уменьшите offload или используйте меньший quant." } elseif ($runningRamRisk) { "RAM risk: после загрузки доступно меньше 2 GiB физической RAM; возможен pagefile и резкое падение скорости." } else { '' }
 
         (UI 'EstimateModelSize').Text = ('{0:N2} GiB' -f ($modelMiB/1024.0))
-        (UI 'EstimateVram').Text = ('{0:N2} GiB' -f ($estimateMiB/1024.0))
-        (UI 'EstimateHeadroom').Text = ('{0:N0} MiB' -f $headroomMiB)
-        (UI 'EstimateSpill').Text = ('{0:N2} GiB' -f ($ramSpillMiB/1024.0))
+        (UI 'EstimateVram').Text = if ($fineOverride) { ('≤ {0:N2} GiB*' -f ($estimateMiB/1024.0)) } else { ('{0:N2} GiB' -f ($estimateMiB/1024.0)) }
+        (UI 'EstimateHeadroom').Text = if ($null -ne $actualHeadroomMiB) { ('{0:N0} MiB фактически' -f $actualHeadroomMiB) } elseif ($fineOverride) { 'н/д до запуска' } else { ('{0:N0} MiB' -f $headroomMiB) }
+        (UI 'EstimateSpill').Text = if ($fineOverride) { 'н/д (tensor override)' } else { ('{0:N2} GiB' -f ($ramSpillMiB/1024.0)) }
         (UI 'ActualVram').Text = if ($status.VramUsedMiB) { '{0:N2} / {1:N2} GiB' -f ($status.VramUsedMiB/1024.0),($status.VramTotalMiB/1024.0) } else { 'н/д' }
         (UI 'ActualRam').Text = if ($status.RamUsedGiB) { '{0:N1} / {1:N1} GiB' -f $status.RamUsedGiB,$status.RamTotalGiB } else { 'н/д' }
-        (UI 'ResourceWeights').Text = ('{0:N2} GiB' -f ($weightVramMiB/1024.0))
+        (UI 'ResourceWeights').Text = if ($fineOverride) { ('≤ {0:N2} GiB*' -f ($weightVramMiB/1024.0)) } else { ('{0:N2} GiB' -f ($weightVramMiB/1024.0)) }
         (UI 'ResourceKv').Text = ('{0:N0} MiB' -f $kvMiB)
         (UI 'ResourceBuffers').Text = ('{0:N0} MiB' -f $buffersMiB)
         (UI 'ResourceBackground').Text = ('{0:N0} MiB' -f $idleMiB)
-        (UI 'ResourceCalculatedFrom').Text = "Рассчитано $(Get-Date -Format 'HH:mm:ss') из формы: ctx $([int]$p.context) | KV $($p.kvK)/$($p.kvV) | GPU layers $($p.gpuLayers)/$modelLayerCount | CPU MoE $cpuMoeLayers"
+        $offloadMode = if ($fineOverride) { 'tensor override' } elseif ([bool]$p.cpuMoeAll) { 'all CPU MoE' } elseif ($cpuMoeLayers -gt 0) { "CPU MoE $cpuMoeLayers" } else { 'GPU/default' }
+        (UI 'ResourceCalculatedFrom').Text = "Рассчитано $(Get-Date -Format 'HH:mm:ss') из формы: ctx $([int]$p.context) | KV $($p.kvK)/$($p.kvV) | GPU layers $($p.gpuLayers)/$modelLayerCount | $offloadMode"
 
         $baselineContext = 162000.0
         $baselineTail = [math]::Min([double]$p.kvTailTokens,$baselineContext)
@@ -636,26 +665,48 @@ function Update-ResourceEstimate {
         $contextSavingMiB = $baselineKvMiB - $kvMiB
         $kvComparison = if ($p.kvK -eq 'q4_0' -and $p.kvV -eq 'q4_0') { 'q4_0/q4_0 и KVarN4/KVarN4 оцениваются почти одинаково: оба хранят KV примерно в 4 битах.' } else { "Коэффициент KV относительно KVarN4/KVarN4: $('{0:N2}'-f$mainFactor)x." }
         $visionImpact = if ([bool]$p.visionEnabled) { if ($visionMiB -gt 0) { if ([bool]$p.visionOffload) { "Vision projector добавляет примерно $('{0:N0}' -f $visionGpuMiB) MiB к VRAM." } else { "Vision projector остаётся в RAM: примерно $('{0:N0}' -f $visionRamMiB) MiB; VRAM сохраняется для контекста." } } else { 'Vision включён, но projector пока не выбран или не найден.' } } else { 'Vision выключен.' }
-        $moeImpact = if ($cpuMoeWeightFraction -gt 0) { "MoE offload по текущей модели уменьшает оценочную GPU-долю весов примерно на $('{0:P0}'-f$cpuMoeWeightFraction)." } elseif ($cpuMoeLayers -gt 0 -or [bool]$p.cpuMoeAll) { 'CPU MoE задан, но доля expert weights или число MoE-слоёв неизвестны — заполните поля MoE для корректного прогноза.' } else { 'CPU MoE не используется.' }
-        (UI 'ResourceImpact').Text = "Что изменилось: context $([int]$p.context) уменьшает KV примерно на $('{0:N0}'-f[math]::Max(0,$contextSavingMiB)) MiB относительно 162K при тех же KV-настройках. $kvComparison $moeImpact $visionImpact GPU-веса модели по оценке: $('{0:N2}'-f($weightVramMiB/1024.0)) GiB. KV для hybrid/linear-attention архитектур остаётся консервативной оценкой по Qwen38 до первого реального запуска."
+        $moeImpact = if ($fineOverride) { 'Точечный tensor override активен; его реальный memory split определяется runtime и проверяется запуском.' } elseif ($cpuMoeWeightFraction -gt 0) { "CPU MoE уменьшает оценочную GPU-долю весов примерно на $('{0:P0}'-f$cpuMoeWeightFraction), но это может резко снизить decode из-за RAM/CPU bottleneck." } elseif ($moeWeightFraction -gt 0) { 'MoE experts остаются GPU/default; это лучший режим скорости, если quant действительно помещается.' } else { 'CPU MoE не используется.' }
+        (UI 'ResourceImpact').Text = "Что изменилось: context $([int]$p.context) уменьшает KV примерно на $('{0:N0}'-f[math]::Max(0,$contextSavingMiB)) MiB относительно 162K при тех же KV-настройках. $kvComparison $moeImpact $visionImpact KV для hybrid/linear-attention архитектур показан как консервативная Qwen38-оценка до реального запуска."
 
         $targetHeadroomMiB = 800.0
-        $fullWeightMiB = $modelMiB*1.02*[math]::Max(0.01,(1.0-$cpuMoeWeightFraction))
-        $availableForWeights = $gpuTotalMiB-$targetHeadroomMiB-$idleMiB-$kvMiB-$buffersMiB
-        $recommendedFraction = [math]::Max(0.0,[math]::Min(1.0,$availableForWeights/$fullWeightMiB))
-        $recommendedLayers = [math]::Floor($recommendedFraction*$modelLayerCount)
-        $recommendedEffectiveGpuFraction = $recommendedFraction*(1.0-$cpuMoeWeightFraction)
-        $recommendedRamMiB = $modelMiB*(1.0-$recommendedEffectiveGpuFraction)*1.05
-        if ($recommendedFraction -ge 0.995) { (UI 'ResourceRecommendation').Text='Рекомендация: все GPU layers должны помещаться с целевым запасом около 800 MiB.' }
-        else { (UI 'ResourceRecommendation').Text="Рекомендация для запаса около 800 MiB: начните примерно с GPU layers = $recommendedLayers из условных 64. Около $('{0:N2}'-f($recommendedRamMiB/1024.0)) GiB весов перейдёт в RAM. Точное число слоёв подтвердите реальным запуском." }
+        if ($fineOverride) {
+            (UI 'ResourceRecommendation').Text='Рекомендация: tensor override нельзя надёжно оценить по размеру GGUF. Запустите короткий 16–32K профиль, проверьте фактические VRAM/RAM и decode, затем увеличивайте context. Не комбинируйте с CPU MoE без отдельного A/B-теста.'
+        } elseif ($moeWeightFraction -gt 0) {
+            if ($cpuMoeWeightFraction -gt 0) {
+                (UI 'ResourceRecommendation').Text='Рекомендация MoE: CPU MoE — способ УМЕСТИТЬ модель, а не бесплатное ускорение. Если decode сильно падает, выбирайте меньший quant, который почти целиком помещается в VRAM, либо используйте опубликованный tensor-level override.'
+            } elseif ($headroomMiB -ge $targetHeadroomMiB) {
+                (UI 'ResourceRecommendation').Text='Рекомендация MoE: оставьте CPU MoE = 0 — модель по оценке помещается с рабочим запасом. Сначала измерьте decode на 16–32K, затем увеличивайте context.'
+            } else {
+                (UI 'ResourceRecommendation').Text='Рекомендация MoE: модель не помещается целиком. Для daily-driver сначала возьмите меньший quant; не уменьшайте GPU layers как первый шаг. CPU MoE используйте только как capacity fallback, а точечный -ot — когда есть проверенный рецепт.'
+            }
+        } else {
+            $fullWeightMiB = $modelMiB*1.02
+            $availableForWeights = $gpuTotalMiB-$targetHeadroomMiB-$idleMiB-$kvMiB-$buffersMiB
+            $recommendedFraction = [math]::Max(0.0,[math]::Min(1.0,$availableForWeights/$fullWeightMiB))
+            $recommendedLayers = [math]::Floor($recommendedFraction*$modelLayerCount)
+            $recommendedRamMiB = $modelMiB*(1.0-$recommendedFraction)*1.05
+            if ($recommendedFraction -ge 0.995) { (UI 'ResourceRecommendation').Text='Рекомендация: все GPU layers должны помещаться с целевым запасом около 800 MiB.' }
+            else { (UI 'ResourceRecommendation').Text="Рекомендация для запаса около 800 MiB: начните примерно с GPU layers = $recommendedLayers из $modelLayerCount. Около $('{0:N2}'-f($recommendedRamMiB/1024.0)) GiB весов перейдёт в RAM. Точное число слоёв подтвердите реальным запуском." }
+        }
+
+        if ($ramPressureNote) { (UI 'ResourceRecommendation').Text = ((UI 'ResourceRecommendation').Text + ' ' + $ramPressureNote).Trim() }
 
         $card = UI 'ResourceRiskCard'
-        if ($riskHeadroomMiB -ge 1200) { $card.Background='#213A2B';$card.BorderBrush='#3EA66B';$verdict="Хороший запас: ожидается полное размещение в VRAM, запас около $([math]::Round($headroomMiB)) MiB." }
-        elseif ($riskHeadroomMiB -ge 500) { $card.Background='#394024';$card.BorderBrush='#A6A63E';$verdict="Допустимо, но близко к пределу: расчётный запас около $([math]::Round($headroomMiB)) MiB. Проверьте реальный peak VRAM." }
-        elseif ($riskHeadroomMiB -ge 0) { $card.Background='#49351F';$card.BorderBrush='#D58A36';$verdict="Высокий риск: практический запас меньше 500 MiB. Возможен Shared GPU Memory spill или OOM." }
-        else { $card.Background='#4A2428';$card.BorderBrush='#D85862';$verdict="Не помещается по оценке: превышение VRAM примерно на $([math]::Round(-$headroomMiB)) MiB. Уменьшите context/GPU layers или KV." }
-        (UI 'ResourceVerdict').Text = $verdict + $measurementNote
-        (UI 'ResourceDetails').Text = "Модель: $([IO.Path]::GetFileName($p.modelPath))`nРаскладка: $layerNote`nMoE: $moeNote`nФактический Shared GPU Memory через nvidia-smi на Windows надёжно не доступен; отрицательный или очень малый запас помечается как риск spill. Для Dense Qwen прогноз откалиброван по рабочему Qwen38 162K; для MoE/hybrid окончательная проверка — реальный запуск и фактические VRAM/RAM."
+        if ($null -ne $actualHeadroomMiB) {
+            if ($actualHeadroomMiB -ge 1200) { $card.Background='#213A2B';$card.BorderBrush='#3EA66B' }
+            elseif ($actualHeadroomMiB -ge 500) { $card.Background='#394024';$card.BorderBrush='#A6A63E' }
+            else { $card.Background='#49351F';$card.BorderBrush='#D58A36' }
+            $verdict="Фактический текущий запуск: запас dedicated VRAM около $([math]::Round($actualHeadroomMiB)) MiB. Это надёжнее расчётной модели."
+        } elseif ($fineOverride) {
+            $card.Background='#49351F';$card.BorderBrush='#D58A36';$verdict='Tensor override активен: точный VRAM split неизвестен до запуска. Показанная VRAM — консервативная верхняя граница без учёта точечного offload.'
+        } elseif ($headroomMiB -ge 1200) { $card.Background='#213A2B';$card.BorderBrush='#3EA66B';$verdict="Хороший запас: ожидается размещение с запасом около $([math]::Round($headroomMiB)) MiB." }
+        elseif ($headroomMiB -ge 500) { $card.Background='#394024';$card.BorderBrush='#A6A63E';$verdict="Допустимо, но близко к пределу: расчётный запас около $([math]::Round($headroomMiB)) MiB. Проверьте real peak VRAM." }
+        elseif ($headroomMiB -ge 0) { $card.Background='#49351F';$card.BorderBrush='#D58A36';$verdict='Высокий риск: практический запас меньше 500 MiB. Возможен Shared GPU Memory spill или OOM.' }
+        else { $card.Background='#4A2428';$card.BorderBrush='#D85862';$verdict="Не помещается по консервативной оценке: превышение VRAM примерно на $([math]::Round(-$headroomMiB)) MiB." }
+        if ($ramRisk -or $runningRamRisk) { $card.Background='#4A2428';$card.BorderBrush='#D85862';$verdict = $ramPressureNote + ' ' + $verdict }
+        (UI 'ResourceVerdict').Text = $verdict.Trim()
+        $mmapNote = if ([bool]$p.noMmap) { '--no-mmap ON' } else { 'mmap default' }
+        (UI 'ResourceDetails').Text = "Модель: $([IO.Path]::GetFileName($p.modelPath))`nРаскладка: $layerNote`nMoE: $moeNote`nMemory mapping: $mmapNote`nДля MoE/hybrid не принимайте расчёт за benchmark: окончательная проверка — реальный запуск, dedicated VRAM/RAM, prompt tok/s и decode tok/s."
     } catch {
         (UI 'ResourceVerdict').Text = "Не удалось рассчитать: $($_.Exception.Message)"
         (UI 'ResourceRiskCard').Background='#4A2428'; (UI 'ResourceRiskCard').BorderBrush='#D85862'
@@ -1063,12 +1114,12 @@ function Start-TelegramFromUi {
 (UI 'AddAdvanced').Add_Click({ $advanced.Add([pscustomobject]@{flag='--';value=''}) })
 (UI 'RemoveAdvanced').Add_Click({ $item=(UI 'AdvancedGrid').SelectedItem; if($item){$advanced.Remove($item)} })
 (UI 'RefreshEstimate').Add_Click({ Update-ResourceEstimate })
-foreach($controlName in @('Context','Parallel','Batch','Ubatch','KvTailTokens','CpuMoeLayers','MoeLayerCount','MoeExpertWeightPercent','ModelLayerCount')) { (UI $controlName).Add_TextChanged({ Queue-ResourceEstimate; Update-Preview }) }
+foreach($controlName in @('Context','Parallel','Batch','Ubatch','KvTailTokens','CpuMoeLayers','MoeLayerCount','MoeExpertWeightPercent','ModelLayerCount','TensorOverride')) { (UI $controlName).Add_TextChanged({ Queue-ResourceEstimate; Update-Preview }) }
 (UI 'ModelLayerCount').Add_LostKeyboardFocus({ Update-GpuLayerChoices })
 foreach($controlName in @('GpuLayers','KvK','KvV','KvTailType')) { (UI $controlName).Add_SelectionChanged({ Queue-ResourceEstimate }) }
-foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionOffload','CpuMoeAll')) { (UI $controlName).Add_Checked({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview }); (UI $controlName).Add_Unchecked({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview }) }
-(UI 'ModelPath').Add_SelectionChanged({ Refresh-VisionProjectorList -PreferDetected; Update-MoEHint -ApplyDefaults; Queue-ResourceEstimate; Update-Preview })
-(UI 'ModelPath').Add_LostKeyboardFocus({ Refresh-VisionProjectorList -PreferDetected; Update-MoEHint -ApplyDefaults; Queue-ResourceEstimate; Update-Preview })
+foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionOffload','CpuMoeAll','NoMmap')) { (UI $controlName).Add_Checked({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview }); (UI $controlName).Add_Unchecked({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview }) }
+(UI 'ModelPath').Add_SelectionChanged({ Refresh-VisionProjectorList -PreferDetected; Update-MoEHint -ApplyDefaults -ForcePreset; Queue-ResourceEstimate; Update-Preview })
+(UI 'ModelPath').Add_LostKeyboardFocus({ Refresh-VisionProjectorList -PreferDetected; Update-MoEHint -ApplyDefaults -ForcePreset; Queue-ResourceEstimate; Update-Preview })
 (UI 'MmprojPath').Add_SelectionChanged({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview })
 (UI 'MmprojPath').Add_LostKeyboardFocus({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview })
 (UI 'Context').Add_TextChanged({ Update-TestLimitHint })
@@ -1111,7 +1162,7 @@ foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionO
 (UI 'CopyRemoteInstall').Add_Click({try{$command=Get-BeeRemoteClientInstallCommand (Get-FormProfile);[Windows.Clipboard]::SetText($command);(UI 'RemoteInstallCommand').Text=$command;(UI 'StatusLine').Text='Команда установки скопирована.'}catch{Show-Message $_.Exception.Message 'Команда для ноутбука' Error}})
 (UI 'ConnectionMode').Add_SelectionChanged({if($script:currentProfile){Set-ProfileModeUi ([string](UI 'ConnectionMode').Text);Update-Preview}})
 (UI 'NewProfile').Add_Click({ try { $base=Get-BeeNewProfileTemplate;$base.id='profile-'+[guid]::NewGuid().ToString('N').Substring(0,10);$base.name='Новый профиль';$base.protected=$false;$s=Get-BeeProfileStore;$s.profiles=@($s.profiles)+$base;Save-BeeProfileStore $s;Refresh-ProfileList $base.id } catch { Show-Message $_.Exception.Message 'Ошибка' Error } })
-(UI 'CloneProfile').Add_Click({ try { $p=Get-FormProfile;$p.id='profile-'+[guid]::NewGuid().ToString('N').Substring(0,10);$p.name=$p.name+' — копия';$p.protected=$false;$s=Get-BeeProfileStore;$s.profiles=@($s.profiles)+$p;Save-BeeProfileStore $s;Refresh-ProfileList $p.id } catch { Show-Message $_.Exception.Message 'Ошибка' Error } })
+(UI 'CloneProfile').Add_Click({ try { $p=Get-FormProfile;$p.id='profile-'+[guid]::NewGuid().ToString('N').Substring(0,10);$p.name=$p.name+' — копия';$p.protected=$false;$s=Get-BeeProfileStore;$used=@($s.profiles|ForEach-Object{[string]$_.alias});$baseAlias=([string]$p.alias+'-copy');$candidate=$baseAlias;$n=2;while($used-contains$candidate){$candidate=$baseAlias+'-'+$n;$n++};$p.alias=$candidate;$s.profiles=@($s.profiles)+$p;Save-BeeProfileStore $s;Refresh-ProfileList $p.id } catch { Show-Message $_.Exception.Message 'Ошибка' Error } })
 (UI 'DeleteProfile').Add_Click({ try { $p=$script:currentProfile;$s=Get-BeeProfileStore;if(@($s.profiles).Count-le1){throw 'Нельзя удалить единственный профиль. Сначала создайте или импортируйте другой.'};if([Windows.MessageBox]::Show($window,"Удалить профиль $($p.name)?",'Подтверждение','YesNo','Warning')-eq'Yes'){$s.profiles=@($s.profiles|Where-Object{$_.id-ne$p.id});$nextId=[string]@($s.profiles)[0].id;if($s.activeProfileId-eq$p.id){$s.activeProfileId=$nextId};if($s.lastGoodProfileId-eq$p.id){$s.lastGoodProfileId=$nextId};Save-BeeProfileStore $s;Refresh-ProfileList $nextId} } catch { Show-Message $_.Exception.Message 'Удаление' Error } })
 (UI 'ExportProfile').Add_Click({ try { $d=New-Object Microsoft.Win32.SaveFileDialog;$d.Filter='JSON profile (*.json)|*.json';$d.FileName=$script:currentProfile.id+'.json';if($d.ShowDialog()){$json=Get-FormProfile|ConvertTo-Json -Depth 20;[IO.File]::WriteAllText($d.FileName,$json,[Text.UTF8Encoding]::new($true))} } catch { Show-Message $_.Exception.Message 'Экспорт' Error } })
 (UI 'ImportProfile').Add_Click({ try { $d=New-Object Microsoft.Win32.OpenFileDialog;$d.Filter='JSON profile (*.json)|*.json';if($d.ShowDialog()){$p=[IO.File]::ReadAllText($d.FileName,[Text.UTF8Encoding]::new($false))|ConvertFrom-Json;$p.id='profile-'+[guid]::NewGuid().ToString('N').Substring(0,10);$p.protected=$false;$v=Test-BeeProfile $p;if(-not$v.Valid){throw($v.Errors-join"`n")};$s=Get-BeeProfileStore;$s.profiles=@($s.profiles)+$p;Save-BeeProfileStore $s;Refresh-ProfileList $p.id} } catch { Show-Message $_.Exception.Message 'Импорт' Error } })
