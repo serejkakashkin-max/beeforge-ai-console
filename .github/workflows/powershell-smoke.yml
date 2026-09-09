@@ -1,0 +1,24 @@
+name: PowerShell smoke
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell
+        shell: pwsh
+        run: |
+          $files = @('scripts/BeeLlamaManager.Core.psm1','ui/BeeLlama-Manager.ps1','tests/MoEProfile.Smoke.ps1')
+          foreach ($file in $files) {
+            $tokens = $null; $errors = $null
+            [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors)
+            if ($errors.Count) { $errors | Format-List | Out-String | Write-Error; exit 1 }
+          }
+      - name: MoE profile smoke
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/MoEProfile.Smoke.ps1
