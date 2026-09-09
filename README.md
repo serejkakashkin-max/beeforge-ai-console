@@ -1,4 +1,4 @@
-# BeeForge AI Console
+﻿# BeeForge AI Console
 
 Локальная Windows-консоль для запуска GGUF-моделей через llama-server/BeeLlama,
 синхронизации команды OpenCode и защищённого управления через личного Telegram-бота.
@@ -154,6 +154,37 @@ Telegram и не запускает второй Telegram Bridge. Модель �
 7. Для завершения сервера нажмите **Остановить**. Если эксперимент не загрузился,
    изучите `logs/current.stderr.log`, исправьте профиль либо запустите другой.
 
+## MoE и перенос routed experts на CPU
+
+Для MoE-моделей BeeForge имеет отдельный блок **MoE / CPU offload** на вкладке
+**Производительность**. Поле **CPU MoE layers** напрямую управляет
+`--n-cpu-moe N`; значение `0` отключает принудительный перенос. Флажок
+**Все MoE experts на CPU** соответствует `--cpu-moe` и взаимоисключаем с числом
+CPU MoE layers.
+
+Поля **MoE layers**, **Expert weights %** и **Model layers** используются только
+для оценки ресурсов и динамического списка GPU layers. Для известных семейств
+(Ornith/Tiel/KAT/Qwen3.6-35B-A3B, Gemma4-26B-A4B, Qwen3.8-27B) интерфейс подставляет
+разумный пресет; значения можно скорректировать вручную. Старые профили, где
+`--n-cpu-moe` или `--cpu-moe` были записаны во вкладке Advanced, автоматически
+мигрируют в нативные поля.
+
+Для MoE/hybrid-attention вкладка **Ресурсы** учитывает оценочную долю routed expert
+weights, переносимую в RAM. Оценка KV остаётся консервативной до первого реального
+запуска, потому что разные hybrid/linear-attention архитектуры имеют разную стоимость
+контекста. После запуска ориентируйтесь на фактические VRAM/RAM и встроенный benchmark.
+
+Пример стартовой конфигурации Ornith-1.5-35B-A3B на 16 GiB GPU:
+
+```text
+GPU layers:       all
+CPU MoE layers:   16
+MoE layers:       40
+Expert weights:   93%
+Model layers:     40
+Flash Attention:  on
+MTP:              off (для первого baseline)
+```
 ## Встроенный benchmark
 
 На вкладке **Тест** задаются примерный размер synthetic input, максимальное число

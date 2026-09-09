@@ -68,6 +68,11 @@ try { Invoke-BeeRetention } catch {}
        <Label Content="KV K"/><ComboBox Grid.Column="1" Name="KvK"/><Label Grid.Column="2" Content="KV V"/><ComboBox Grid.Column="3" Name="KvV"/>
        <Label Grid.Row="1" Content="KV tail tokens"/><TextBox Grid.Row="1" Grid.Column="1" Name="KvTailTokens"/><Label Grid.Row="1" Grid.Column="2" Content="KV tail type"/><ComboBox Grid.Row="1" Grid.Column="3" Name="KvTailType"/>
       </Grid></GroupBox>
+      <GroupBox Name="MoeGroup" Header="MoE / CPU offload"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="140"/><ColumnDefinition Width="180"/><ColumnDefinition Width="150"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+       <Label Content="CPU MoE layers"/><TextBox Grid.Column="1" Name="CpuMoeLayers" ToolTip="0 = не переносить routed experts принудительно; N = --n-cpu-moe N"/><CheckBox Grid.Column="2" Grid.ColumnSpan="2" Name="CpuMoeAll" Content="Все MoE experts на CPU (--cpu-moe)"/>
+       <Label Grid.Row="1" Content="MoE layers"/><TextBox Grid.Row="1" Grid.Column="1" Name="MoeLayerCount" ToolTip="Для оценки памяти. 0 = неизвестно/авто по известному имени модели"/><Label Grid.Row="1" Grid.Column="2" Content="Expert weights %"/><TextBox Grid.Row="1" Grid.Column="3" Name="MoeExpertWeightPercent" ToolTip="Доля GGUF, приходящаяся на routed experts. Например Ornith ≈ 93%."/>
+       <Label Grid.Row="2" Content="Model layers"/><TextBox Grid.Row="2" Grid.Column="1" Name="ModelLayerCount" ToolTip="Используется для списка GPU layers и оценки. 0 = авто по известному имени модели"/><TextBlock Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="2" Name="MoeHint" Text="Параметры MoE определятся после выбора модели" Foreground="#8FC8EA" TextWrapping="Wrap" Margin="8,5"/>
+      </Grid></GroupBox>
       <GroupBox Name="ReasoningGroup" Header="Reasoning"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition Width="160"/><ColumnDefinition Width="200"/><ColumnDefinition Width="160"/></Grid.ColumnDefinitions>
        <CheckBox Name="ReasoningEnabled" Content="Reasoning включён"/><TextBox Grid.Column="1" Name="ReasoningBudget" ToolTip="Hard reasoning budget"/><CheckBox Grid.Column="2" Name="ReasoningPreserve" Content="Preserve reasoning"/>
       </Grid></GroupBox>
@@ -375,10 +380,51 @@ $serenaMemoryProjects = New-Object 'System.Collections.ObjectModel.ObservableCol
 (UI 'SerenaMemoryGrid').ItemsSource = $serenaMemoryProjects
 (UI 'AgentMode').ItemsSource = @('primary','subagent','all')
 
+function Get-MoEPreset([string]$ModelPath) {
+    $name = if ([string]::IsNullOrWhiteSpace($ModelPath)) { '' } else { [IO.Path]::GetFileName($ModelPath) }
+    if ($name -match '(?i)(Ornith|Tiel-Coder|KAT-Coder|Qwen3[._-]?6.*35B.*A3B)') {
+        return [pscustomobject]@{ IsMoe=$true; MoeLayers=40; ModelLayers=40; ExpertPercent=93.0; Label='Qwen35MoE/Ornith family: 40 layers, routed experts ≈93% of main weights' }
+    }
+    if ($name -match '(?i)Gemma4.*26B.*A4B') {
+        return [pscustomobject]@{ IsMoe=$true; MoeLayers=30; ModelLayers=30; ExpertPercent=90.0; Label='Gemma4 26B-A4B: 30 layers; expert share uses a conservative 90% heuristic' }
+    }
+    if ($name -match '(?i)Qwen3[._-]?8.*27B') {
+        return [pscustomobject]@{ IsMoe=$false; MoeLayers=0; ModelLayers=64; ExpertPercent=0.0; Label='Qwen3.8-27B Dense preset: 64 layers' }
+    }
+    return [pscustomobject]@{ IsMoe=$false; MoeLayers=0; ModelLayers=0; ExpertPercent=0.0; Label='Неизвестная архитектура: при MoE укажите MoE layers / Expert weights % вручную' }
+}
+
+function Update-GpuLayerChoices {
+    $current = (UI 'GpuLayers').Text
+    $count = 0
+    [void][int]::TryParse((UI 'ModelLayerCount').Text,[ref]$count)
+    if ($count -le 0) {
+        $preset = Get-MoEPreset (UI 'ModelPath').Text
+        $count = [int]$preset.ModelLayers
+    }
+    if ($count -le 0) { $count = 128 }
+    (UI 'GpuLayers').ItemsSource = @('all') + @($count..0 | ForEach-Object { [string]$_ })
+    if (-not [string]::IsNullOrWhiteSpace($current)) { (UI 'GpuLayers').Text = $current }
+}
+
+function Update-MoEHint([switch]$ApplyDefaults) {
+    $preset = Get-MoEPreset (UI 'ModelPath').Text
+    if ($ApplyDefaults) {
+        $value = 0
+        if ([int]::TryParse((UI 'ModelLayerCount').Text,[ref]$value) -and $value -eq 0 -and $preset.ModelLayers -gt 0) { (UI 'ModelLayerCount').Text = [string]$preset.ModelLayers }
+        $value = 0
+        if ([int]::TryParse((UI 'MoeLayerCount').Text,[ref]$value) -and $value -eq 0 -and $preset.MoeLayers -gt 0) { (UI 'MoeLayerCount').Text = [string]$preset.MoeLayers }
+        $percent = 0.0
+        if ([double]::TryParse((UI 'MoeExpertWeightPercent').Text.Replace(',','.'),[Globalization.NumberStyles]::Float,[Globalization.CultureInfo]::InvariantCulture,[ref]$percent) -and $percent -eq 0.0 -and $preset.ExpertPercent -gt 0) { (UI 'MoeExpertWeightPercent').Text = [string]$preset.ExpertPercent }
+    }
+    (UI 'MoeHint').Text = [string]$preset.Label
+    Update-GpuLayerChoices
+}
+
 foreach ($name in @('KvK','KvV')) { (UI $name).ItemsSource = @('f16','bf16','q8_0','q4_0','iq4_nl','kvarn4','kvarn3') }
 (UI 'KvTailType').ItemsSource = @('f16','bf16','q8_0','q4_0')
 (UI 'MtpNMax').ItemsSource = @(2,3,4)
-(UI 'GpuLayers').ItemsSource = @('all') + @(64..0 | ForEach-Object { [string]$_ })
+Update-GpuLayerChoices
 (UI 'TestPromptTokens').ItemsSource = @(1024,4096,8192,16384,32768)
 (UI 'TestPromptTokens').Text = '4096'
 (UI 'TestOutputTokens').ItemsSource = @(64,128,256,512,1024,2048,4096)
@@ -441,7 +487,7 @@ function Refresh-ProfileList([string]$SelectId) {
 function Set-ProfileModeUi([string]$Mode) {
     $remote=($Mode-eq'RemoteClient')
     foreach($name in @('ModelPath','ServerPath','BrowseModel','BrowseRuntime','MmprojPath','BrowseMmproj','VisionOffload','Host','Port')){(UI $name).IsEnabled=-not$remote}
-    foreach($name in @('ComputeGroup','KvGroup','ReasoningGroup','MtpGroup','SamplingGroup','ResourcesTab','AdvancedGrid','AddAdvanced','RemoveAdvanced','OpenLiveLog')){(UI $name).IsEnabled=-not$remote}
+    foreach($name in @('ComputeGroup','KvGroup','MoeGroup','ReasoningGroup','MtpGroup','SamplingGroup','ResourcesTab','AdvancedGrid','AddAdvanced','RemoveAdvanced','OpenLiveLog')){(UI $name).IsEnabled=-not$remote}
     (UI 'RemoteBaseUrl').IsEnabled=$remote
     (UI 'ApplyRestart').Content=if($remote){'Проверить подключение'}else{'Применить и перезапустить'}
     (UI 'StartServer').Content=if($remote){'Подключить и открыть OpenCode'}else{'Сохранить и запустить'}
@@ -454,7 +500,7 @@ function Load-Profile($Profile) {
     if (-not $Profile) { return }
     $script:currentProfile = $Profile
     $map = @{
-        ProfileName='name'; ModelPath='modelPath'; ServerPath='serverPath'; Alias='alias'; Context='context'; Parallel='parallel'; Batch='batch'; Ubatch='ubatch'; Threads='threads'; ThreadsBatch='threadsBatch'; CacheReuse='cacheReuse'; Host='host'; Port='port'; RemoteBaseUrl='remoteBaseUrl'; OpenCodeOutput='openCodeOutput'; KvTailTokens='kvTailTokens'; ReasoningBudget='reasoningBudget'; Temperature='temperature'; TopP='topP'; TopK='topK'; MinP='minP'; RepeatPenalty='repeatPenalty'
+        ProfileName='name'; ModelPath='modelPath'; ServerPath='serverPath'; Alias='alias'; Context='context'; Parallel='parallel'; Batch='batch'; Ubatch='ubatch'; Threads='threads'; ThreadsBatch='threadsBatch'; CacheReuse='cacheReuse'; Host='host'; Port='port'; RemoteBaseUrl='remoteBaseUrl'; OpenCodeOutput='openCodeOutput'; KvTailTokens='kvTailTokens'; ReasoningBudget='reasoningBudget'; Temperature='temperature'; TopP='topP'; TopK='topK'; MinP='minP'; RepeatPenalty='repeatPenalty'; CpuMoeLayers='cpuMoeLayers'; MoeLayerCount='moeLayerCount'; ModelLayerCount='modelLayerCount'
     }
     foreach ($control in $map.Keys) { (UI $control).Text = [string]$Profile.($map[$control]) }
     $mode=Get-BeeProfileConnectionMode $Profile
@@ -465,10 +511,12 @@ function Load-Profile($Profile) {
     (UI 'MmprojPath').Text = if ($Profile.PSObject.Properties['mmprojPath']) { [string]$Profile.mmprojPath } else { '' }
     if($mode-eq'LocalHost'-and$env:BEEFORGE_REMOTE_SMOKE_TEST-ne'1'){Refresh-VisionProjectorList}else{Update-VisionHint}
     (UI 'GpuLayers').SelectedItem = [string]$Profile.gpuLayers
-    foreach ($pair in @(@('FlashAttention','flashAttention'),@('OpenCodeSync','openCodeSync'),@('ReasoningEnabled','reasoningEnabled'),@('ReasoningPreserve','reasoningPreserve'),@('MtpEnabled','mtpEnabled'))) { (UI $pair[0]).IsChecked = [bool]$Profile.($pair[1]) }
+    foreach ($pair in @(@('FlashAttention','flashAttention'),@('OpenCodeSync','openCodeSync'),@('ReasoningEnabled','reasoningEnabled'),@('ReasoningPreserve','reasoningPreserve'),@('MtpEnabled','mtpEnabled'),@('CpuMoeAll','cpuMoeAll'))) { (UI $pair[0]).IsChecked = [bool]$Profile.($pair[1]) }
+    (UI 'MoeExpertWeightPercent').Text = ('{0:0.##}' -f ([double]$Profile.moeExpertWeightFraction * 100.0))
     foreach ($pair in @(@('KvK','kvK'),@('KvV','kvV'),@('KvTailType','kvTailType'),@('MtpNMax','mtpNMax'))) { (UI $pair[0]).SelectedItem = $Profile.($pair[1]) }
     $advanced.Clear()
     foreach ($item in @($Profile.advancedArgs)) { $advanced.Add([pscustomobject]@{ flag=[string]$item.flag; value=[string]$item.value }) }
+    Update-MoEHint -ApplyDefaults
     Update-Preview
     Update-VisionHint
     Update-ResourceEstimate
@@ -490,6 +538,8 @@ function Get-FormProfile {
     $p.flashAttention=[bool](UI 'FlashAttention').IsChecked; $p.host=(UI 'Host').Text.Trim(); $p.port=[int](UI 'Port').Text; $p.openCodeSync=[bool](UI 'OpenCodeSync').IsChecked; $p.openCodeOutput=[int](UI 'OpenCodeOutput').Text
     $p.visionEnabled=[bool](UI 'VisionEnabled').IsChecked; $p.visionOffload=[bool](UI 'VisionOffload').IsChecked; $p.mmprojPath=(UI 'MmprojPath').Text.Trim()
     $p.kvK=[string](UI 'KvK').SelectedItem; $p.kvV=[string](UI 'KvV').SelectedItem; $p.kvTailTokens=[int](UI 'KvTailTokens').Text; $p.kvTailType=[string](UI 'KvTailType').SelectedItem
+    $p.cpuMoeLayers=[int](UI 'CpuMoeLayers').Text; $p.cpuMoeAll=[bool](UI 'CpuMoeAll').IsChecked; $p.moeLayerCount=[int](UI 'MoeLayerCount').Text; $p.modelLayerCount=[int](UI 'ModelLayerCount').Text
+    $moePercent=[double]::Parse((UI 'MoeExpertWeightPercent').Text.Replace(',','.'),[Globalization.CultureInfo]::InvariantCulture); $p.moeExpertWeightFraction=$moePercent/100.0
     $p.reasoningEnabled=[bool](UI 'ReasoningEnabled').IsChecked; $p.reasoningBudget=[int](UI 'ReasoningBudget').Text; $p.reasoningPreserve=[bool](UI 'ReasoningPreserve').IsChecked; $p.mtpEnabled=[bool](UI 'MtpEnabled').IsChecked; $p.mtpNMax=[int](UI 'MtpNMax').SelectedItem
     $culture=[Globalization.CultureInfo]::InvariantCulture
     $p.temperature=[double]::Parse((UI 'Temperature').Text.Replace(',','.'),$culture); $p.topP=[double]::Parse((UI 'TopP').Text.Replace(',','.'),$culture); $p.topK=[int](UI 'TopK').Text; $p.minP=[double]::Parse((UI 'MinP').Text.Replace(',','.'),$culture); $p.repeatPenalty=[double]::Parse((UI 'RepeatPenalty').Text.Replace(',','.'),$culture)
@@ -524,14 +574,25 @@ function Update-ResourceEstimate {
         $status = Get-BeeServerStatus
         $gpuTotalMiB = if ($status.VramTotalMiB) { [double]$status.VramTotalMiB } else { 16303.0 }
 
+        $modelLayerCount = if ([int]$p.modelLayerCount -gt 0) { [int]$p.modelLayerCount } else { 64 }
         $gpuFraction = 1.0
         $layerNote = 'все слои на GPU'
         if ([string]$p.gpuLayers -ne 'all') {
             $layerCount = 0
             if (-not [int]::TryParse([string]$p.gpuLayers,[ref]$layerCount)) { throw 'GPU layers должен быть all или целым числом' }
-            $gpuFraction = [math]::Max(0.0,[math]::Min(1.0,$layerCount / 64.0))
-            $layerNote = "примерно $([math]::Round($gpuFraction*100))% весов на GPU (для прогноза принято 64 слоя)"
+            $gpuFraction = [math]::Max(0.0,[math]::Min(1.0,$layerCount / [double]$modelLayerCount))
+            $layerNote = "примерно $([math]::Round($gpuFraction*100))% слоёв на GPU ($layerCount/$modelLayerCount)"
         }
+        $cpuMoeLayers = [math]::Max(0,[int]$p.cpuMoeLayers)
+        $moeLayerCount = [math]::Max(0,[int]$p.moeLayerCount)
+        $moeWeightFraction = [math]::Max(0.0,[math]::Min(1.0,[double]$p.moeExpertWeightFraction))
+        $cpuMoeWeightFraction = 0.0
+        if ([bool]$p.cpuMoeAll -and $moeWeightFraction -gt 0) { $cpuMoeWeightFraction = $moeWeightFraction }
+        elseif ($cpuMoeLayers -gt 0 -and $moeLayerCount -gt 0 -and $moeWeightFraction -gt 0) {
+            $cpuMoeWeightFraction = $moeWeightFraction * [math]::Min(1.0,$cpuMoeLayers/[double]$moeLayerCount)
+        }
+        $effectiveGpuWeightFraction = [math]::Max(0.0,[math]::Min(1.0,$gpuFraction * (1.0-$cpuMoeWeightFraction)))
+        $moeNote = if ([bool]$p.cpuMoeAll) { "все routed MoE experts на CPU; оценочная доля experts $('{0:P0}' -f $moeWeightFraction)" } elseif ($cpuMoeLayers -gt 0) { "CPU MoE $cpuMoeLayers/$moeLayerCount; оценочно в RAM уходит $('{0:P0}' -f $cpuMoeWeightFraction) весов" } else { 'CPU MoE выключен' }
 
         $context = [double]$p.context
         $tail = [math]::Min([double]$p.kvTailTokens,$context)
@@ -539,7 +600,7 @@ function Update-ResourceEstimate {
         $tailFactor = Get-KvMemoryFactor ([string]$p.kvTailType)
         $effectiveKvFactor = if ($context -gt 0) { ((($context-$tail)*$mainFactor)+($tail*$tailFactor))/$context } else { 1.0 }
         $kvMiB = 2306.0 * ($context / 162000.0) * $effectiveKvFactor
-        $weightVramMiB = $modelMiB * 1.02 * $gpuFraction
+        $weightVramMiB = $modelMiB * 1.02 * $effectiveGpuWeightFraction
         $bufferScale = [math]::Sqrt(([math]::Max(1,[double]$p.batch)/2048.0) * ([math]::Max(1,[double]$p.ubatch)/512.0))
         $buffersMiB = 350.0 * $bufferScale + (50.0 * [math]::Max(0,[int]$p.parallel-1)) + $visionGpuMiB
         if (-not [bool]$p.flashAttention) { $buffersMiB += 250.0 }
@@ -547,7 +608,7 @@ function Update-ResourceEstimate {
         $idleMiB = if (-not $status.Running -and $status.VramUsedMiB) { [math]::Max(760.0,[double]$status.VramUsedMiB) } else { 760.0 }
         $estimateMiB = $idleMiB + $weightVramMiB + $kvMiB + $buffersMiB
         $headroomMiB = $gpuTotalMiB - $estimateMiB
-        $ramSpillMiB = $modelMiB * (1.0-$gpuFraction) * 1.05 + $visionRamMiB
+        $ramSpillMiB = $modelMiB * (1.0-$effectiveGpuWeightFraction) * 1.05 + $visionRamMiB
         $riskHeadroomMiB = $headroomMiB
         $measurementNote = ''
         if ($status.Running -and [int]$status.Context -eq [int]$p.context -and $status.Model -eq [IO.Path]::GetFileName($p.modelPath) -and $status.VramUsedMiB) {
@@ -566,7 +627,7 @@ function Update-ResourceEstimate {
         (UI 'ResourceKv').Text = ('{0:N0} MiB' -f $kvMiB)
         (UI 'ResourceBuffers').Text = ('{0:N0} MiB' -f $buffersMiB)
         (UI 'ResourceBackground').Text = ('{0:N0} MiB' -f $idleMiB)
-        (UI 'ResourceCalculatedFrom').Text = "Рассчитано $(Get-Date -Format 'HH:mm:ss') из формы: ctx $([int]$p.context) | KV $($p.kvK)/$($p.kvV) | tail $($p.kvTailTokens) $($p.kvTailType) | GPU layers $($p.gpuLayers)"
+        (UI 'ResourceCalculatedFrom').Text = "Рассчитано $(Get-Date -Format 'HH:mm:ss') из формы: ctx $([int]$p.context) | KV $($p.kvK)/$($p.kvV) | GPU layers $($p.gpuLayers)/$modelLayerCount | CPU MoE $cpuMoeLayers"
 
         $baselineContext = 162000.0
         $baselineTail = [math]::Min([double]$p.kvTailTokens,$baselineContext)
@@ -575,14 +636,16 @@ function Update-ResourceEstimate {
         $contextSavingMiB = $baselineKvMiB - $kvMiB
         $kvComparison = if ($p.kvK -eq 'q4_0' -and $p.kvV -eq 'q4_0') { 'q4_0/q4_0 и KVarN4/KVarN4 оцениваются почти одинаково: оба хранят KV примерно в 4 битах.' } else { "Коэффициент KV относительно KVarN4/KVarN4: $('{0:N2}'-f$mainFactor)x." }
         $visionImpact = if ([bool]$p.visionEnabled) { if ($visionMiB -gt 0) { if ([bool]$p.visionOffload) { "Vision projector добавляет примерно $('{0:N0}' -f $visionGpuMiB) MiB к VRAM." } else { "Vision projector остаётся в RAM: примерно $('{0:N0}' -f $visionRamMiB) MiB; VRAM сохраняется для контекста." } } else { 'Vision включён, но projector пока не выбран или не найден.' } } else { 'Vision выключен.' }
-        (UI 'ResourceImpact').Text = "Что изменилось: context $([int]$p.context) уменьшает KV примерно на $('{0:N0}'-f[math]::Max(0,$contextSavingMiB)) MiB относительно 162K при тех же KV-настройках. $kvComparison $visionImpact Главный потребитель здесь — веса выбранной модели ($('{0:N2}'-f($weightVramMiB/1024.0)) GiB). Итоговые параметры следует проверять тестом именно для этой модели."
+        $moeImpact = if ($cpuMoeWeightFraction -gt 0) { "MoE offload по текущей модели уменьшает оценочную GPU-долю весов примерно на $('{0:P0}'-f$cpuMoeWeightFraction)." } elseif ($cpuMoeLayers -gt 0 -or [bool]$p.cpuMoeAll) { 'CPU MoE задан, но доля expert weights или число MoE-слоёв неизвестны — заполните поля MoE для корректного прогноза.' } else { 'CPU MoE не используется.' }
+        (UI 'ResourceImpact').Text = "Что изменилось: context $([int]$p.context) уменьшает KV примерно на $('{0:N0}'-f[math]::Max(0,$contextSavingMiB)) MiB относительно 162K при тех же KV-настройках. $kvComparison $moeImpact $visionImpact GPU-веса модели по оценке: $('{0:N2}'-f($weightVramMiB/1024.0)) GiB. KV для hybrid/linear-attention архитектур остаётся консервативной оценкой по Qwen38 до первого реального запуска."
 
         $targetHeadroomMiB = 800.0
-        $fullWeightMiB = $modelMiB*1.02
+        $fullWeightMiB = $modelMiB*1.02*[math]::Max(0.01,(1.0-$cpuMoeWeightFraction))
         $availableForWeights = $gpuTotalMiB-$targetHeadroomMiB-$idleMiB-$kvMiB-$buffersMiB
         $recommendedFraction = [math]::Max(0.0,[math]::Min(1.0,$availableForWeights/$fullWeightMiB))
-        $recommendedLayers = [math]::Floor($recommendedFraction*64.0)
-        $recommendedRamMiB = $modelMiB*(1.0-$recommendedFraction)*1.05
+        $recommendedLayers = [math]::Floor($recommendedFraction*$modelLayerCount)
+        $recommendedEffectiveGpuFraction = $recommendedFraction*(1.0-$cpuMoeWeightFraction)
+        $recommendedRamMiB = $modelMiB*(1.0-$recommendedEffectiveGpuFraction)*1.05
         if ($recommendedFraction -ge 0.995) { (UI 'ResourceRecommendation').Text='Рекомендация: все GPU layers должны помещаться с целевым запасом около 800 MiB.' }
         else { (UI 'ResourceRecommendation').Text="Рекомендация для запаса около 800 MiB: начните примерно с GPU layers = $recommendedLayers из условных 64. Около $('{0:N2}'-f($recommendedRamMiB/1024.0)) GiB весов перейдёт в RAM. Точное число слоёв подтвердите реальным запуском." }
 
@@ -592,7 +655,7 @@ function Update-ResourceEstimate {
         elseif ($riskHeadroomMiB -ge 0) { $card.Background='#49351F';$card.BorderBrush='#D58A36';$verdict="Высокий риск: практический запас меньше 500 MiB. Возможен Shared GPU Memory spill или OOM." }
         else { $card.Background='#4A2428';$card.BorderBrush='#D85862';$verdict="Не помещается по оценке: превышение VRAM примерно на $([math]::Round(-$headroomMiB)) MiB. Уменьшите context/GPU layers или KV." }
         (UI 'ResourceVerdict').Text = $verdict + $measurementNote
-        (UI 'ResourceDetails').Text = "Модель: $([IO.Path]::GetFileName($p.modelPath))`nРаскладка: $layerNote`nФактический Shared GPU Memory через nvidia-smi на Windows надёжно не доступен; отрицательный или очень малый запас помечается как риск spill. Прогноз откалиброван по рабочему Qwen38 162K KVarN4/KVarN4 (факт около 15.7 GiB)."
+        (UI 'ResourceDetails').Text = "Модель: $([IO.Path]::GetFileName($p.modelPath))`nРаскладка: $layerNote`nMoE: $moeNote`nФактический Shared GPU Memory через nvidia-smi на Windows надёжно не доступен; отрицательный или очень малый запас помечается как риск spill. Для Dense Qwen прогноз откалиброван по рабочему Qwen38 162K; для MoE/hybrid окончательная проверка — реальный запуск и фактические VRAM/RAM."
     } catch {
         (UI 'ResourceVerdict').Text = "Не удалось рассчитать: $($_.Exception.Message)"
         (UI 'ResourceRiskCard').Background='#4A2428'; (UI 'ResourceRiskCard').BorderBrush='#D85862'
@@ -1000,11 +1063,12 @@ function Start-TelegramFromUi {
 (UI 'AddAdvanced').Add_Click({ $advanced.Add([pscustomobject]@{flag='--';value=''}) })
 (UI 'RemoveAdvanced').Add_Click({ $item=(UI 'AdvancedGrid').SelectedItem; if($item){$advanced.Remove($item)} })
 (UI 'RefreshEstimate').Add_Click({ Update-ResourceEstimate })
-foreach($controlName in @('Context','Parallel','Batch','Ubatch','KvTailTokens')) { (UI $controlName).Add_TextChanged({ Queue-ResourceEstimate }) }
+foreach($controlName in @('Context','Parallel','Batch','Ubatch','KvTailTokens','CpuMoeLayers','MoeLayerCount','MoeExpertWeightPercent','ModelLayerCount')) { (UI $controlName).Add_TextChanged({ Queue-ResourceEstimate; Update-Preview }) }
+(UI 'ModelLayerCount').Add_LostKeyboardFocus({ Update-GpuLayerChoices })
 foreach($controlName in @('GpuLayers','KvK','KvV','KvTailType')) { (UI $controlName).Add_SelectionChanged({ Queue-ResourceEstimate }) }
-foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionOffload')) { (UI $controlName).Add_Checked({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview }); (UI $controlName).Add_Unchecked({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview }) }
-(UI 'ModelPath').Add_SelectionChanged({ Refresh-VisionProjectorList -PreferDetected; Queue-ResourceEstimate; Update-Preview })
-(UI 'ModelPath').Add_LostKeyboardFocus({ Refresh-VisionProjectorList -PreferDetected; Queue-ResourceEstimate; Update-Preview })
+foreach($controlName in @('FlashAttention','MtpEnabled','VisionEnabled','VisionOffload','CpuMoeAll')) { (UI $controlName).Add_Checked({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview }); (UI $controlName).Add_Unchecked({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview }) }
+(UI 'ModelPath').Add_SelectionChanged({ Refresh-VisionProjectorList -PreferDetected; Update-MoEHint -ApplyDefaults; Queue-ResourceEstimate; Update-Preview })
+(UI 'ModelPath').Add_LostKeyboardFocus({ Refresh-VisionProjectorList -PreferDetected; Update-MoEHint -ApplyDefaults; Queue-ResourceEstimate; Update-Preview })
 (UI 'MmprojPath').Add_SelectionChanged({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview })
 (UI 'MmprojPath').Add_LostKeyboardFocus({ Update-VisionHint; Queue-ResourceEstimate; Update-Preview })
 (UI 'Context').Add_TextChanged({ Update-TestLimitHint })

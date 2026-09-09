@@ -20,7 +20,7 @@ $script:ManagedFlags = @(
     '-ub','--ubatch-size','-t','--threads','-tb','--threads-batch','-ctk','--cache-type-k',
     '-ctv','--cache-type-v','--kv-tail-tokens','--kv-tail-type','-fa','--flash-attn',
     '--fit','-np','--parallel','--cache-reuse','--reasoning','--reasoning-budget',
-    '--reasoning-loop-guard','--reasoning-preserve','--spec-type','--spec-draft-n-max',
+    '--reasoning-loop-guard','--reasoning-preserve','--cpu-moe','-cmoe','--n-cpu-moe','-ncmoe','--spec-type','--spec-draft-n-max',
     '--temp','--top-p','--top-k','--min-p','--repeat-penalty','--host','--port',
     '--log-colors'
 )
@@ -90,12 +90,36 @@ function Initialize-BeeProfileSchema($Profile) {
         visionEnabled = $false
         visionOffload = $false
         mmprojPath = ''
+        cpuMoeLayers = 0
+        cpuMoeAll = $false
+        moeLayerCount = 0
+        moeExpertWeightFraction = 0.0
+        modelLayerCount = 0
+        advancedArgs = @()
     }
     foreach ($entry in $defaults.GetEnumerator()) {
         if (-not $Profile.PSObject.Properties[$entry.Key]) {
             $Profile | Add-Member -NotePropertyName $entry.Key -NotePropertyValue $entry.Value
         }
     }
+    # Migrate older profiles that carried MoE flags in Advanced into native fields.
+    $cleanAdvanced = @()
+    foreach ($advancedEntry in @($Profile.advancedArgs)) {
+        $advancedFlag = [string]$advancedEntry.flag
+        if ($advancedFlag -in @('--n-cpu-moe','-ncmoe')) {
+            $parsedCpuMoe = 0
+            if ([int]::TryParse([string]$advancedEntry.value,[ref]$parsedCpuMoe) -and $parsedCpuMoe -ge 0 -and [int]$Profile.cpuMoeLayers -eq 0) {
+                $Profile.cpuMoeLayers = $parsedCpuMoe
+            }
+            continue
+        }
+        if ($advancedFlag -in @('--cpu-moe','-cmoe')) {
+            $Profile.cpuMoeAll = $true
+            continue
+        }
+        $cleanAdvanced += $advancedEntry
+    }
+    $Profile.advancedArgs = @($cleanAdvanced)
     # Profiles are user-defined; no profile has a privileged or undeletable role.
     if ($Profile.PSObject.Properties['protected']) { $Profile.protected = $false }
     else { $Profile | Add-Member -NotePropertyName 'protected' -NotePropertyValue $false }
@@ -130,6 +154,7 @@ function Get-BeeNewProfileTemplate {
         alias='qwen38-ymq-s-pro'; context=162000; gpuLayers='all'; batch=2048; ubatch=512
         threads=16; threadsBatch=16; flashAttention=$true; kvK='kvarn4'; kvV='kvarn4'
         kvTailTokens=1024; kvTailType='f16'; cacheReuse=256; parallel=1
+        cpuMoeLayers=0; cpuMoeAll=$false; moeLayerCount=0; moeExpertWeightFraction=0.0; modelLayerCount=0
         reasoningEnabled=$true; reasoningBudget=32768; reasoningPreserve=$true
         mtpEnabled=$false; mtpNMax=4; temperature=1.0; topP=0.95; topK=20
         minP=0.0; repeatPenalty=1.0; host='127.0.0.1'; port=8080
@@ -249,6 +274,18 @@ function Test-BeeProfile([Parameter(Mandatory=$true)]$Profile, [switch]$SkipHelp
     if ([int]$Profile.mtpNMax -lt 2 -or [int]$Profile.mtpNMax -gt 4) { $errors.Add('MTP n-max must be 2, 3, or 4') }
     if ([string]$Profile.host -notin @('127.0.0.1','localhost')) { $warnings.Add('Non-local host exposes the API beyond localhost') }
 
+    $cpuMoeLayers = if ($Profile.PSObject.Properties['cpuMoeLayers']) { [int]$Profile.cpuMoeLayers } else { 0 }
+    $cpuMoeAll = ($Profile.PSObject.Properties['cpuMoeAll'] -and [bool]$Profile.cpuMoeAll)
+    $moeLayerCount = if ($Profile.PSObject.Properties['moeLayerCount']) { [int]$Profile.moeLayerCount } else { 0 }
+    $moeExpertWeightFraction = if ($Profile.PSObject.Properties['moeExpertWeightFraction']) { [double]$Profile.moeExpertWeightFraction } else { 0.0 }
+    $modelLayerCount = if ($Profile.PSObject.Properties['modelLayerCount']) { [int]$Profile.modelLayerCount } else { 0 }
+    if ($cpuMoeLayers -lt 0) { $errors.Add('CPU MoE layers must be 0 or greater') }
+    if ($cpuMoeAll -and $cpuMoeLayers -gt 0) { $errors.Add('Use either all CPU MoE or a numeric CPU MoE layer count, not both') }
+    if ($moeLayerCount -lt 0) { $errors.Add('MoE layer count must be 0 or greater') }
+    if ($modelLayerCount -lt 0) { $errors.Add('Model layer count must be 0 or greater') }
+    if ($moeExpertWeightFraction -lt 0.0 -or $moeExpertWeightFraction -gt 1.0) { $errors.Add('MoE expert weight fraction must be between 0 and 1') }
+    if ($cpuMoeLayers -gt 0 -and $moeLayerCount -gt 0 -and $cpuMoeLayers -gt $moeLayerCount) { $warnings.Add("CPU MoE layers ($cpuMoeLayers) exceed configured MoE layers ($moeLayerCount); runtime behavior will be authoritative") }
+
     $helpText = $null
     if (-not $SkipHelp -and (Test-Path -LiteralPath $Profile.serverPath -PathType Leaf)) {
         try { $helpText = Get-BeeSupportedHelp $Profile.serverPath } catch { $errors.Add($_.Exception.Message) }
@@ -262,6 +299,8 @@ function Test-BeeProfile([Parameter(Mandatory=$true)]$Profile, [switch]$SkipHelp
         )
         if ([bool]$Profile.reasoningPreserve) { $requiredFlags += '--reasoning-preserve' }
         if ([bool]$Profile.mtpEnabled) { $requiredFlags += @('--spec-type','--spec-draft-n-max') }
+        if ($cpuMoeAll) { $requiredFlags += '--cpu-moe' }
+        elseif ($cpuMoeLayers -gt 0) { $requiredFlags += '--n-cpu-moe' }
         foreach ($requiredFlag in $requiredFlags) {
             if ($helpText -notmatch [regex]::Escape($requiredFlag)) { $errors.Add("Runtime does not support required flag: $requiredFlag") }
         }
@@ -308,6 +347,12 @@ function Get-BeeArguments([Parameter(Mandatory=$true)]$Profile) {
     if ([bool]$Profile.reasoningPreserve) { $args.Add('--reasoning-preserve') }
     if ([bool]$Profile.mtpEnabled) {
         foreach ($value in @('--spec-type','draft-mtp','--spec-draft-n-max',[string]$Profile.mtpNMax)) { $args.Add($value) }
+    }
+    $cpuMoeAll = ($Profile.PSObject.Properties['cpuMoeAll'] -and [bool]$Profile.cpuMoeAll)
+    $cpuMoeLayers = if ($Profile.PSObject.Properties['cpuMoeLayers']) { [int]$Profile.cpuMoeLayers } else { 0 }
+    if ($cpuMoeAll) { $args.Add('--cpu-moe') }
+    elseif ($cpuMoeLayers -gt 0) {
+        foreach ($value in @('--n-cpu-moe',[string]$cpuMoeLayers)) { $args.Add($value) }
     }
     foreach ($entry in @($Profile.advancedArgs)) {
         $args.Add([string]$entry.flag)
@@ -476,6 +521,8 @@ function Test-BeeRunningProfileMatch([Parameter(Mandatory=$true)]$Profile) {
             [IO.Path]::GetFullPath([string]$run.modelPath) -eq [IO.Path]::GetFullPath([string]$Profile.modelPath) -and
             [string]$run.alias -eq [string]$Profile.alias -and
             [int]$run.context -eq [int]$Profile.context -and
+            [int]$(if ($run.PSObject.Properties['cpuMoeLayers']) { $run.cpuMoeLayers } else { 0 }) -eq [int]$(if ($Profile.PSObject.Properties['cpuMoeLayers']) { $Profile.cpuMoeLayers } else { 0 }) -and
+            [bool]$(if ($run.PSObject.Properties['cpuMoeAll']) { $run.cpuMoeAll } else { $false }) -eq [bool]($Profile.PSObject.Properties['cpuMoeAll'] -and $Profile.cpuMoeAll) -and
             [bool]$run.visionEnabled -eq [bool]($Profile.PSObject.Properties['visionEnabled'] -and $Profile.visionEnabled) -and
             [bool]$run.visionOffload -eq [bool]($Profile.PSObject.Properties['visionOffload'] -and $Profile.visionOffload) -and
             [string]$run.mmprojPath -eq [string]$(if ($Profile.PSObject.Properties['mmprojPath']) { $Profile.mmprojPath } else { '' }) -and
@@ -502,7 +549,7 @@ function Start-BeeServer([string]$ProfileId) {
     $argumentLine = ConvertTo-BeeArgumentLine $arguments
     $process = Start-Process -FilePath $profile.serverPath -ArgumentList $argumentLine -RedirectStandardOutput $script:StdoutPath -RedirectStandardError $script:StderrPath -PassThru -WindowStyle Hidden
     Set-Content -LiteralPath $script:PidPath -Value $process.Id -Encoding ASCII
-    [pscustomobject]@{ profileId=$profile.id; profileName=$profile.name; alias=$profile.alias; modelPath=$profile.modelPath; serverPath=$profile.serverPath; context=$profile.context; visionEnabled=[bool]($profile.PSObject.Properties['visionEnabled'] -and $profile.visionEnabled); visionOffload=[bool]($profile.PSObject.Properties['visionOffload'] -and $profile.visionOffload); mmprojPath=[string]$(if ($profile.PSObject.Properties['mmprojPath']) { $profile.mmprojPath } else { '' }); host=$profile.host; port=$profile.port; pid=$process.Id; startedAt=(Get-Date).ToString('o') } |
+    [pscustomobject]@{ profileId=$profile.id; profileName=$profile.name; alias=$profile.alias; modelPath=$profile.modelPath; serverPath=$profile.serverPath; context=$profile.context; cpuMoeLayers=[int]$(if ($profile.PSObject.Properties['cpuMoeLayers']) { $profile.cpuMoeLayers } else { 0 }); cpuMoeAll=[bool]($profile.PSObject.Properties['cpuMoeAll'] -and $profile.cpuMoeAll); visionEnabled=[bool]($profile.PSObject.Properties['visionEnabled'] -and $profile.visionEnabled); visionOffload=[bool]($profile.PSObject.Properties['visionOffload'] -and $profile.visionOffload); mmprojPath=[string]$(if ($profile.PSObject.Properties['mmprojPath']) { $profile.mmprojPath } else { '' }); host=$profile.host; port=$profile.port; pid=$process.Id; startedAt=(Get-Date).ToString('o') } |
         ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $script:RunPath -Encoding UTF8
     $ready = $false
     for ($attempt=0; $attempt -lt 60; $attempt++) {

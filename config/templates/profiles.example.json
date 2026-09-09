@@ -1,4 +1,4 @@
-{
+﻿{
   "schemaVersion": 1,
   "activeProfileId": "profile-b453573d18",
   "lastGoodProfileId": "profile-b453573d18",
@@ -44,7 +44,12 @@
       "advancedArgs": [],
       "visionEnabled": false,
       "mmprojPath": "",
-      "visionOffload": false
+      "visionOffload": false,
+      "cpuMoeLayers": 0,
+      "cpuMoeAll": false,
+      "moeLayerCount": 0,
+      "moeExpertWeightFraction": 0.0,
+      "modelLayerCount": 0
     },
     {
       "id": "profile-b453573d18",
@@ -85,7 +90,12 @@
       "advancedArgs": [],
       "visionEnabled": true,
       "mmprojPath": "__USERPROFILE__\\.lmstudio\\models\\unsloth\\Qwen3.8-27B-GGUF\\mmproj-F16.gguf",
-      "visionOffload": false
+      "visionOffload": false,
+      "cpuMoeLayers": 0,
+      "cpuMoeAll": false,
+      "moeLayerCount": 0,
+      "moeExpertWeightFraction": 0.0,
+      "modelLayerCount": 0
     }
   ]
 }
