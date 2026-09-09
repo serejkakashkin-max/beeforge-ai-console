@@ -51,9 +51,10 @@ jobs:
         run: |
           pwsh -NoProfile -File tests/MoEProfile.Smoke.ps1
           pwsh -NoProfile -File tests/RuntimeProfile.Smoke.ps1
-      - name: Commit feature changes
+      - name: Commit feature changes without workflow mutation
         shell: pwsh
         run: |
+          git checkout HEAD -- .github/workflows/powershell-smoke.yml .github/workflows/runtime-hardening-bootstrap.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
