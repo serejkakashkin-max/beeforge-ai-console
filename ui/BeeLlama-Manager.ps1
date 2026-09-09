@@ -416,14 +416,21 @@ function Update-GpuLayerChoices {
 function Update-MoEHint([switch]$ApplyDefaults,[switch]$ForcePreset) {
     $preset = Get-MoEPreset (UI 'ModelPath').Text
     if ($ApplyDefaults) {
-        $value = 0
-        if ($preset.ModelLayers -gt 0 -and ($ForcePreset -or ([int]::TryParse((UI 'ModelLayerCount').Text,[ref]$value) -and $value -eq 0))) { (UI 'ModelLayerCount').Text = [string]$preset.ModelLayers }
-        $value = 0
-        if ($preset.MoeLayers -gt 0 -and ($ForcePreset -or ([int]::TryParse((UI 'MoeLayerCount').Text,[ref]$value) -and $value -eq 0))) { (UI 'MoeLayerCount').Text = [string]$preset.MoeLayers }
-        $percent = 0.0
-        $percentParsed = [double]::TryParse((UI 'MoeExpertWeightPercent').Text.Replace(',','.'),[Globalization.NumberStyles]::Float,[Globalization.CultureInfo]::InvariantCulture,[ref]$percent)
-        if ($preset.ExpertPercent -gt 0 -and ($ForcePreset -or ($percentParsed -and $percent -eq 0.0))) { (UI 'MoeExpertWeightPercent').Text = [string]$preset.ExpertPercent }
-        if (-not $preset.IsMoe -and $ForcePreset) { (UI 'MoeLayerCount').Text='0'; (UI 'MoeExpertWeightPercent').Text='0'; (UI 'CpuMoeLayers').Text='0'; (UI 'CpuMoeAll').IsChecked=$false; (UI 'TensorOverride').Text='' }
+        if ($ForcePreset) {
+            # Offload recipes are model-specific. Never carry CPU MoE / -ot / no-mmap
+            # from the previous GGUF into a newly selected model.
+            (UI 'CpuMoeLayers').Text='0'; (UI 'CpuMoeAll').IsChecked=$false; (UI 'TensorOverride').Text=''; (UI 'NoMmap').IsChecked=$false
+            (UI 'ModelLayerCount').Text = if ($preset.ModelLayers -gt 0) { [string]$preset.ModelLayers } else { '0' }
+            (UI 'MoeLayerCount').Text = if ($preset.MoeLayers -gt 0) { [string]$preset.MoeLayers } else { '0' }
+            (UI 'MoeExpertWeightPercent').Text = if ($preset.ExpertPercent -gt 0) { [string]$preset.ExpertPercent } else { '0' }
+        } else {
+            $value = 0
+            if ($preset.ModelLayers -gt 0 -and [int]::TryParse((UI 'ModelLayerCount').Text,[ref]$value) -and $value -eq 0) { (UI 'ModelLayerCount').Text = [string]$preset.ModelLayers }
+            $value = 0
+            if ($preset.MoeLayers -gt 0 -and [int]::TryParse((UI 'MoeLayerCount').Text,[ref]$value) -and $value -eq 0) { (UI 'MoeLayerCount').Text = [string]$preset.MoeLayers }
+            $percent = 0.0
+            if ($preset.ExpertPercent -gt 0 -and [double]::TryParse((UI 'MoeExpertWeightPercent').Text.Replace(',','.'),[Globalization.NumberStyles]::Float,[Globalization.CultureInfo]::InvariantCulture,[ref]$percent) -and $percent -eq 0.0) { (UI 'MoeExpertWeightPercent').Text = [string]$preset.ExpertPercent }
+        }
         if ($ForcePreset -and $null -ne $preset.CacheReuseDefault -and (UI 'CacheReuse').Text -eq '256') { (UI 'CacheReuse').Text=[string]$preset.CacheReuseDefault }
     }
     (UI 'MoeHint').Text = [string]$preset.Label
@@ -631,6 +638,12 @@ function Update-ResourceEstimate {
         try { $runningMatch = [bool](Test-BeeRunningProfileMatch $p) } catch {}
         $actualHeadroomMiB = $null
         if ($runningMatch -and $status.VramUsedMiB) { $actualHeadroomMiB = [double]$status.VramTotalMiB - [double]$status.VramUsedMiB }
+        $ramAvailableMiB = if ($status.RamAvailableGiB) { [double]$status.RamAvailableGiB * 1024.0 } else { 0.0 }
+        # Before launch, projected CPU/offloaded weights need physical RAM in addition
+        # to the currently running Windows/apps. Keep 2 GiB reserve to avoid paging.
+        $ramRisk = (-not $runningMatch -and -not $fineOverride -and $ramSpillMiB -gt 0 -and $ramAvailableMiB -gt 0 -and ($ramSpillMiB + 2048.0) -gt $ramAvailableMiB)
+        $runningRamRisk = ($runningMatch -and $ramAvailableMiB -gt 0 -and $ramAvailableMiB -lt 2048.0)
+        $ramPressureNote = if ($ramRisk) { "RAM risk: ожидаемый CPU/RAM spill $('{0:N2}'-f($ramSpillMiB/1024.0)) GiB при доступных сейчас $('{0:N2}'-f($ramAvailableMiB/1024.0)) GiB. Освободите RAM, уменьшите offload или используйте меньший quant." } elseif ($runningRamRisk) { "RAM risk: после загрузки доступно меньше 2 GiB физической RAM; возможен pagefile и резкое падение скорости." } else { '' }
 
         (UI 'EstimateModelSize').Text = ('{0:N2} GiB' -f ($modelMiB/1024.0))
         (UI 'EstimateVram').Text = if ($fineOverride) { ('≤ {0:N2} GiB*' -f ($estimateMiB/1024.0)) } else { ('{0:N2} GiB' -f ($estimateMiB/1024.0)) }
@@ -676,6 +689,8 @@ function Update-ResourceEstimate {
             else { (UI 'ResourceRecommendation').Text="Рекомендация для запаса около 800 MiB: начните примерно с GPU layers = $recommendedLayers из $modelLayerCount. Около $('{0:N2}'-f($recommendedRamMiB/1024.0)) GiB весов перейдёт в RAM. Точное число слоёв подтвердите реальным запуском." }
         }
 
+        if ($ramPressureNote) { (UI 'ResourceRecommendation').Text = ((UI 'ResourceRecommendation').Text + ' ' + $ramPressureNote).Trim() }
+
         $card = UI 'ResourceRiskCard'
         if ($null -ne $actualHeadroomMiB) {
             if ($actualHeadroomMiB -ge 1200) { $card.Background='#213A2B';$card.BorderBrush='#3EA66B' }
@@ -688,7 +703,8 @@ function Update-ResourceEstimate {
         elseif ($headroomMiB -ge 500) { $card.Background='#394024';$card.BorderBrush='#A6A63E';$verdict="Допустимо, но близко к пределу: расчётный запас около $([math]::Round($headroomMiB)) MiB. Проверьте real peak VRAM." }
         elseif ($headroomMiB -ge 0) { $card.Background='#49351F';$card.BorderBrush='#D58A36';$verdict='Высокий риск: практический запас меньше 500 MiB. Возможен Shared GPU Memory spill или OOM.' }
         else { $card.Background='#4A2428';$card.BorderBrush='#D85862';$verdict="Не помещается по консервативной оценке: превышение VRAM примерно на $([math]::Round(-$headroomMiB)) MiB." }
-        (UI 'ResourceVerdict').Text = $verdict
+        if ($ramRisk -or $runningRamRisk) { $card.Background='#4A2428';$card.BorderBrush='#D85862';$verdict = $ramPressureNote + ' ' + $verdict }
+        (UI 'ResourceVerdict').Text = $verdict.Trim()
         $mmapNote = if ([bool]$p.noMmap) { '--no-mmap ON' } else { 'mmap default' }
         (UI 'ResourceDetails').Text = "Модель: $([IO.Path]::GetFileName($p.modelPath))`nРаскладка: $layerNote`nMoE: $moeNote`nMemory mapping: $mmapNote`nДля MoE/hybrid не принимайте расчёт за benchmark: окончательная проверка — реальный запуск, dedicated VRAM/RAM, prompt tok/s и decode tok/s."
     } catch {
