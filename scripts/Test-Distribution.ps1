@@ -1,7 +1,8 @@
-[CmdletBinding()]
-param([string]$Root = (Split-Path -Parent $PSScriptRoot))
+﻿[CmdletBinding()]
+param([string]$Root = '')
 
 $ErrorActionPreference = 'Stop'
+if([string]::IsNullOrWhiteSpace($Root)){$Root=Split-Path -Parent $PSScriptRoot}
 $failures = [Collections.Generic.List[string]]::new()
 
 # BEEFORGE-AI.cmd starts the desktop UI with Windows PowerShell 5.1. Unlike
@@ -10,7 +11,10 @@ $failures = [Collections.Generic.List[string]]::new()
 # window is shown, so losing its BOM makes the application exit at parse time.
 $windowsPowerShellUtf8Files = @(
     'scripts\BeeForgeRemote.Core.psm1',
-    'scripts\Start-OpenCode.ps1'
+    'scripts\Start-OpenCode.ps1',
+    'scripts\Test-BeeGameQaPolicy.ps1',
+    'scripts\Test-BeeTeamCoordinationPolicy.ps1',
+    'scripts\Test-Distribution.ps1'
 )
 foreach ($relativePath in $windowsPowerShellUtf8Files) {
     $bytes = [IO.File]::ReadAllBytes((Join-Path $Root $relativePath))
@@ -37,12 +41,15 @@ $portableFiles = @(
     (Join-Path $Root 'config\templates\remote-access.example.json'),
     (Join-Path $Root 'opencode\opencode.template.json'),
     (Join-Path $Root 'opencode\plugin\beeforge-telegram.js.template')
+    (Join-Path $Root 'opencode\plugin\beeforge-team-guard.js.template')
+    (Join-Path $Root 'tools\team-guard\v1.0.0\plugin.mjs')
+    (Join-Path $Root 'tools\team-guard\v1.0.0\self-test.mjs')
 )
 $personalMarkers = @('C:\Users\snkashkin','C:\release_web','telegram-token.dpapi')
 foreach ($file in $portableFiles) {
     $text = Get-Content -LiteralPath $file -Raw
     foreach ($marker in $personalMarkers) {
-        if ($text.Contains($marker, [StringComparison]::OrdinalIgnoreCase)) { $failures.Add("Персональная строка '$marker' обнаружена в $file") }
+        if ($text.IndexOf($marker, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $failures.Add("Персональная строка '$marker' обнаружена в $file") }
     }
 }
 

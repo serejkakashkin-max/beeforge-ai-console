@@ -1,0 +1,8 @@
+[
+  {"id":"code-fix","prompt":"В текущем проекте исправь баг: кнопка сохранения отправляет форму дважды. Добавь проверку.","agent":"software-engineer"},
+  {"id":"new-project","prompt":"В новом проекте нет Serena memory. Добавь сортировку списка по дате. Проанализируй нужный код и внеси правки.","agent":"software-engineer"},
+  {"id":"analysis-only","prompt":"Только проанализируй архитектуру текущего проекта и дай заключение. Ничего не меняй.","agent":"solution-architect"},
+  {"id":"game","prompt":"Исправь баланс и столкновения в canvas-игре. Играть и оценивать сложность буду сам.","agent":"software-engineer"},
+  {"id":"windows-network","prompt":"Проверь, почему Windows не открывает сайт по имени, хотя запрос на IP с правильным Host работает. Нужна диагностика моего ПК.","agent":"systems-engineer"},
+  {"id":"docker","prompt":"Проверь состояние моего Docker Compose стека и причину unhealthy. Пока только диагностика, ничего не перезапускай.","agent":"platform-engineer"}
+]

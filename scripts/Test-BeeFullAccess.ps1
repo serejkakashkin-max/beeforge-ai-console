@@ -55,6 +55,17 @@ try {
     [void](& $module { param($candidate) Write-BeeTeamConfig $candidate 'save-agent' } $afterSave)
     $afterAssignmentSave=[IO.File]::ReadAllText($openCodePath,[Text.UTF8Encoding]::new($false))|ConvertFrom-Json
     if($afterAssignmentSave.agent.alpha.permission.skill.PSObject.Properties['diagnosing-bugs']-or[string]$afterAssignmentSave.agent.alpha.permission.skill.'find-docs'-ne'allow'-or$afterAssignmentSave.agent.alpha.permission.PSObject.Properties['serena*']-or[string]$afterAssignmentSave.agent.alpha.permission.'github*'-ne'allow'){throw 'Skill/MCP assignment changes were not retained during full access'}
+    # Simulate a policy script that writes an assignment directly while Full
+    # Access is active. Re-enabling must reconcile the baseline snapshot before
+    # repairing the unrestricted overlay, otherwise disabling loses the change.
+    $direct=[IO.File]::ReadAllText($openCodePath,[Text.UTF8Encoding]::new($false))|ConvertFrom-Json
+    $direct.agent.alpha.permission.skill|Add-Member -NotePropertyName 'opencode-safe-operations' -NotePropertyValue 'allow'
+    $direct.agent.alpha.permission|Add-Member -NotePropertyName 'serena_remove_project' -NotePropertyValue 'deny'
+    [IO.File]::WriteAllText($openCodePath,($direct|ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
+    $directStatus=Get-BeeFullAccessStatus
+    if(-not$directStatus.Inconsistent){throw 'Direct policy drift did not become visible'}
+    $directRepair=Set-BeeFullAccess -Enabled $true -Source 'self-test-repair-direct-policy'
+    if(-not$directRepair.Enabled-or$directRepair.Inconsistent){throw 'Direct policy drift was not repaired'}
     $tampered=[IO.File]::ReadAllText($openCodePath,[Text.UTF8Encoding]::new($false))|ConvertFrom-Json
     $tampered.agent.alpha.permission.task|Add-Member -NotePropertyName 'explore' -NotePropertyValue 'allow'
     [IO.File]::WriteAllText($openCodePath,($tampered|ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
@@ -71,6 +82,7 @@ try {
     if([string]$after.agent.'team-lead'.permission.'*'-ne'deny'-or[string]$after.agent.'team-lead'.permission.task.alpha-ne'allow'){throw 'Disabling full access restored obsolete project access to Team Lead'}
     if([string]$after.permission.bash-ne'ask'-or[string]$after.permission.task-ne'deny'-or[string]$after.agent.alpha.permission.edit-ne'ask'-or[string]$after.agent.alpha.permission.task.beta-ne'allow'){throw 'Original permission values or routing were not restored'}
     if($after.agent.alpha.permission.skill.PSObject.Properties['diagnosing-bugs']-or[string]$after.agent.alpha.permission.skill.'find-docs'-ne'allow'-or$after.agent.alpha.permission.PSObject.Properties['serena*']-or[string]$after.agent.alpha.permission.'github*'-ne'allow'){throw 'Updated skill/MCP assignments were not restored after disabling full access'}
+    if([string]$after.agent.alpha.permission.skill.'opencode-safe-operations'-ne'allow'){throw 'Direct skill assignment was lost when Full Access was disabled'}
 
     [pscustomobject]@{passed=$true;enabledAgents=$enabled.AgentCount;nonPermissionChangePreserved=$true;permissionsRestored=$true}|ConvertTo-Json -Compress
 } finally {

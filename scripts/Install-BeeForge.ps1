@@ -8,6 +8,7 @@ param(
     [string]$TelegramUserId = '',
     [string]$TelegramChatId = '',
     [string]$OpenCodeRoot = '',
+    [string]$SkillRoot = '',
     [string]$RemoteBaseUrl = '',
     [string]$RemoteModelAlias = '',
     [int]$RemoteContext = 162000,
@@ -204,9 +205,13 @@ if ($ConfigureOpenCode) {
     }
     Write-JsonUtf8 $openCodePath $openCodeConfig
     Copy-Item -LiteralPath (Join-Path $script:Root 'opencode\AGENTS.md') -Destination (Join-Path $script:OpenCodeRoot 'AGENTS.md') -Force
-    $skillTarget = Join-Path $env:USERPROFILE '.agents\skills'
+    $skillTarget = if($SkillRoot){[IO.Path]::GetFullPath($SkillRoot)}else{Join-Path $env:USERPROFILE '.agents\skills'}
     New-Item -ItemType Directory -Path $skillTarget -Force | Out-Null
-    Get-ChildItem -LiteralPath (Join-Path $script:Root 'opencode\skills') -Directory | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $skillTarget $_.Name) -Recurse -Force }
+    & (Join-Path $script:Root 'scripts\Sync-BeeSkills.ps1') -TargetRoot $skillTarget
+    $teamGuardSource = Join-Path $script:Root 'tools\team-guard\v1.0.0\plugin.mjs'
+    $teamGuardUri = ([uri]$teamGuardSource).AbsoluteUri
+    $teamGuardText = (Get-Content -LiteralPath (Join-Path $script:Root 'opencode\plugin\beeforge-team-guard.js.template') -Raw).Replace('__BEEFORGE_TEAM_GUARD_URI__', $teamGuardUri)
+    [IO.File]::WriteAllText((Join-Path $script:OpenCodeRoot 'plugin\beeforge-team-guard.js'), $teamGuardText, [Text.UTF8Encoding]::new($false))
     if($Mode-eq'LocalHost'){
         $pluginSource = Join-Path $script:Root 'tools\telegram-bridge\v1.0.0\plugin.mjs'
         $pluginUri = ([uri]$pluginSource).AbsoluteUri

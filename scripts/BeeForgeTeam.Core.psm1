@@ -133,7 +133,10 @@ function Get-BeeMcpCatalog($Config) {
         $command=@(Get-BeeObjectProperty $m 'command' @());$command0=$(if($command.Count){[string]$command[0]}else{''})
         $resolved=Resolve-BeeExecutable $command0
         $enabled=[bool](Get-BeeObjectProperty $m 'enabled' $true);$type=[string](Get-BeeObjectProperty $m 'type' '')
-        $status=if(-not$enabled){'DISABLED'}elseif($type-ne'local'){'CONFIG ERROR'}elseif(-not$resolved){'MISSING'}else{'READY'}
+        # An existing executable proves only that the MCP is configured. READY
+        # requires a successful protocol handshake and is reported separately by
+        # the explicit "Проверить MCP" action.
+        $status=if(-not$enabled){'DISABLED'}elseif($type-ne'local'){'CONFIG ERROR'}elseif(-not$resolved){'MISSING'}else{'CONFIGURED'}
         $environment=Get-BeeObjectProperty $m 'environment' $null;$environmentNames=if($environment){@($environment.PSObject.Properties.Name)}else{@()}
         $description=$(if($descriptions.ContainsKey($id)){$descriptions[$id]}else{'Локальный MCP-сервер OpenCode.'})
         $items.Add([pscustomobject]@{Id=$id;Description=$description;Type=$type;Enabled=$enabled;Command=$command0;Executable=$resolved;PathExists=[bool]$resolved;EnvironmentNames=($environmentNames-join ', ');Status=$status})
@@ -462,10 +465,36 @@ function Set-BeeFullAccess([bool]$Enabled,[string]$Source='BeeForge AI Console')
         if($Enabled){
             $current=Get-BeeFullAccessStatus
             $existingVersion=[int](Get-BeeObjectProperty $existingState 'version' 0)
-            if($current.Enabled-and$existingVersion-ge6){return $current}
             if($existingState-and[bool](Get-BeeObjectProperty $existingState 'enabled' $false)-and$existingState.PSObject.Properties['agents']){
                 $state=$existingState
                 $agentSnapshotCount=@($state.agents).Count
+                # Policy scripts and the UI may change explicit skill/MCP
+                # assignments while the unrestricted overlay is active. Merge
+                # those assignment changes into the ordinary baseline before an
+                # early return or repair, so disabling Full Access will not lose
+                # them.
+                $known=@{};foreach($snapshot in @($state.agents)){$known[[string]$snapshot.id]=$snapshot}
+                $mcpIds=@($(if($config.mcp){$config.mcp.PSObject.Properties.Name}else{@()}))
+                foreach($agentProperty in @($config.agent.PSObject.Properties)){
+                    $id=[string]$agentProperty.Name
+                    if(-not$known.ContainsKey($id)){
+                        $permission=Get-BeeObjectProperty $agentProperty.Value 'permission' $null
+                        $snapshot=[pscustomobject]@{id=$id;permissionExisted=[bool]$permission;permission=(Copy-BeeJsonValue $permission)}
+                        Set-BeeObjectProperty $state 'agents' (@($state.agents)+@($snapshot));$known[$id]=$snapshot;$agentSnapshotCount++
+                    }
+                    $snapshot=$known[$id]
+                    $baselinePermission=Get-BeeObjectProperty $snapshot 'permission' $null
+                    $baselineTask=Get-BeeObjectProperty $baselinePermission 'task' $null
+                    $updated=Merge-BeePermissionAssignments $baselinePermission (Get-BeeObjectProperty $agentProperty.Value 'permission' $null) $mcpIds
+                    # Routing is a control-plane boundary, not an assignment.
+                    # Never learn task expansion from a drifted live overlay.
+                    if($null-ne$baselineTask){Set-BeeObjectProperty $updated 'task' (Copy-BeeJsonValue $baselineTask)}else{Remove-BeeObjectProperty $updated 'task'}
+                    if($id-eq'team-lead'){$updated=New-BeeTeamLeadCoordinationPermission $updated}
+                    Set-BeeObjectProperty $snapshot 'permission' $updated
+                    if($updated-and@($updated.PSObject.Properties).Count){Set-BeeObjectProperty $snapshot 'permissionExisted' $true}
+                }
+                Write-BeeFullAccessState $state
+                if($current.Enabled-and$existingVersion-ge6){return Get-BeeFullAccessStatus}
             }else{
                 $globalExisted=[bool]$config.PSObject.Properties['permission']
                 $agentSnapshots=New-Object System.Collections.Generic.List[object]

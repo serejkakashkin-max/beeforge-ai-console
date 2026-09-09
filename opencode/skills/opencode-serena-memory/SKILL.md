@@ -33,9 +33,12 @@ Every required memory that is created or materially updated must contain this ma
 - Scope: concise description of what was actually checked
 - Evidence: `relative/path`, `symbol`, or verified command
 - Unknown: known gaps, or `none`
+- Evidence SHA256: relative/path/to/relevant-file | SHA256-of-that-file
 ```
 
 Treat memory as a cache, not as the source of truth. If current source, configuration, or verified runtime behavior conflicts with memory, the current evidence wins: correct the memory and mention the reconciliation in HANDOFF. Keep branch-specific and temporary facts out unless the memory clearly labels their scope.
+
+For each materially updated memory record SHA256 fingerprints of 1–20 directly relevant small files (at most 2 MiB each). Use Get-FileHash or an equivalent hash tool; never invent a digest. The UI only labels evidence VERIFIED while these files still match. A mismatch or legacy memory without fingerprints requires focused review, not a full project rescan or mandatory onboarding. Do not add fingerprints for unrelated files or secret files. Command-only evidence can remain NEEDS_REVIEW; it does not block the task. Matching fingerprints verify evidence freshness, not the truth of every statement.
 
 Role boundaries prevent unnecessary delegations while limiting memory pollution:
 

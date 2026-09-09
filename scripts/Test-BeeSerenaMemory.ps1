@@ -37,12 +37,20 @@ Set-Content -LiteralPath (Join-Path $dir 'project.yml') -Value "project_name: te
     if((Get-BeeSerenaMemoryStatus $project).Status-ne'READY'){throw 'Required memory readiness failed'}
     $status=Get-BeeSerenaMemoryStatus $project
     if(-not$status.Managed-or$status.ReadOnly-ne$false-or$status.Status-ne'READY'-or$status.Quality-ne'NEEDS_REVIEW'){throw 'Unified persistent mode failed'}
+    $evidence=Join-Path $project 'source.txt'
+    Set-Content -LiteralPath $evidence -Value 'verified source' -Encoding UTF8
+    $digest=(Get-FileHash -LiteralPath $evidence -Algorithm SHA256).Hash
     foreach($name in @('core','tech_stack','suggested_commands','conventions','task_completion')){
         $verified="# $name`n`n## Verification`n- Last verified: 2026-09-01`n- Scope: focused test`n- Evidence: scripts/Test-BeeSerenaMemory.ps1`n- Unknown: none"
+        $verified+="`n- Evidence SHA256: source.txt | $digest"
         Set-Content -LiteralPath (Join-Path $enabled.MemoryDirectory "$name.md") -Value $verified -Encoding UTF8
     }
     $verifiedStatus=Get-BeeSerenaMemoryStatus $project
     if($verifiedStatus.Quality-ne'VERIFIED'-or$verifiedStatus.Verified.Count-ne5-or$verifiedStatus.NeedsReview.Count-ne0){throw 'Memory verification metadata failed'}
+    Set-Content -LiteralPath $evidence -Value 'changed source' -Encoding UTF8
+    if((Get-BeeSerenaMemoryStatus $project).Quality-ne'NEEDS_REVIEW'){throw 'Changed evidence remained VERIFIED'}
+    Remove-Item -LiteralPath $evidence
+    if((Get-BeeSerenaMemoryStatus $project).Quality-ne'NEEDS_REVIEW'){throw 'Deleted evidence remained VERIFIED'}
     'SERENA_MEMORY_TEST_OK'
 } finally {
     Remove-Item Env:BEEFORGE_SERENA_MEMORY_POLICY_PATH,Env:BEEFORGE_SERENA_CONFIG_PATH,Env:BEEFORGE_TELEGRAM_CONFIG_PATH,Env:BEEFORGE_OPENCODE_GLOBAL_DATA,Env:BEEFORGE_SERENA_EXE,Env:BEEFORGE_SERENA_ENSURE_SCRIPT -ErrorAction SilentlyContinue

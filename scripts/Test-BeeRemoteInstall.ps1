@@ -7,7 +7,7 @@ try{
     New-Item -ItemType Directory -Path $copy -Force|Out-Null
     foreach($name in @('scripts','config','opencode','tools','assets')){Copy-Item -LiteralPath (Join-Path $Root $name) -Destination (Join-Path $copy $name) -Recurse -Force}
     Copy-Item -LiteralPath (Join-Path $Root 'BEEFORGE-AI.cmd') -Destination $copy
-    & (Join-Path $copy 'scripts\Install-BeeForge.ps1') -Mode RemoteClient -RemoteBaseUrl 'https://desktop.example.ts.net' -RemoteModelAlias Q2 -RemoteContext 162000 -RemoteOutput 65528 -RemoteVision -ProjectRoot $projects -OpenCodeRoot $openCode -ConfigureOpenCode -SkipDependencies -Force
+    & (Join-Path $copy 'scripts\Install-BeeForge.ps1') -Mode RemoteClient -RemoteBaseUrl 'https://desktop.example.ts.net' -RemoteModelAlias Q2 -RemoteContext 162000 -RemoteOutput 65528 -RemoteVision -ProjectRoot $projects -OpenCodeRoot $openCode -SkillRoot (Join-Path $temp 'skills') -ConfigureOpenCode -SkipDependencies -Force
     if($LASTEXITCODE-ne0){throw "Remote installer exited with $LASTEXITCODE"}
     $profiles=Get-Content -LiteralPath (Join-Path $copy 'config\profiles.json') -Raw|ConvertFrom-Json
     $profile=$profiles.profiles|Select-Object -First 1
@@ -17,5 +17,6 @@ try{
     $config=Get-Content -LiteralPath (Join-Path $openCode 'opencode.json') -Raw|ConvertFrom-Json
     if($config.provider.beellama.options.baseURL-ne'https://desktop.example.ts.net/v1'){throw 'Remote provider endpoint is invalid'}
     if(Test-Path -LiteralPath (Join-Path $openCode 'plugin\beeforge-telegram.js')){throw 'Telegram plugin must not be installed on RemoteClient'}
+    if(-not(Test-Path -LiteralPath (Join-Path $openCode 'plugin\beeforge-team-guard.js'))){throw 'Team guard must be installed on RemoteClient'}
     Write-Host 'Remote installer checks: PASS' -ForegroundColor Green
 }finally{if(Test-Path -LiteralPath $temp){Remove-Item -LiteralPath $temp -Recurse -Force}}

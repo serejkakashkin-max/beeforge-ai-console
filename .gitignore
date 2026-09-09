@@ -17,6 +17,7 @@ runtime/
 logs/
 backups/
 benchmarks/*.json
+!benchmarks/team-routing-cases.json
 benchmarks/*.log
 *.gguf
 *.safetensors

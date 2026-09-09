@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $config = [IO.File]::ReadAllText((Join-Path $root 'opencode\opencode.template.json'), [Text.UTF8Encoding]::new($false)) | ConvertFrom-Json
 $lead = [string]$config.agent.'team-lead'.prompt

@@ -1,0 +1,1 @@
+export { BeeForgeTeamGuard } from "__BEEFORGE_TEAM_GUARD_URI__";

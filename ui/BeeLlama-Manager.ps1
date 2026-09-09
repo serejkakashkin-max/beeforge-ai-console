@@ -764,7 +764,8 @@ function Load-TeamAgent($Agent) {
     (UI 'AgentDelegatable').IsChecked=[bool]$Agent.DelegateAllowed
     (UI 'AgentDelegatable').IsEnabled=($Agent.Id-notin@('team-lead','build'))
     (UI 'AgentPrompt').Text=[string]$Agent.Prompt
-    (UI 'AgentPermissions').Text=$(if($Agent.Permissions){"Эффективные правила:`n$($Agent.Permissions)"}else{'Нет собственных правил; действуют глобальные разрешения OpenCode.'})
+    $accessNote=if($Agent.Permissions-match'(?m)^\*: allow\s*$'){'Полный доступ: назначенные галочками skills/MCP показывают роль; доступ может быть шире назначений.'}else{'Галочки показывают назначения роли. Фактический доступ определяется глобальными и собственными правилами OpenCode.'}
+    (UI 'AgentPermissions').Text="$accessNote`n`nСобственные правила:`n$($Agent.Permissions)"
     (UI 'AgentDelegates').Text=$(if(@($Agent.Delegates).Count){"Может делегировать:`n$(@($Agent.Delegates)-join [Environment]::NewLine)"}else{'Делегирование другим агентам не настроено.'})
     (UI 'DeleteAgent').IsEnabled=[bool]$Agent.CanDelete
     $script:teamSkills.Clear()

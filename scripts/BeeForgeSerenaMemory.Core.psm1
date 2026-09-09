@@ -105,14 +105,34 @@ function Get-BeeSerenaMemoryStatus([string]$ProjectPath) {
     $memoryDir=Join-Path $full '.serena\memories'
     $existing=@();if(Test-Path -LiteralPath $memoryDir){$existing=@(Get-ChildItem -LiteralPath $memoryDir -File -Filter '*.md'|ForEach-Object{$_.BaseName})}
     $required=@($script:RequiredMemories);$present=@($required|Where-Object{$_ -in $existing});$missing=@($required|Where-Object{$_ -notin $existing})
-    $verified=@();$needsReview=@()
+    $verified=@();$needsReview=@();$digestCache=@{}
     foreach($name in $present){
         $memoryFile=Join-Path $memoryDir "$name.md"
         $content=[IO.File]::ReadAllText($memoryFile,[Text.UTF8Encoding]::new($false))
         $hasDate=$content-match'(?im)^\s*-\s*Last verified:\s*\d{4}-\d{2}-\d{2}\s*$'
         $hasScope=$content-match'(?im)^\s*-\s*Scope:\s*\S.+'
         $hasEvidence=$content-match'(?im)^\s*-\s*Evidence:\s*\S.+'
-        if($hasDate-and$hasScope-and$hasEvidence){$verified+=$name}else{$needsReview+=$name}
+        $hasUnknown=$content-match'(?im)^\s*-\s*Unknown:\s*\S.+'
+        $fingerprints=[regex]::Matches($content,'(?im)^\s*-\s*Evidence SHA256:\s*([^|\r\n]+)\s*\|\s*([a-f0-9]{64})\s*$')
+        $fresh=$fingerprints.Count-gt0-and$fingerprints.Count-le20
+        foreach($fp in $fingerprints){
+            $relative=$fp.Groups[1].Value.Trim().Trim('`')
+            try{
+                if([IO.Path]::IsPathRooted($relative)){throw 'Absolute evidence path'}
+                $target=[IO.Path]::GetFullPath((Join-Path $full $relative))
+                if(-not$target.StartsWith($full.TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'Evidence outside project'}
+                $item=Get-Item -LiteralPath $target -ErrorAction Stop
+                if($item.PSIsContainer-or$item.Length-gt2MB){throw 'Evidence must be a small file'}
+                $ancestor=$item
+                while($ancestor-and$ancestor.FullName-ne$full){
+                    if($ancestor.Attributes-band[IO.FileAttributes]::ReparsePoint){throw 'Linked evidence path'}
+                    $ancestor=if($ancestor.PSIsContainer){$ancestor.Parent}else{$ancestor.Directory}
+                }
+                if(-not$digestCache.ContainsKey($target)){$digestCache[$target]=(Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash}
+                if($digestCache[$target]-ne$fp.Groups[2].Value){$fresh=$false}
+            }catch{$fresh=$false}
+        }
+        if($hasDate-and$hasScope-and$hasEvidence-and$hasUnknown-and$fresh){$verified+=$name}else{$needsReview+=$name}
     }
     $config=Join-Path $full '.serena\project.yml';$readOnly=$null
     if(Test-Path -LiteralPath $config){$match=Select-String -LiteralPath $config -Pattern '^read_only:\s*(true|false)'|Select-Object -First 1;if($match){$readOnly=$match.Matches[0].Groups[1].Value-eq'true'}}
