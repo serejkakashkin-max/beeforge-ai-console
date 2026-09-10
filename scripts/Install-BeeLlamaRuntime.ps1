@@ -138,9 +138,9 @@ function Test-InstalledRuntime([string]$Path) {
     $directory = Split-Path -Parent $Path
     if (-not (Test-Path -LiteralPath (Join-Path $directory 'ggml-cuda.dll') -PathType Leaf)) { return $false }
     try {
-        # Do not invoke the native executable through PowerShell's 2>&1 redirection here.
-        # Windows PowerShell 5.1 can promote native stderr into NativeCommandError when
-        # $ErrorActionPreference='Stop', even when llama-server exits successfully.
+        # Avoid PowerShell native stderr redirection here. Windows PowerShell 5.1 can
+        # promote native stderr into NativeCommandError when ErrorActionPreference is
+        # Stop even if llama-server itself exits successfully with code 0.
         $probe = Invoke-NativeVersionProbe $Path
         if ($probe.ExitCode -ne 0) { return $false }
         if ([string]::IsNullOrWhiteSpace([string]$probe.Output)) { return $false }
@@ -176,7 +176,7 @@ if (-not (Test-InstalledRuntime $serverPath)) {
 
     try {
         Save-VerifiedAsset $binaryAsset $binArchive
-        Save-VerifiedAsset $cudaAsset $cudaArchive
+        Save-VerifiedAsset $cudartAsset $cudaArchive
 
         Write-Step 'Extracting BeeLlama runtime'
         Expand-Archive -LiteralPath $binArchive -DestinationPath $binStage -Force
