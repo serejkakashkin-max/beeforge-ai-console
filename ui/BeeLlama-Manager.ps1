@@ -437,7 +437,7 @@ function Update-MoEHint([switch]$ApplyDefaults,[switch]$ForcePreset) {
     Update-GpuLayerChoices
 }
 
-foreach ($name in @('KvK','KvV')) { (UI $name).ItemsSource = @('f16','bf16','q8_0','q4_0','iq4_nl','kvarn4','kvarn3') }
+foreach ($name in @('KvK','KvV')) { (UI $name).ItemsSource = @('f16','bf16','q8_0','q4_0','iq4_nl','kvarn8','kvarn6','kvarn5','kvarn4','kvarn3','kvarn2') }
 (UI 'KvTailType').ItemsSource = @('f16','bf16','q8_0','q4_0')
 (UI 'MtpNMax').ItemsSource = @(2,3,4)
 Update-GpuLayerChoices
@@ -580,7 +580,12 @@ function Update-Preview {
 function Get-KvMemoryFactor([string]$Type) {
     switch ($Type.ToLowerInvariant()) {
         'f16' { return 4.0 }; 'bf16' { return 4.0 }; 'q8_0' { return 2.0 }
+        'kvarn8' { return 1.8611 }
+        'kvarn6' { return 1.4167 }
+        'kvarn5' { return 1.1944 }
+        'kvarn4' { return 0.9722 }
         'kvarn3' { return 0.75 }
+        'kvarn2' { return 0.5278 }
         default { return 1.0 }
     }
 }
