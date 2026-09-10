@@ -1,4 +1,4 @@
-﻿Set-StrictMode -Version 2.0
+Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 Import-Module (Join-Path $root 'scripts\BeeLlamaManager.Core.psm1') -Force
@@ -25,6 +25,19 @@ if ($installer -notmatch [regex]::Escape('"runtime\beellama-{0}-cuda{1}" -f $nor
 }
 if ($installer -match [regex]::Escape('"runtime\beellama-{0}-cuda{1}" -f $versionNumber,$CudaVersion')) {
     throw 'Runtime installer must not drop the v prefix from the target directory'
+}
+
+# Native stderr must not be validated through PowerShell 5.1 redirection while
+# ErrorActionPreference is Stop. BeeLlama can emit valid version diagnostics on
+# stderr and still exit 0, which PowerShell 5.1 may surface as NativeCommandError.
+foreach ($needle in @('System.Diagnostics.ProcessStartInfo','RedirectStandardOutput','RedirectStandardError','Invoke-NativeVersionProbe')) {
+    if ($installer -notmatch [regex]::Escape($needle)) { throw "Runtime validator is missing PowerShell 5.1-safe token: $needle" }
+}
+if ($installer -match [regex]::Escape('& $Path --version 2>&1')) {
+    throw 'Runtime validator must not use PowerShell native stderr redirection for llama-server --version'
+}
+if ($installer -notmatch [regex]::Escape('Save-VerifiedAsset $cudartAsset $cudaArchive')) {
+    throw 'Runtime installer must download the verified cudart asset into the CUDA archive path'
 }
 
 $fullInstallerPath = Join-Path $root 'scripts\Install-BeeForge.ps1'
