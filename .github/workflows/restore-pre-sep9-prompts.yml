@@ -17,7 +17,7 @@ jobs:
           ref: restore-pre-sep9-prompts-safe
           fetch-depth: 0
 
-      - name: Restore canonical prompts only
+      - name: Restore and verify canonical prompts only
         shell: bash
         run: |
           python - <<'PY'
@@ -27,10 +27,10 @@ jobs:
           BASE = 'f581b4c4f73a71d195f2555468701b8d3acb03d7'
           path = Path('opencode/opencode.template.json')
           before = json.loads(path.read_text(encoding='utf-8-sig'))
-          old_raw = subprocess.check_output(['git','show',f'{BASE}:opencode/opencode.template.json'])
-          old = json.loads(old_raw.decode('utf-8-sig'))
+          old = json.loads(subprocess.check_output(['git','show',f'{BASE}:opencode/opencode.template.json']).decode('utf-8-sig'))
           after = copy.deepcopy(before)
 
+          expected = ['software-engineer','team-lead','systems-engineer','qa-engineer','devops-engineer','solution-architect','platform-engineer','security-engineer']
           restored = []
           for agent_id, old_agent in old.get('agent', {}).items():
               if 'prompt' not in old_agent:
@@ -40,38 +40,29 @@ jobs:
               after['agent'][agent_id]['prompt'] = old_agent['prompt']
               restored.append(agent_id)
 
-          expected = ['software-engineer','team-lead','systems-engineer','qa-engineer','devops-engineer','solution-architect','platform-engineer','security-engineer']
           if restored != expected:
               raise SystemExit(f'Unexpected restored prompt set: {restored!r}')
 
-          # Verify that no non-prompt semantic setting is changed.
           def strip_prompts(obj):
               obj = copy.deepcopy(obj)
               for agent in obj.get('agent', {}).values():
                   agent.pop('prompt', None)
               return obj
+
           if strip_prompts(before) != strip_prompts(after):
               raise SystemExit('Non-prompt configuration changed unexpectedly')
-          for agent_id in restored:
+          for agent_id in expected:
               if after['agent'][agent_id]['prompt'] != old['agent'][agent_id]['prompt']:
                   raise SystemExit(f'Prompt mismatch after restore: {agent_id}')
 
           path.write_text(json.dumps(after, ensure_ascii=False, indent=2) + '\n', encoding='utf-8-sig')
-          print('Restored prompts:', ', '.join(restored))
+          # Parse written file again and verify exact prompt equality after serialization.
+          written = json.loads(path.read_text(encoding='utf-8-sig'))
+          for agent_id in expected:
+              if written['agent'][agent_id]['prompt'] != old['agent'][agent_id]['prompt']:
+                  raise SystemExit(f'Written prompt mismatch: {agent_id}')
+          print('All 8 prompts restored exactly:', ', '.join(expected))
           PY
-
-      - name: Validate JSON and prompt restore
-        shell: pwsh
-        run: |
-          Get-Content -Raw ./opencode/opencode.template.json | ConvertFrom-Json | Out-Null
-          $current = Get-Content -Raw ./opencode/opencode.template.json | ConvertFrom-Json
-          $oldJson = git show f581b4c4f73a71d195f2555468701b8d3acb03d7:opencode/opencode.template.json
-          $old = ($oldJson -join "`n") | ConvertFrom-Json
-          $ids = @('software-engineer','team-lead','systems-engineer','qa-engineer','devops-engineer','solution-architect','platform-engineer','security-engineer')
-          foreach ($id in $ids) {
-            if ([string]$current.agent.$id.prompt -ne [string]$old.agent.$id.prompt) { throw "Prompt restore mismatch: $id" }
-          }
-          Write-Host 'All 8 canonical agent prompts exactly match the pre-Sep9 version.'
 
       - name: Commit restored prompts
         shell: bash
