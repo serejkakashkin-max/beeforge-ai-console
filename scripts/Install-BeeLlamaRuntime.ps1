@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [string]$Version = 'v0.4.6',
     [ValidateSet('13.3','12.4')]
@@ -106,15 +106,48 @@ function Update-ManagedProfiles([string]$NewServerPath) {
     return $changed
 }
 
+function Invoke-NativeVersionProbe([string]$Path) {
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $Path
+    $startInfo.Arguments = '--version'
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) {
+            return [pscustomobject]@{ ExitCode = -1; Output = 'Process.Start returned false.' }
+        }
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+        return [pscustomobject]@{
+            ExitCode = [int]$process.ExitCode
+            Output = (($stdout + [Environment]::NewLine + $stderr).Trim())
+        }
+    } finally {
+        $process.Dispose()
+    }
+}
+
 function Test-InstalledRuntime([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
     $directory = Split-Path -Parent $Path
     if (-not (Test-Path -LiteralPath (Join-Path $directory 'ggml-cuda.dll') -PathType Leaf)) { return $false }
     try {
-        $output = (& $Path --version 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0) { return $false }
-        return (-not [string]::IsNullOrWhiteSpace($output))
-    } catch { return $false }
+        # Avoid PowerShell native stderr redirection here. Windows PowerShell 5.1 can
+        # promote native stderr into NativeCommandError when ErrorActionPreference is
+        # Stop even if llama-server itself exits successfully with code 0.
+        $probe = Invoke-NativeVersionProbe $Path
+        if ($probe.ExitCode -ne 0) { return $false }
+        if ([string]::IsNullOrWhiteSpace([string]$probe.Output)) { return $false }
+        return ([string]$probe.Output -match '(?im)^version:\s+\S+')
+    } catch {
+        return $false
+    }
 }
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
