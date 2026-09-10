@@ -1,4 +1,4 @@
-import http from "node:http";
+﻿import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -797,34 +797,72 @@ async function send(text, replyMarkup) {
   return telegram("sendMessage", body);
 }
 
+async function deleteTelegramMessagesResilient(messageIds) {
+  const ids = [...new Set((messageIds || []).map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return { requested: 0, failed: 0 };
+  try {
+    await telegram("deleteMessages", { chat_id: config.allowedChatId, message_ids: ids });
+    return { requested: ids.length, failed: 0 };
+  } catch (error) {
+    const message = String(error.message || "");
+    if (!/Bad Request|can't be deleted|cannot be deleted/i.test(message)) throw error;
+    if (ids.length === 1) {
+      audit("chat_clear_message_skipped", { messageId: ids[0], error: message });
+      return { requested: 1, failed: 1 };
+    }
+    const middle = Math.ceil(ids.length / 2);
+    const left = await deleteTelegramMessagesResilient(ids.slice(0, middle));
+    const right = await deleteTelegramMessagesResilient(ids.slice(middle));
+    return { requested: left.requested + right.requested, failed: left.failed + right.failed };
+  }
+}
+
+async function normalizePinnedStatusAfterClear(messageId) {
+  if (!messageId) return;
+  try {
+    // Old bridge builds could leave several status cards pinned. Unpin the
+    // legacy set and pin only the card currently tracked in bridge-state.json.
+    await telegram("unpinAllChatMessages", { chat_id: config.allowedChatId });
+    await telegram("pinChatMessage", { chat_id: config.allowedChatId, message_id: messageId, disable_notification: true });
+  } catch (error) {
+    audit("pinned_status_normalize_failed", { messageId, error: error.message });
+  }
+}
+
 async function clearRecentTelegramChat(anchorMessageId) {
-  // Telegram has no bot API method that clears a chat wholesale. In a private
-  // chat, however, it permits deleting incoming and outgoing messages younger
-  // than 48 hours, in deleteMessages batches of at most 100 IDs.
+  // Telegram cannot clear a private chat wholesale. Keep the one BeeForge
+  // status card alive and delete the recent messages around it.
   const latest = Math.max(1, Number(anchorMessageId || 0));
-  // Scan a broad ID range, not just the latest 500 IDs. The previous fixed
-  // window repeated the same range on every click and could never reach older
-  // but still deletable messages. Telegram safely skips missing/expired IDs.
-  const ids = Array.from({ length: Math.min(5000, latest) }, (_unused, index) => latest - index);
-  let attempted = 0;
+  const protectedPinnedId = Number(pinnedMessageId || 0) || 0;
+  const ids = Array.from({ length: Math.min(5000, latest) }, (_unused, index) => latest - index)
+    .filter((messageId) => messageId !== protectedPinnedId);
+  let requested = 0;
+  let failed = 0;
   for (let index = 0; index < ids.length; index += 100) {
-    const messageIds = ids.slice(index, index + 100);
     try {
-      await telegram("deleteMessages", { chat_id: config.allowedChatId, message_ids: messageIds });
-      attempted += messageIds.length;
+      const result = await deleteTelegramMessagesResilient(ids.slice(index, index + 100));
+      requested += result.requested;
+      failed += result.failed;
+      // Lower message IDs are older in this private chat. A singleton that
+      // Telegram refuses at the age boundary means older batches are not useful.
+      if (result.failed > 0) break;
     } catch (error) {
-      audit("chat_clear_batch_failed", { start: messageIds.at(0), end: messageIds.at(-1), error: error.message });
+      audit("chat_clear_batch_failed", { start: ids[index], end: ids[Math.min(ids.length - 1, index + 99)], error: error.message });
+      break;
     }
   }
-  pinnedMessageId = null;
   pendingQuestions.clear();
   callbacks.clear();
   openRequests.clear();
   saveBridgeState();
-  audit("chat_cleared", { attempted, anchorMessageId: latest });
-  await send("🧹 Чат очищен. Нажмите /start, чтобы снова открыть меню.");
+  audit("chat_cleared", { requested, failed, anchorMessageId: latest, preservedPinnedMessageId: protectedPinnedId || "" });
+  if (config.pinnedStatus !== false && protectedPinnedId) {
+    await normalizePinnedStatusAfterClear(protectedPinnedId);
+    await updatePinnedStatus();
+    schedulePinnedStatus(250);
+  }
+  await send("🧹 Чат очищен. Закреплённый статус BeeForge сохранён и обновляется на месте.");
 }
-
 async function telegramUpload(method, field, filePath, mime, caption = "") {
   const data = fs.readFileSync(filePath);
   let lastError;
@@ -1484,7 +1522,11 @@ function schedulePinnedStatus(delayMs = 1500) {
 }
 
 async function updatePinnedStatus(forceCreate = false) {
-  if (config.pinnedStatus === false || pinnedUpdateInFlight) return;
+  if (config.pinnedStatus === false) return;
+  if (pinnedUpdateInFlight) {
+    schedulePinnedStatus(250);
+    return;
+  }
   pinnedUpdateInFlight = true;
   const text = buildStatusText();
   try {
@@ -1493,9 +1535,17 @@ async function updatePinnedStatus(forceCreate = false) {
         await telegram("editMessageText", { chat_id: config.allowedChatId, message_id: pinnedMessageId, text, disable_web_page_preview: true, reply_markup: mainMenuKeyboard() });
         return;
       } catch (error) {
-        if (/message is not modified/i.test(String(error.message))) return;
-        audit("pinned_status_edit_failed", { messageId: pinnedMessageId, error: error.message });
-        pinnedMessageId = null;
+        const message = String(error.message || "");
+      if (/message is not modified/i.test(message)) return;
+      audit("pinned_status_edit_failed", { messageId: pinnedMessageId, error: message });
+      // A transient edit failure must not manufacture a second pinned status.
+      // Replace the card only when Telegram says the tracked message is gone.
+      if (!/(message to edit not found|message_id_invalid|message can't be edited|message cannot be edited)/i.test(message)) {
+        schedulePinnedStatus(2000);
+        return;
+      }
+      pinnedMessageId = null;
+      saveBridgeState();
       }
     }
     const sent = await send(`📌 ${text}`, mainMenuKeyboard());
