@@ -1,0 +1,111 @@
+name: Apply no-WSL SSH policy fix
+
+on:
+  push:
+    branches:
+      - fix/disable-wsl-ssh
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/disable-wsl-ssh
+
+      - name: Patch agent policy
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8-sig')
+              if old not in text:
+                  raise SystemExit(f'marker not found in {path}: {old[:100]!r}')
+              text = text.replace(old, new, 1)
+              p.write_text(text, encoding='utf-8-sig')
+
+          agents = 'opencode/AGENTS.md'
+          replace_once(
+              agents,
+              '- Keep progress narration compact and return a structured handoff when another agent will continue. End every HANDOFF with exactly one memory result: `Memory: updated <names> — <reason>` or `Memory: unchanged — no new durable facts`.',
+              '- Keep progress narration compact and return a structured handoff when another agent will continue. End every HANDOFF with exactly one memory result: `Memory: updated <names> — <reason>` or `Memory: unchanged — no new durable facts`. BeeForge HANDOFF is virtual task metadata injected by the team guard (`BEEFORGE_PREVIOUS_HANDOFF_DATA`), not a project file: if that injected block is absent, there is no prior handoff. Never search for, create, or read `HANDOFF.md` merely because a prompt says to use HANDOFF; read a physical `HANDOFF.md` only when the user explicitly names that file as an input.'
+          )
+          replace_once(
+              agents,
+              '- For Windows, WSL, SSH, networking, clusters, proxies, and other external operations, Systems Engineer must define the first failing boundary before changing anything. It may make at most two corrected attempts for the same failure. After two failed attempts for the same symptom, or a confirmed missing authorization or user-only action, it must stop with `EXTERNAL_BLOCKER_CONFIRMED`, evidence, and one smallest next action. Do not layer a new proxy, port forward, service, package, or script over an unproven topology.',
+              '- For Windows, SSH, networking, clusters, proxies, and other external operations, Systems Engineer must define the first failing boundary before changing anything. WSL is forbidden for agent operations: never run `wsl.exe`, `wsl -d`, Linux `bash`/`sh` through WSL, or use WSL as a fallback for `sshpass`, ASKPASS, OpenSSH, curl, package managers, or scripting. Use native Windows PowerShell/cmd/Python. For SSH, use native `ssh.exe`/`scp.exe`/`sftp.exe` with keys; when password authentication is explicitly authorized by the user and the credential was already supplied by the user in the current task/project input, use native Windows Python + Paramiko without printing, copying to temp/env, or exposing the password. It may make at most two corrected attempts for the same failure. After two failed attempts for the same symptom, or a confirmed missing authorization or user-only action, it must stop with `EXTERNAL_BLOCKER_CONFIRMED`, evidence, and one smallest next action. Do not layer a new proxy, port forward, service, package, or script over an unproven topology.'
+          )
+
+          template = 'opencode/opencode.template.json'
+          replace_once(template, 'Windows/WSL/SSH направляй systems-engineer', 'Windows/SSH направляй systems-engineer')
+          replace_once(
+              template,
+              'Ты Systems Engineer для Windows, WSL и SSH. Выполняй только действия в заявленной области и в начале загрузи назначенный skill opencode-safe-operations. Сначала используй переданный HANDOFF и не перепроверяй неизменившиеся факты.',
+              'Ты Systems Engineer для Windows и SSH. WSL для агентных операций ЗАПРЕЩЁН: никогда не запускай wsl.exe, wsl -d, Linux bash/sh через WSL и не используй WSL как fallback для sshpass, ASKPASS, OpenSSH, curl, package manager или скриптов. Выполняй только действия в заявленной области и в начале загрузи назначенный skill opencode-safe-operations. HANDOFF означает только виртуальные данные BEEFORGE_PREVIOUS_HANDOFF_DATA, автоматически переданные team guard. Если такого блока нет, предыдущего HANDOFF нет: не ищи, не создавай и не читай HANDOFF.md, если пользователь явно не назвал этот файл. Сначала используй переданный виртуальный HANDOFF и не перепроверяй неизменившиеся факты.'
+          )
+          replace_once(
+              template,
+              'Для локального ПК используй PowerShell/shell и Windows UI MCP; не смешивай синтаксис PowerShell и Linux в одном конвейере. Для удалённых хостов используй ssh.exe, scp.exe или sftp.exe; предпочитай aliases из ~/.ssh/config и аутентификацию ключом.',
+              'Для локального ПК используй native Windows PowerShell/cmd/Python и Windows UI MCP; не запускай Linux shell через WSL. Для удалённых хостов используй только native Windows: ssh.exe, scp.exe или sftp.exe при ключевой аутентификации. Если пользователь явно разрешил password-auth и уже предоставил пароль в текущей задаче или проектном input-файле, используй native Windows Python + Paramiko напрямую. Никогда не передавай пароль через WSL, sshpass, ASKPASS, командную строку, environment variable или временный файл и не печатай его.'
+          )
+          replace_once(
+              template,
+              'Подключись к SSH-хосту и выполни только указанную задачу: $ARGUMENTS. Сначала проверь подключение через ssh с BatchMode=yes. Используй ключи или alias из ~/.ssh/config, не используй пароль и не отключай проверку ключа хоста. Перед опасными удалёнными действиями запроси подтверждение и в конце дай краткий отчёт.',
+              'Подключись к SSH-хосту и выполни только указанную задачу: $ARGUMENTS. Используй только native Windows, без WSL. Для key-auth сначала проверь подключение через ssh.exe с BatchMode=yes и используй ключи/alias из ~/.ssh/config. Если пользователь явно разрешил password-auth и пароль уже предоставлен им в текущей задаче или проектном input-файле, используй native Windows Python + Paramiko, не выводя пароль и не копируя его в CLI/env/temp. Не отключай проверку ключа хоста. Перед опасными удалёнными действиями запроси подтверждение и в конце дай краткий отчёт.'
+          )
+
+          skill = 'opencode/skills/opencode-safe-operations/SKILL.md'
+          replace_once(
+              skill,
+              'Inspect state first and report the exact target before changing it. Use native Windows UI or PowerShell for local operations. For SSH, use aliases or keys from `~/.ssh/config`, `BatchMode=yes`, and preserve host-key checking.\n\nAsk before deletion, overwrite, service stop/restart, network changes, credential changes, or sending data outside the PC. Never request, store, print, or disable protection for passwords, keys, tokens, or host verification.',
+              'Inspect state first and report the exact target before changing it. Use native Windows UI, PowerShell, cmd, or Windows Python for local operations. WSL is forbidden for agent operations: never invoke `wsl.exe`, `wsl -d`, Linux shells through WSL, `sshpass`, or WSL/ASKPASS fallbacks. For SSH key authentication, use native Windows `ssh.exe`/`scp.exe`/`sftp.exe`, aliases or keys from `~/.ssh/config`, `BatchMode=yes`, and preserve host-key checking. If the user explicitly authorizes password authentication and has already supplied the credential in the current task/project input, use native Windows Python + Paramiko without exposing it in output, command lines, environment variables, or temporary files.\n\nAsk before deletion, overwrite, service stop/restart, network changes, credential changes, or sending data outside the PC. Never request, persist a new copy of, print, or disable protection for passwords, keys, tokens, or host verification.'
+          )
+
+          Path('tests/SystemsEngineer.NoWsl.Smoke.ps1').write_text(r'''Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+$root = Split-Path $PSScriptRoot -Parent
+$agentsPath = Join-Path $root 'opencode\AGENTS.md'
+$templatePath = Join-Path $root 'opencode\opencode.template.json'
+$skillPath = Join-Path $root 'opencode\skills\opencode-safe-operations\SKILL.md'
+$agents = [IO.File]::ReadAllText($agentsPath)
+$templateText = [IO.File]::ReadAllText($templatePath)
+$skill = [IO.File]::ReadAllText($skillPath)
+$template = $templateText | ConvertFrom-Json
+$systemsPrompt = [string]$template.agent.'systems-engineer'.prompt
+$sshTemplate = [string]$template.command.ssh.template
+
+if ($agents -notmatch 'WSL is forbidden for agent operations') { throw 'Global agent policy does not forbid WSL' }
+if ($agents -notmatch 'Paramiko') { throw 'Global SSH policy does not prefer native Paramiko for authorized password auth' }
+if ($agents -notmatch 'HANDOFF\.md') { throw 'Global policy does not distinguish virtual HANDOFF from HANDOFF.md' }
+if ($systemsPrompt -match 'Ты Systems Engineer для Windows, WSL и SSH') { throw 'Systems Engineer still advertises WSL as an operating domain' }
+if ($systemsPrompt -notmatch 'WSL для агентных операций ЗАПРЕЩЁН') { throw 'Systems Engineer prompt does not explicitly forbid WSL' }
+if ($systemsPrompt -notmatch 'Paramiko') { throw 'Systems Engineer prompt does not route authorized password auth through native Paramiko' }
+if ($systemsPrompt -notmatch 'BEEFORGE_PREVIOUS_HANDOFF_DATA' -or $systemsPrompt -notmatch 'HANDOFF\.md') { throw 'Systems Engineer prompt does not distinguish injected HANDOFF data from a physical file' }
+if ($sshTemplate -notmatch 'без WSL' -or $sshTemplate -notmatch 'Paramiko') { throw '/ssh command policy is not native-Windows only' }
+if ($skill -notmatch 'WSL is forbidden for agent operations' -or $skill -notmatch 'Paramiko') { throw 'Safe-operations skill does not enforce native-Windows SSH' }
+if ($templateText -match 'Windows/WSL/SSH направляй systems-engineer') { throw 'Team Lead still routes WSL as a supported domain' }
+Write-Host 'Systems Engineer no-WSL policy smoke test passed.'
+''', encoding='utf-8-sig')
+          PY
+
+      - name: Validate policy files
+        shell: pwsh
+        run: |
+          ./tests/SystemsEngineer.NoWsl.Smoke.ps1
+          Get-Content -Raw ./opencode/opencode.template.json | ConvertFrom-Json | Out-Null
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-disable-wsl-ssh.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add opencode/AGENTS.md opencode/opencode.template.json opencode/skills/opencode-safe-operations/SKILL.md tests/SystemsEngineer.NoWsl.Smoke.ps1 .github/workflows/apply-disable-wsl-ssh.yml
+          git commit -m "fix: keep SSH agents on native Windows without WSL"
+          git push origin HEAD:fix/disable-wsl-ssh
