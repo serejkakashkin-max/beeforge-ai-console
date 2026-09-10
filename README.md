@@ -342,3 +342,18 @@ shell, интернет и MCP, поэтому его следует включ�
 ## Runtime tuning
 
 Для различий `Threads decode` / `Threads prefill`, OpenCode Output, безопасного vision projector, MoE CPU offload и tensor override см. [`docs/MODEL-RUNTIME-TUNING.md`](docs/MODEL-RUNTIME-TUNING.md).
+
+## BeeLlama runtime updates
+
+BeeForge pins the default local runtime to **BeeLlama v0.4.6 CUDA 13.3** on Windows/NVIDIA. The runtime is installed into `runtime\beellama-v0.4.6-cuda13.3` and older runtime folders are kept for rollback.
+
+For an existing installation, pull the repository and run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-BeeLlamaRuntime.ps1 -Version v0.4.6 -CudaVersion 13.3 -UpdateProfiles
+```
+
+The installer resolves the official `Anbeeld/beellama.cpp` release assets through the GitHub API, downloads both the Windows CUDA binary archive and matching CUDA runtime archive, verifies each asset against the SHA-256 digest published by GitHub, validates that `llama-server.exe --version` starts, and only then switches BeeForge-managed LocalHost profiles. A profile using a custom `llama-server.exe` outside BeeForge's `runtime\beellama-*` folders is left unchanged.
+
+To reinstall the same runtime from scratch, add `-Force`. To keep a custom runtime during a full `Install-BeeForge.ps1` run, pass `-LlamaServerPath`; to skip BeeLlama installation entirely, pass `-SkipBeeLlamaRuntime`.
+

@@ -154,7 +154,7 @@ function Get-BeeNewProfileTemplate {
     [pscustomobject]@{
         id='qwen38-daily-162k'; name='Qwen38 Daily 162K'; protected=$false; connectionMode='LocalHost'; remoteBaseUrl=''
         modelPath=(Join-Path $env:USERPROFILE '.lmstudio\models\zerodigest\Qwen3.8-27B-Uncensored-YMQ-MTP-GGUF\Qwen3.8-27B-Uncensored-YMQ-S-Pro.gguf')
-        serverPath=(Join-Path $script:BeeRoot 'runtime\beellama-v0.4.3-cuda13.1\llama-server.exe')
+        serverPath=(Join-Path $script:BeeRoot 'runtime\beellama-v0.4.6-cuda13.3\llama-server.exe')
         alias='qwen38-ymq-s-pro'; context=162000; gpuLayers='all'; batch=2048; ubatch=512
         threads=16; threadsBatch=16; flashAttention=$true; kvK='kvarn4'; kvV='kvarn4'
         kvTailTokens=1024; kvTailType='f16'; cacheReuse=256; parallel=1

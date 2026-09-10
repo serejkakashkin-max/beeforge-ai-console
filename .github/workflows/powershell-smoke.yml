@@ -13,7 +13,7 @@ jobs:
       - name: Parse PowerShell
         shell: pwsh
         run: |
-          $files = @('scripts/BeeLlamaManager.Core.psm1','ui/BeeLlama-Manager.ps1') + @(Get-ChildItem tests -Filter '*.ps1' | ForEach-Object { $_.FullName })
+          $files = @('scripts/BeeLlamaManager.Core.psm1','ui/BeeLlama-Manager.ps1') + @(Get-ChildItem scripts -Filter '*.ps1' | ForEach-Object { $_.FullName }) + @(Get-ChildItem tests -Filter '*.ps1' | ForEach-Object { $_.FullName })
           foreach ($file in $files) {
             $tokens = $null; $errors = $null
             [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file),[ref]$tokens,[ref]$errors)
@@ -24,3 +24,4 @@ jobs:
         run: |
           pwsh -NoProfile -File tests/MoEProfile.Smoke.ps1
           pwsh -NoProfile -File tests/RuntimeProfile.Smoke.ps1
+          pwsh -NoProfile -File tests/BeeLlamaRuntime.Smoke.ps1
