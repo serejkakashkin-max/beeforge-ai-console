@@ -13,8 +13,7 @@ if ($env:OS -ne 'Windows_NT') { throw 'BeeLlama runtime installer supports Windo
 $script:Root = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $normalizedVersion = if ($Version.StartsWith('v',[StringComparison]::OrdinalIgnoreCase)) { $Version } else { 'v' + $Version }
 if ($normalizedVersion -notmatch '^v\d+\.\d+\.\d+$') { throw "Unsupported BeeLlama version format: $Version" }
-$versionNumber = $normalizedVersion.Substring(1)
-$targetDirectory = Join-Path $script:Root ("runtime\beellama-{0}-cuda{1}" -f $versionNumber,$CudaVersion)
+$targetDirectory = Join-Path $script:Root ("runtime\beellama-{0}-cuda{1}" -f $normalizedVersion,$CudaVersion)
 $serverPath = Join-Path $targetDirectory 'llama-server.exe'
 $releaseApi = "https://api.github.com/repos/Anbeeld/beellama.cpp/releases/tags/$normalizedVersion"
 $headers = @{
@@ -158,8 +157,6 @@ if (-not (Test-InstalledRuntime $serverPath)) {
         New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
         Copy-DirectoryContents $stagedServer.Directory.FullName $targetDirectory
 
-        # The CUDA runtime archive is flat in official releases, but flattening its
-        # files makes the installer robust to a single wrapper directory.
         foreach ($file in @(Get-ChildItem -LiteralPath $cudaStage -Recurse -File)) {
             Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $targetDirectory $file.Name) -Force
         }
