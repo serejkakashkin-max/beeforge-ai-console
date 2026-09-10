@@ -44,13 +44,39 @@ replace_exact(
 
 installer = ROOT / 'scripts' / 'Install-BeeForge.ps1'
 text, bom = read_preserve(installer)
-param_old = "    [switch]$SkipDependencies,\n    [switch]$Force\n)"
-param_new = "    [switch]$SkipDependencies,\n    [switch]$SkipBeeLlamaRuntime,\n    [switch]$Force\n)"
+nl = '\r\n' if '\r\n' in text else '\n'
+param_old = nl.join([
+    '    [switch]$SkipDependencies,',
+    '    [switch]$Force',
+    ')',
+])
+param_new = nl.join([
+    '    [switch]$SkipDependencies,',
+    '    [switch]$SkipBeeLlamaRuntime,',
+    '    [switch]$Force',
+    ')',
+])
 if param_old not in text:
     raise SystemExit('Install-BeeForge.ps1: parameter anchor not found')
 text = text.replace(param_old, param_new, 1)
-anchor = "    Write-JsonUtf8 $profilesPath $profiles\n}\n\n$telegramPath = Join-Path $script:Root 'config\\telegram.json'"
-block = "    Write-JsonUtf8 $profilesPath $profiles\n}\n\nif ($Mode -eq 'LocalHost' -and -not $LlamaServerPath -and -not $SkipBeeLlamaRuntime) {\n    Write-Step 'Установка BeeLlama v0.4.6 CUDA 13.3'\n    $runtimeInstaller = Join-Path $script:Root 'scripts\\Install-BeeLlamaRuntime.ps1'\n    & $runtimeInstaller -Version 'v0.4.6' -CudaVersion '13.3' -UpdateProfiles | Out-Null\n}\n\n$telegramPath = Join-Path $script:Root 'config\\telegram.json'"
+anchor = nl.join([
+    '    Write-JsonUtf8 $profilesPath $profiles',
+    '}',
+    '',
+    "$telegramPath = Join-Path $script:Root 'config\\telegram.json'",
+])
+block = nl.join([
+    '    Write-JsonUtf8 $profilesPath $profiles',
+    '}',
+    '',
+    "if ($Mode -eq 'LocalHost' -and -not $LlamaServerPath -and -not $SkipBeeLlamaRuntime) {",
+    "    Write-Step 'Установка BeeLlama v0.4.6 CUDA 13.3'",
+    "    $runtimeInstaller = Join-Path $script:Root 'scripts\\Install-BeeLlamaRuntime.ps1'",
+    "    & $runtimeInstaller -Version 'v0.4.6' -CudaVersion '13.3' -UpdateProfiles | Out-Null",
+    '}',
+    '',
+    "$telegramPath = Join-Path $script:Root 'config\\telegram.json'",
+])
 if anchor not in text:
     raise SystemExit('Install-BeeForge.ps1: profile-write anchor not found')
 text = text.replace(anchor, block, 1)
