@@ -16,6 +16,7 @@ param(
     [switch]$RemoteVision,
     [switch]$ConfigureOpenCode,
     [switch]$SkipDependencies,
+    [switch]$SkipBeeLlamaRuntime,
     [switch]$Force
 )
 
@@ -139,6 +140,12 @@ if ($Force -or -not (Test-Path -LiteralPath $profilesPath)) {
         $profiles.lastGoodProfileId=''
     }
     Write-JsonUtf8 $profilesPath $profiles
+}
+
+if ($Mode -eq 'LocalHost' -and -not $LlamaServerPath -and -not $SkipBeeLlamaRuntime) {
+    Write-Step 'Установка BeeLlama v0.4.6 CUDA 13.3'
+    $runtimeInstaller = Join-Path $script:Root 'scripts\Install-BeeLlamaRuntime.ps1'
+    & $runtimeInstaller -Version 'v0.4.6' -CudaVersion '13.3' -UpdateProfiles | Out-Null
 }
 
 $telegramPath = Join-Path $script:Root 'config\telegram.json'
