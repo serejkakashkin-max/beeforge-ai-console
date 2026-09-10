@@ -1,0 +1,88 @@
+name: Apply KVarN cache type UI patch
+
+on:
+  push:
+    branches:
+      - feat/kvarn-cache-types
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/kvarn-cache-types
+
+      - name: Patch BeeForge KV cache choices
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          ui_path = Path('ui/BeeLlama-Manager.ps1')
+          ui = ui_path.read_text(encoding='utf-8-sig')
+
+          old_types = "foreach ($name in @('KvK','KvV')) { (UI $name).ItemsSource = @('f16','bf16','q8_0','q4_0','iq4_nl','kvarn4','kvarn3') }"
+          new_types = "foreach ($name in @('KvK','KvV')) { (UI $name).ItemsSource = @('f16','bf16','q8_0','q4_0','iq4_nl','kvarn8','kvarn6','kvarn5','kvarn4','kvarn3','kvarn2') }"
+          if old_types not in ui:
+              raise SystemExit('KV ItemsSource marker not found; refusing to patch blindly')
+          ui = ui.replace(old_types, new_types, 1)
+
+          old_factor = """function Get-KvMemoryFactor([string]$Type) {
+              switch ($Type.ToLowerInvariant()) {
+                  'f16' { return 4.0 }; 'bf16' { return 4.0 }; 'q8_0' { return 2.0 }
+                  'kvarn3' { return 0.75 }
+                  default { return 1.0 }
+              }
+          }"""
+          new_factor = """function Get-KvMemoryFactor([string]$Type) {
+              switch ($Type.ToLowerInvariant()) {
+                  'f16' { return 4.0 }; 'bf16' { return 4.0 }; 'q8_0' { return 2.0 }
+                  'kvarn8' { return 1.8611 }
+                  'kvarn6' { return 1.4167 }
+                  'kvarn5' { return 1.1944 }
+                  'kvarn4' { return 0.9722 }
+                  'kvarn3' { return 0.75 }
+                  'kvarn2' { return 0.5278 }
+                  default { return 1.0 }
+              }
+          }"""
+          if old_factor not in ui:
+              raise SystemExit('KV memory factor marker not found; refusing to patch blindly')
+          ui = ui.replace(old_factor, new_factor, 1)
+          ui_path.write_text(ui, encoding='utf-8-sig')
+
+          test_path = Path('tests/RuntimeProfile.Smoke.ps1')
+          test = test_path.read_text(encoding='utf-8-sig')
+          marker = "Write-Host 'Runtime profile smoke test passed.'"
+          check = r'''$uiScript = [IO.File]::ReadAllText((Join-Path $root 'ui\BeeLlama-Manager.ps1'), [Text.UTF8Encoding]::new($true))
+          $expectedKvItems = "@('f16','bf16','q8_0','q4_0','iq4_nl','kvarn8','kvarn6','kvarn5','kvarn4','kvarn3','kvarn2')"
+          if (-not $uiScript.Contains($expectedKvItems)) { throw 'UI must expose every BeeLlama KVarN width: 8, 6, 5, 4, 3, 2' }
+          foreach ($entry in @("'kvarn8' { return 1.8611 }","'kvarn6' { return 1.4167 }","'kvarn5' { return 1.1944 }","'kvarn4' { return 0.9722 }","'kvarn3' { return 0.75 }","'kvarn2' { return 0.5278 }")) {
+              if (-not $uiScript.Contains($entry)) { throw "KV resource estimator is missing: $entry" }
+          }
+
+          '''
+          if '$expectedKvItems' not in test:
+              if marker not in test:
+                  raise SystemExit('RuntimeProfile smoke marker not found')
+              test = test.replace(marker, check + marker, 1)
+              test_path.write_text(test, encoding='utf-8-sig')
+          PY
+
+      - name: Commit patch to feature branch
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-kvarn-cache-types.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ui/BeeLlama-Manager.ps1 tests/RuntimeProfile.Smoke.ps1 .github/workflows/apply-kvarn-cache-types.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "feat: expose all BeeLlama KVarN cache widths"
+          git push origin HEAD:feat/kvarn-cache-types
