@@ -1,0 +1,88 @@
+name: Restore pre-Sep9 Team Lead and Systems Engineer prompts
+
+on:
+  push:
+    branches: [restore/pre-sep9-team-systems-prompts]
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: restore/pre-sep9-team-systems-prompts
+          fetch-depth: 0
+
+      - name: Restore exactly two prompts from pre-Sep9 commit
+        shell: bash
+        run: |
+          python - <<'PY'
+          import copy, json, subprocess
+          from pathlib import Path
+
+          path = Path('opencode/opencode.template.json')
+          old_sha = 'f581b4c4f73a71d195f2555468701b8d3acb03d7'
+          roles = ['team-lead', 'systems-engineer']
+
+          current_text = path.read_text(encoding='utf-8-sig')
+          current = json.loads(current_text)
+          old_text = subprocess.check_output(
+              ['git', 'show', f'{old_sha}:opencode/opencode.template.json'],
+              text=True,
+              encoding='utf-8-sig'
+          )
+          old = json.loads(old_text)
+
+          expected = copy.deepcopy(current)
+          for role in roles:
+              expected['agent'][role]['prompt'] = old['agent'][role]['prompt']
+
+          patched = current_text
+          for role in roles:
+              before = json.dumps(current['agent'][role]['prompt'], ensure_ascii=False)
+              after = json.dumps(old['agent'][role]['prompt'], ensure_ascii=False)
+              count = patched.count(before)
+              if count != 1:
+                  raise SystemExit(f'{role}: expected exactly one prompt occurrence, got {count}')
+              patched = patched.replace(before, after, 1)
+
+          actual = json.loads(patched)
+          if actual != expected:
+              raise SystemExit('Unexpected configuration drift outside the two requested prompts')
+
+          path.write_text(patched, encoding='utf-8-sig')
+
+          for role in roles:
+              if actual['agent'][role]['prompt'] != old['agent'][role]['prompt']:
+                  raise SystemExit(f'{role}: restoration mismatch')
+          print('PROMPT_RESTORE_OK')
+          PY
+
+      - name: Validate exact scope
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          diff = subprocess.check_output(['git','diff','--','opencode/opencode.template.json'], text=True)
+          if not diff.strip():
+              raise SystemExit('No prompt changes produced')
+          print(diff)
+          current = json.load(open('opencode/opencode.template.json', encoding='utf-8-sig'))
+          old = json.loads(subprocess.check_output(['git','show','f581b4c4f73a71d195f2555468701b8d3acb03d7:opencode/opencode.template.json'], text=True, encoding='utf-8-sig'))
+          for role in ('team-lead','systems-engineer'):
+              assert current['agent'][role]['prompt'] == old['agent'][role]['prompt'], role
+          print('EXACT_SCOPE_OK')
+          PY
+
+      - name: Commit restoration
+        shell: bash
+        run: |
+          rm -f .github/workflows/restore-pre-sep9-prompts.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: restore pre-Sep9 Team Lead and Systems Engineer prompts"
+          git push origin HEAD:restore/pre-sep9-team-systems-prompts
