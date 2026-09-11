@@ -12,17 +12,17 @@ if ($clearBlock.Contains('pinnedMessageId = null')) { throw 'Chat clear must pre
 foreach ($needle in @(
     'deleteTelegramMessagesResilient',
     '.filter((messageId) => messageId !== protectedPinnedId)',
-    'normalizePinnedStatusAfterClear(protectedPinnedId)',
-    'unpinAllChatMessages',
-    'if (result.failed > 0) break;',
     'await updatePinnedStatus()'
 )) {
     if (-not $bridge.Contains($needle)) { throw "Telegram clear/pin regression: missing $needle" }
 }
+if ($clearBlock.Contains('pinChatMessage') -or $clearBlock.Contains('unpinAllChatMessages')) { throw 'Clear must not repin messages' }
 if (-not $bridge.Contains('if (pinnedUpdateInFlight) {')) { throw 'Concurrent pin refreshes must be retried' }
 if (-not $bridge.Contains('schedulePinnedStatus(2000)')) { throw 'Transient pinned-message edit failures must be retried' }
 $node = Get-Command node -ErrorAction SilentlyContinue
 if ($node) {
+    & $node.Source (Join-Path $root 'tools\telegram-bridge\v1.0.0\clear-chat-self-test.mjs')
+    if ($LASTEXITCODE -ne 0) { throw 'Behavioral clear test failed' }
     & $node.Source --check $bridgePath
     if ($LASTEXITCODE -ne 0) { throw "node --check failed with exit code $LASTEXITCODE" }
 }

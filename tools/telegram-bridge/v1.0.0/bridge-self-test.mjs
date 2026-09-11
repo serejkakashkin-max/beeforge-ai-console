@@ -226,7 +226,7 @@ for (let attempt = 0; attempt < 80; attempt++) {
   const modelMenu = sentMessages.some((item) => (item.reply_markup?.inline_keyboard || []).flat().some((button) => button.text?.includes("Запустить всё")));
   const profilesMenu = sentMessages.some((item) => (item.reply_markup?.inline_keyboard || []).flat().some((button) => button.text?.includes("BOM profile")));
   const modelStart = sentMessages.some((item) => item.text?.includes("Тестовый запуск последней модели"));
-  const modelStatus = sentMessages.some((item) => item.text?.includes("🤖 BeeLlama") && item.text?.includes("Qwen38 Daily 162K Q2 - Very FAST"));
+  const modelStatus = sentMessages.some((item) => item.text?.includes("🤖 BeeLlama") && item.text?.includes("Bridge fixture model"));
   const consoleLaunch = sentMessages.some((item) => item.text?.includes("self-test") && item.text?.includes("PID: 1"));
   const compactStatus = sentMessages.find((item) => item.text?.includes("Ожидают:") && item.text?.includes("BridgeTest:") && item.text?.includes("Роли:"));
   if (!compactStatus || compactStatus.text.includes("Основные сессии:")) throw new Error("Waiting Team Lead sessions were not compacted in /status");
@@ -265,7 +265,7 @@ for (let attempt = 0; attempt < 80; attempt++) {
     pendingUpdates.push({ update_id: updateId++, callback_query: { id: "callback-clear-chat-confirm", from: { id: Number(realConfig.allowedUserId) }, message: { message_id: 701, chat: { id: Number(realConfig.allowedChatId), type: "private" } }, data: clearChatConfirm } });
     for (let clearAttempt = 0; clearAttempt < 80 && !sentMessages.some((item) => item.text?.includes("Чат очищен")); clearAttempt++) await new Promise((resolve) => setTimeout(resolve, 25));
     const deletedIdCount = deletedMessageBatches.reduce((total, batch) => total + batch.length, 0);
-    if (!sentMessages.some((item) => item.text?.includes("Чат очищен")) || deletedIdCount !== 701 || !deletedMessageBatches.every((batch) => batch.length <= 100)) throw new Error(`Chat clear did not scan the complete available ID range in confirmed batches: ${deletedIdCount}`);
+    if (!sentMessages.some((item) => item.text?.includes("Чат очищен")) || deletedIdCount !== 500 || !deletedMessageBatches.every((batch) => batch.length <= 100)) throw new Error(`Chat clear did not scan the bounded recent ID range in confirmed batches: ${deletedIdCount}`);
     const beforeForeignRestore = JSON.parse(fs.readFileSync(path.join(root, "bridge-state.json"), "utf8"));
     await local("/result", "POST", { commandId: "foreign-list", type: "list_sessions", ok: true, instanceId: "instance-2", projectName: "PreviouslyOpened", sessions: [{ id: "foreign-session", title: "Foreign project session" }] });
     const afterForeignRestore = JSON.parse(fs.readFileSync(path.join(root, "bridge-state.json"), "utf8"));

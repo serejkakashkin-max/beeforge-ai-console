@@ -360,6 +360,7 @@ function launchOpenCode(directory) {
 }
 
 function readModelStatus() {
+  if (process.env.BEEFORGE_BRIDGE_SELF_TEST === "1") return { Profile: "Bridge fixture model", Ready: true, Running: true, Pid: 1, Context: 8192 };
   const powerShellExe = path.join(process.env.WINDIR || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
   const manager = "C:\\AI\\BeeForge AI Console\\scripts\\server-manager.ps1";
   const result = spawnSync(powerShellExe, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", manager, "-Action", "Status"], { encoding: "utf8", windowsHide: true, timeout: 15000 });
@@ -817,51 +818,39 @@ async function deleteTelegramMessagesResilient(messageIds) {
   }
 }
 
-async function normalizePinnedStatusAfterClear(messageId) {
-  if (!messageId) return;
-  try {
-    // Old bridge builds could leave several status cards pinned. Unpin the
-    // legacy set and pin only the card currently tracked in bridge-state.json.
-    await telegram("unpinAllChatMessages", { chat_id: config.allowedChatId });
-    await telegram("pinChatMessage", { chat_id: config.allowedChatId, message_id: messageId, disable_notification: true });
-  } catch (error) {
-    audit("pinned_status_normalize_failed", { messageId, error: error.message });
-  }
-}
-
 async function clearRecentTelegramChat(anchorMessageId) {
   // Telegram cannot clear a private chat wholesale. Keep the one BeeForge
   // status card alive and delete the recent messages around it.
   const latest = Math.max(1, Number(anchorMessageId || 0));
   const protectedPinnedId = Number(pinnedMessageId || 0) || 0;
-  const ids = Array.from({ length: Math.min(5000, latest) }, (_unused, index) => latest - index)
+  const ids = Array.from({ length: Math.min(500, latest) }, (_unused, index) => latest - index)
     .filter((messageId) => messageId !== protectedPinnedId);
   let requested = 0;
   let failed = 0;
+  let interrupted = false;
   for (let index = 0; index < ids.length; index += 100) {
     try {
       const result = await deleteTelegramMessagesResilient(ids.slice(index, index + 100));
       requested += result.requested;
       failed += result.failed;
-      // Lower message IDs are older in this private chat. A singleton that
-      // Telegram refuses at the age boundary means older batches are not useful.
-      if (result.failed > 0) break;
+      // A service message may be undeletable among otherwise recent messages.
+      // Telegram's generic error does not establish an age boundary.
     } catch (error) {
       audit("chat_clear_batch_failed", { start: ids[index], end: ids[Math.min(ids.length - 1, index + 99)], error: error.message });
+      interrupted = true;
       break;
     }
   }
-  pendingQuestions.clear();
-  callbacks.clear();
-  openRequests.clear();
+  // Chat cleanup must not invalidate buttons on the preserved status card
+  // or discard pending OpenCode permission/question requests.
   saveBridgeState();
   audit("chat_cleared", { requested, failed, anchorMessageId: latest, preservedPinnedMessageId: protectedPinnedId || "" });
   if (config.pinnedStatus !== false && protectedPinnedId) {
-    await normalizePinnedStatusAfterClear(protectedPinnedId);
     await updatePinnedStatus();
-    schedulePinnedStatus(250);
   }
-  await send("🧹 Чат очищен. Закреплённый статус BeeForge сохранён и обновляется на месте.");
+  await send(failed || interrupted
+    ? "🧹 Очистка выполнена частично: часть сообщений не удалось удалить. Telegram ограничивает удаление возрастом 48 часов; также возможны служебные сообщения или ошибка соединения. Проверяются последние 500 ID. Закреп сохранён."
+    : "🧹 Чат очищен в пределах последних 500 ID. Более старые сообщения могут остаться. Закреплённый статус BeeForge сохранён и обновляется на месте.");
 }
 async function telegramUpload(method, field, filePath, mime, caption = "") {
   const data = fs.readFileSync(filePath);

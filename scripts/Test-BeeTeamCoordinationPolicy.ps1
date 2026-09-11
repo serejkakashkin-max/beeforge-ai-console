@@ -9,6 +9,14 @@ $software = [string]$config.agent.'software-engineer'.prompt
 $architect = [string]$config.agent.'solution-architect'.prompt
 $systems = [string]$config.agent.'systems-engineer'.prompt
 $skill = [IO.File]::ReadAllText($skillPath, [Text.UTF8Encoding]::new($false))
+foreach($entry in $config.agent.PSObject.Properties){
+    if($entry.Value.prompt -and $entry.Name -ne 'team-lead' -and $entry.Value.prompt -notmatch 'HANDOFF-КОНТРАКТ.*beeforge-handoff'){
+        throw "Missing structured handoff: $($entry.Name)"
+    }
+}
+if($systems -notmatch 'сначала используй Python Paramiko' -or $systems -notmatch 'known_hosts'){
+    throw 'Systems Engineer must prefer Paramiko with host verification'
+}
 
 foreach ($required in @(
     'ЕДИНЫЙ ВЛАДЕЛЕЦ РЕАЛИЗАЦИИ',
