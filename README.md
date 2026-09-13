@@ -231,10 +231,10 @@ VRAM и RAM запущенного сервера отображаются ря�
   одного активного primary-агента, затем атомарно обновляет OpenCode.
 - Перед каждым изменением создаётся резервная копия; кнопка восстановления
   возвращает последнюю конфигурацию редактора. Общий лимит — 10 резервных копий.
-- Переключатель **Полный доступ** временно разрешает все рабочие действия OpenCode правилом
-  `* = allow`: прежние ограничивающие `deny` и `ask` для файлов, shell, интернета, MCP и skills
-  не применяются. Явные `allow` выбранных skills и MCP остаются в конфигурации как метаданные,
-  поэтому назначения продолжают отображаться и редактироваться во вкладке AI-команды.
+- Переключатель **Полный доступ** временно снимает `deny` и `ask` с рабочих действий
+  OpenCode: файлов, shell и интернета. Это не расширяет роль агента: skills и MCP
+  остаются строго по назначенному allowlist, а неназначенные MCP явно запрещаются,
+  чтобы их схемы не попадали в контекст специалиста.
   Исходные правила `task` сохраняют маршрутизацию Team Lead только к настроенным агентам.
   Перед включением показывается
   предупреждение. При выключении восстанавливаются только прежние деревья
@@ -298,7 +298,7 @@ OpenCode и не закрывает приложения.
 полный доступ. Включение через Telegram требует двух последовательных подтверждений
 и доступно только настроенным User ID и личному Chat ID. Выключение сразу возвращает
 предыдущие правила. Полный доступ снимает системные запросы разрешений на файлы,
-shell, интернет и MCP, поэтому его следует включать только для доверенной задачи.
+shell и интернет, но не выдаёт агентам неназначенные skills или MCP.
 
 ### Вложения Telegram
 
@@ -356,4 +356,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-BeeLlamaRu
 The installer resolves the official `Anbeeld/beellama.cpp` release assets through the GitHub API, downloads both the Windows CUDA binary archive and matching CUDA runtime archive, verifies each asset against the SHA-256 digest published by GitHub, validates that `llama-server.exe --version` starts, and only then switches BeeForge-managed LocalHost profiles. A profile using a custom `llama-server.exe` outside BeeForge's `runtime\beellama-*` folders is left unchanged.
 
 To reinstall the same runtime from scratch, add `-Force`. To keep a custom runtime during a full `Install-BeeForge.ps1` run, pass `-LlamaServerPath`; to skip BeeLlama installation entirely, pass `-SkipBeeLlamaRuntime`.
-

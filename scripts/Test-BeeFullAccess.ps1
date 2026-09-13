@@ -3,6 +3,10 @@ $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('beeforge-full-access-' + [gui
 $scripts = Join-Path $testRoot 'scripts'
 $configDir = Join-Path $testRoot 'config'
 $openCodePath = Join-Path $testRoot 'opencode.json'
+$uiText = [IO.File]::ReadAllText((Join-Path (Split-Path $PSScriptRoot -Parent) 'ui\BeeLlama-Manager.ps1'),[Text.UTF8Encoding]::new($false))
+if($uiText -notmatch 'Tag="RoleScopedTools"'){
+    throw 'Full Access UI must distinguish action permissions from role-scoped skills and MCP'
+}
 
 try {
     New-Item -ItemType Directory -Path $scripts,$configDir -Force | Out-Null
@@ -29,7 +33,11 @@ try {
         $rules=@($scope.PSObject.Properties)
         if($rules[0].Name-ne'*'-or[string]$rules[0].Value-ne'allow'){throw "Full access wildcard is missing: $($rules.Name -join ', ')"}
     }
-    if([string]$during.agent.alpha.permission.skill.'*'-ne'allow'-or[string]$during.agent.alpha.permission.skill.'diagnosing-bugs'-ne'allow'-or[string]$during.agent.alpha.permission.'serena*'-ne'allow'-or$during.agent.alpha.permission.PSObject.Properties['github*']){throw 'Selected skill/MCP metadata was not preserved while enabling full access'}
+    if([string]$during.agent.alpha.permission.skill.'*'-ne'deny'-or[string]$during.agent.alpha.permission.skill.'diagnosing-bugs'-ne'allow'){throw 'Full Access expanded or lost the selected skill allowlist'}
+    if([string]$during.agent.alpha.permission.'serena*'-ne'allow'-or[string]$during.agent.alpha.permission.'github*'-ne'deny'){throw 'Full Access expanded or lost alpha MCP assignments'}
+    if([string]$during.agent.beta.permission.'serena*'-ne'deny'-or[string]$during.agent.beta.permission.'github*'-ne'deny'){throw 'Unassigned MCP schemas leaked into an agent under Full Access'}
+    if([string]$during.agent.beta.permission.skill.'*'-ne'deny'){throw 'Unassigned skills leaked into an agent under Full Access'}
+    if([string]$during.permission.'serena*'-ne'deny'-or[string]$during.permission.'github*'-ne'deny'){throw 'Global Full Access leaked MCP schemas'}
     if([string]$during.permission.task-ne'deny'-or[string]$during.agent.alpha.permission.task.'*'-ne'deny'-or[string]$during.agent.alpha.permission.task.beta-ne'allow'-or$during.agent.alpha.permission.task.PSObject.Properties['explore']){throw 'Team routing was not preserved while enabling full access'}
     $leadRules=@($during.agent.'team-lead'.permission.PSObject.Properties)
     if($leadRules[0].Name-ne'*'-or[string]$leadRules[0].Value-ne'deny'-or[string]$during.agent.'team-lead'.permission.task.alpha-ne'allow'-or[string]$during.agent.'team-lead'.permission.skill.'opencode-team-coordination'-ne'allow'){
@@ -45,16 +53,16 @@ try {
     $afterSave=[IO.File]::ReadAllText($openCodePath,[Text.UTF8Encoding]::new($false))|ConvertFrom-Json
     foreach($scope in @($afterSave.permission,$afterSave.agent.alpha.permission,$afterSave.agent.beta.permission)){
         $rules=@($scope.PSObject.Properties)
-        if($rules[0].Name-ne'*'-or[string]$rules[0].Value-ne'allow'-or@($rules|Where-Object{[string]$_.Value-in@('ask','deny')-and$_.Name-ne'task'}).Count){throw "A later config save weakened full access: $($rules.Name -join ', ')"}
+        if($rules[0].Name-ne'*'-or[string]$rules[0].Value-ne'allow'-or@($rules|Where-Object{[string]$_.Value-eq'ask'}).Count){throw "A later config save weakened action access: $($rules.Name -join ', ')"}
     }
     if($afterSave.agent.alpha.permission.task.PSObject.Properties['explore']){throw 'A later config save expanded Team Lead routing to an unconfigured agent'}
     $afterSave.agent.alpha.permission.skill.PSObject.Properties.Remove('diagnosing-bugs')
     $afterSave.agent.alpha.permission.skill|Add-Member -NotePropertyName 'find-docs' -NotePropertyValue 'allow'
     $afterSave.agent.alpha.permission.PSObject.Properties.Remove('serena*')
-    $afterSave.agent.alpha.permission|Add-Member -NotePropertyName 'github*' -NotePropertyValue 'allow'
+    $afterSave.agent.alpha.permission.'github*'='allow'
     [void](& $module { param($candidate) Write-BeeTeamConfig $candidate 'save-agent' } $afterSave)
     $afterAssignmentSave=[IO.File]::ReadAllText($openCodePath,[Text.UTF8Encoding]::new($false))|ConvertFrom-Json
-    if($afterAssignmentSave.agent.alpha.permission.skill.PSObject.Properties['diagnosing-bugs']-or[string]$afterAssignmentSave.agent.alpha.permission.skill.'find-docs'-ne'allow'-or$afterAssignmentSave.agent.alpha.permission.PSObject.Properties['serena*']-or[string]$afterAssignmentSave.agent.alpha.permission.'github*'-ne'allow'){throw 'Skill/MCP assignment changes were not retained during full access'}
+    if($afterAssignmentSave.agent.alpha.permission.skill.PSObject.Properties['diagnosing-bugs']-or[string]$afterAssignmentSave.agent.alpha.permission.skill.'find-docs'-ne'allow'-or[string]$afterAssignmentSave.agent.alpha.permission.'serena*'-ne'deny'-or[string]$afterAssignmentSave.agent.alpha.permission.'github*'-ne'allow'){throw 'Skill/MCP assignment changes were not retained during full access'}
     # Simulate a policy script that writes an assignment directly while Full
     # Access is active. Re-enabling must reconcile the baseline snapshot before
     # repairing the unrestricted overlay, otherwise disabling loses the change.

@@ -17,7 +17,6 @@ foreach($entry in $config.agent.PSObject.Properties){
 if($systems -notmatch 'сначала используй Python Paramiko' -or $systems -notmatch 'known_hosts'){
     throw 'Systems Engineer must prefer Paramiko with host verification'
 }
-
 foreach ($required in @(
     'ЕДИНЫЙ ВЛАДЕЛЕЦ РЕАЛИЗАЦИИ',
     'CONTEXT_ROLLOVER_REQUIRED',
@@ -28,6 +27,9 @@ foreach ($required in @(
     'ДЕЛЕГАЦИЯ НЕ БОЛЕЕ 6000 СИМВОЛОВ'
 )) {
     if ($lead -notmatch [regex]::Escape($required)) { throw "Team Lead misses anti-fragmentation rule: $required" }
+}
+foreach($required in @('не передавай task_id','никогда не придумывай','ориентир 1200 символов','технического error task')){
+    if($lead -notmatch [regex]::Escape($required)){throw "Team Lead misses task recovery/compact delegation rule: $required"}
 }
 foreach ($required in @(
     'ОПЕРАЦИОННЫЙ БЮДЖЕТ',

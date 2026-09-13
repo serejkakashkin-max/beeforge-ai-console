@@ -4,6 +4,19 @@ const hooks = await BeeForgeTeamGuard();
 const before = (sessionID, callID, agent) => hooks["tool.execute.before"]({ tool: "task", sessionID, callID }, { args: { agent } });
 const after = (sessionID, callID, agent, output) => hooks["tool.execute.after"]({ tool: "task", sessionID, callID, args: { agent } }, { output });
 
+const inventedIdArgs = { args: { subagent_type: "solution-architect", prompt: "Analyze", task_id: "ctx-analysis-001" } };
+await hooks["tool.execute.before"]({ tool: "task", sessionID: "invalid-task-id", callID: "invalid-task-id-1" }, inventedIdArgs);
+if ("task_id" in inventedIdArgs.args) throw new Error("Invented task_id was not removed before OpenCode validation");
+await after("invalid-task-id", "invalid-task-id-1", "solution-architect", '<task id="ses_validchild" state="error"><task_result>Transport failed</task_result></task>');
+const retryArgs = { args: { subagent_type: "solution-architect", prompt: "Retry once" } };
+await hooks["tool.execute.before"]({ tool: "task", sessionID: "invalid-task-id", callID: "invalid-task-id-2" }, retryArgs);
+if (retryArgs.args.task_id !== "ses_validchild") throw new Error("Technical failure retry did not resume the actual child session");
+await after("invalid-task-id", "invalid-task-id-2", "solution-architect", '<task id="ses_validchild" state="error"><task_result>Transport failed again</task_result></task>');
+let thirdTechnicalRetryBlocked = false;
+try { await hooks["tool.execute.before"]({ tool: "task", sessionID: "invalid-task-id", callID: "invalid-task-id-3" }, { args: { subagent_type: "solution-architect", prompt: "Retry twice" } }); }
+catch (error) { thirdTechnicalRetryBlocked = String(error?.message || error).includes("BEEFORGE_DUPLICATE_DELEGATION_BLOCKED"); }
+if (!thirdTechnicalRetryBlocked) throw new Error("More than one technical failure retry was permitted");
+
 let oversizedPromptBlocked = false;
 try {
   await hooks["tool.execute.before"](

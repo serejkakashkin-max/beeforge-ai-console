@@ -1,6 +1,7 @@
 # Machine-local configuration and credentials
 secrets/
 config/profiles.json
+config/profiles.json.before-*
 config/telegram.json
 config/opencode.json
 config/remote-access.json
