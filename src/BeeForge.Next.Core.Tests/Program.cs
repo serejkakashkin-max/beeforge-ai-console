@@ -47,6 +47,12 @@ try
     try { ProfileSnapshotMigration.Prepare(path, migrationPath); throw new Exception("stale snapshot was accepted"); }
     catch (IOException) { }
 
+    var malformedModePath = Path.Combine(temp, "numeric-mode.json");
+    File.WriteAllText(malformedModePath, "{\"profiles\":[{\"id\":\"one\",\"connectionMode\":12}]}");
+    var numericMigration = ProfileSnapshotMigration.Prepare(malformedModePath, Path.Combine(temp, "numeric-prepared"));
+    Assert(LegacyProfileCatalog.Load(numericMigration.SnapshotPath).Profiles[0].ConnectionMode == "LocalHost",
+        "non-string legacy mode normalizes without dropping profile");
+
     var repo = new DirectoryInfo(AppContext.BaseDirectory);
     while (repo is not null && !File.Exists(Path.Combine(repo.FullName, "scripts", "Get-BeeForgeNextLaunchPlan.ps1")))
         repo = repo.Parent;

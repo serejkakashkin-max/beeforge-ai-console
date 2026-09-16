@@ -28,8 +28,9 @@ public sealed class ProfileSnapshotMigration
             {
                 if (item is not JsonObject profile)
                     throw new InvalidDataException("BeeForge profile entry must be a JSON object.");
-                if (profile["connectionMode"] is null ||
-                    string.IsNullOrWhiteSpace(profile["connectionMode"]?.GetValue<string>()))
+                var hasStringMode = profile["connectionMode"] is JsonValue value &&
+                    value.TryGetValue<string>(out var mode) && !string.IsNullOrWhiteSpace(mode);
+                if (!hasStringMode)
                     profile["connectionMode"] = "LocalHost";
             }
         }
