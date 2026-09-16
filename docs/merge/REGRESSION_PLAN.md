@@ -5,7 +5,7 @@ Baseline commit: `2446f85` on `main`. Machine-readable status is in `baseline.js
 | Gate | Observable evidence | Current status |
 | --- | --- | --- |
 | Legacy profile roundtrip | Preserve all JSON fields, IDs, unknown extensions and UTF-8 names; backup before write | Fixture read/prepare/idempotency/restore tests pass; live cutover pending |
-| Runtime argv parity | Exact ordered argv for BeeLlama/Tiel, KVarN K/V, tail, MoE, MTP, vision, advanced args | `BeeLlamaArgvSnapshot.Smoke.ps1` passes; compare new runtime adapter later |
+| Runtime argv parity | Exact ordered argv for BeeLlama/Tiel, KVarN K/V, tail, MoE, MTP, vision, advanced args | `BeeLlamaArgvSnapshot.Smoke.ps1` passes; Next read-only adapter calls the same generator and passes fixture integration; live launch parity pending |
 | OpenCode prompts | SHA-256 of each canonical agent prompt; no implicit edits | `PromptSnapshot.Smoke.ps1` added |
 | Permissions and routing | Full Access action scope, role-scoped MCP/skills, task allowlist | `Test-BeeFullAccess.ps1`, coordination/policy tests |
 | Team Guard | Duplicate/repair/rollover/handoff/history semantics | Node self-test |

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using BeeForge.Next.Core.Inference;
 using BeeForge.Next.Core.Profiles;
 
 var temp = Path.Combine(Path.GetTempPath(), "beeforge-next-profile-" + Guid.NewGuid().ToString("N"));
@@ -45,6 +46,22 @@ try
     File.WriteAllText(path, original.Replace("Q2", "new", StringComparison.Ordinal));
     try { ProfileSnapshotMigration.Prepare(path, migrationPath); throw new Exception("stale snapshot was accepted"); }
     catch (IOException) { }
+
+    var repo = new DirectoryInfo(AppContext.BaseDirectory);
+    while (repo is not null && !File.Exists(Path.Combine(repo.FullName, "scripts", "Get-BeeForgeNextLaunchPlan.ps1")))
+        repo = repo.Parent;
+    Assert(repo is not null, "repository launch-plan adapter found");
+    var script = Path.Combine(repo!.FullName, "scripts", "Get-BeeForgeNextLaunchPlan.ps1");
+    var templatePath = Path.Combine(repo.FullName, "config", "templates", "profiles.example.json");
+    var templateCopy = Path.Combine(temp, "launch-fixture.json");
+    File.Copy(templatePath, templateCopy);
+    var local = await LegacyLaunchPlanReader.ReadAsync(script, templateCopy, "profile-b453573d18");
+    Assert(local.Mode == "LocalHost" && local.Arguments.Count > 50, "local argv from legacy module");
+    Assert(local.Arguments.Contains("kvarn4") && local.Arguments.Contains("--spec-draft-n-max") &&
+        local.Arguments.Contains("-mm"), "BeeLlama KVarN, MTP and vision retained");
+    File.WriteAllText(templateCopy, original, new UTF8Encoding(false));
+    var remote = await LegacyLaunchPlanReader.ReadAsync(script, templateCopy, "remote");
+    Assert(remote.Mode == "RemoteClient" && remote.Arguments.Count == 0, "remote profile cannot launch local server");
 
     File.WriteAllText(path, "{\"profiles\":[{\"name\":\"missing id\"}]}");
     try { LegacyProfileCatalog.Load(path); throw new Exception("missing ID was accepted"); }
