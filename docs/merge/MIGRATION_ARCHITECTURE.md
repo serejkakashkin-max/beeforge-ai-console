@@ -49,4 +49,6 @@ No new service may write to `opencode.json` or `profiles.json` concurrently with
 
 ## Toolchain and deployment
 
-Windows 10/11 x64 first. The host currently has .NET 8 runtime but no SDK; build verification requires installing a pinned .NET 8 SDK or a CI Windows runner. Existing users keep the PowerShell launcher until the new build and migration pass. No user-specific paths, models, GGUF files, token stores or copied live profiles enter Git.
+Windows 10/11 x64 first. The baseline host had .NET 8 runtime but no SDK; SDK 8.0.425 was installed for the preview build, without changing the legacy launcher. Existing users keep the PowerShell launcher until the new build and migration pass. No user-specific paths, models, GGUF files, token stores or copied live profiles enter Git.
+
+The first Avalonia shell is now a read-only preview in `src/BeeForge.Next.App/`. Its separate core adapter reads the legacy profile store, defaults missing `connectionMode` to `LocalHost`, and preserves original JSON in memory without writing anything. It deliberately does **not** start or stop a model, edit OpenCode, migrate user state, or replace the WPF launcher. This is an implementation milestone, not cutover or parity.

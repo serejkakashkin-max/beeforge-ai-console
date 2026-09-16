@@ -44,6 +44,8 @@ tmp/
 Thumbs.db
 .idea/
 .vscode/
+**/bin/
+**/obj/
 
 # Telegram project inboxes must never be committed implicitly
 **/.beeforge/telegram/inbox/

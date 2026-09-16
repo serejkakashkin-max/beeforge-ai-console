@@ -1,0 +1,84 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BeeForge.Next.App.MainWindow"
+        Width="1280" Height="820" MinWidth="980" MinHeight="640"
+        Title="BeeForge AI Console Next — preview"
+        Background="#111B28" Foreground="#EAF2F7">
+  <Grid RowDefinitions="76,*" Margin="0">
+    <Border Grid.Row="0" Background="#152437" BorderBrush="#2D4658" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto" Margin="28,0">
+        <StackPanel VerticalAlignment="Center" Spacing="3">
+          <TextBlock Text="BEEFORGE / NEXT" FontSize="22" FontWeight="Bold" Foreground="#EAF2F7" />
+          <TextBlock Text="Единая консоль модели и AI-команды · предварительная оболочка" FontSize="12" Foreground="#A6B9C6" />
+        </StackPanel>
+        <Border Grid.Column="1" Background="#203E48" CornerRadius="12" Padding="13,7" VerticalAlignment="Center">
+          <TextBlock Text="LEGACY BACKEND · READ ONLY" Foreground="#9EE0D0" FontSize="11" FontWeight="SemiBold" />
+        </Border>
+      </Grid>
+    </Border>
+
+    <TabControl Grid.Row="1" TabStripPlacement="Left" Background="#111B28" BorderThickness="0">
+      <TabItem Header="Обзор">
+        <ScrollViewer>
+          <StackPanel Margin="34,27" Spacing="22">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Рабочее пространство" FontSize="30" FontWeight="SemiBold" />
+              <TextBlock Text="Состояние из существующего BeeForge; новые сервисы пока ничего не меняют." Foreground="#A6B9C6" />
+            </StackPanel>
+            <Border Background="#1B2B3C" BorderBrush="#365162" BorderThickness="1" CornerRadius="12" Padding="22">
+              <StackPanel Spacing="14">
+                <TextBlock Text="АКТИВНЫЙ ПРОФИЛЬ" FontSize="11" FontWeight="Bold" Foreground="#82BFC3" />
+                <TextBlock Text="{Binding ActiveProfile}" FontSize="24" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" Spacing="26">
+                  <StackPanel Spacing="4"><TextBlock Text="Подключение" Foreground="#A6B9C6" /><TextBlock Text="{Binding Mode}" FontWeight="SemiBold" /></StackPanel>
+                  <StackPanel Spacing="4"><TextBlock Text="Сохранено профилей" Foreground="#A6B9C6" /><TextBlock Text="{Binding ProfileCount}" FontWeight="SemiBold" /></StackPanel>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+            <Border Background="#163B39" BorderBrush="#29736A" BorderThickness="1" CornerRadius="8" Padding="14">
+              <TextBlock Text="{Binding Status}" Foreground="#B9EBD9" />
+            </Border>
+            <TextBlock Text="Запуск модели, Team Guard, Telegram, Serena и RemoteClient пока остаются в проверенной старой консоли." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+      <TabItem Header="Модели">
+        <StackPanel Margin="34,27" Spacing="16">
+          <TextBlock Text="Профили модели" FontSize="28" FontWeight="SemiBold" />
+          <TextBlock Text="Список считан из старого profiles.json. Редактирование появится после тестов совместимости." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <ListBox ItemsSource="{Binding ProfileNames}" Background="#1B2B3C" BorderBrush="#365162" MinHeight="200" />
+        </StackPanel>
+      </TabItem>
+      <TabItem Header="Inference">
+        <StackPanel Margin="34,27" Spacing="14">
+          <TextBlock Text="Inference" FontSize="28" FontWeight="SemiBold" />
+          <TextBlock Text="BeeLlama, upstream llama.cpp и custom runtime будут отдельными адаптерами. На этом этапе управление остаётся в старой консоли." TextWrapping="Wrap" Foreground="#A6B9C6" />
+        </StackPanel>
+      </TabItem>
+      <TabItem Header="Оптимизация">
+        <StackPanel Margin="34,27" Spacing="14">
+          <TextBlock Text="Оптимизация" FontSize="28" FontWeight="SemiBold" />
+          <TextBlock Text="GGUF, оценка VRAM и Auto Tune появятся после проверки точности чтения профилей и эквивалентности команд запуска." TextWrapping="Wrap" Foreground="#A6B9C6" />
+        </StackPanel>
+      </TabItem>
+      <TabItem Header="AI Workspace">
+        <StackPanel Margin="34,27" Spacing="14">
+          <TextBlock Text="AI Workspace" FontSize="28" FontWeight="SemiBold" />
+          <TextBlock Text="OpenCode, Team Lead, специалисты, skills, MCP, Team Guard и Serena работают через существующий BeeForge. Их prompts и разрешения не меняются." TextWrapping="Wrap" Foreground="#A6B9C6" />
+        </StackPanel>
+      </TabItem>
+      <TabItem Header="Удалённый доступ">
+        <StackPanel Margin="34,27" Spacing="14">
+          <TextBlock Text="Удалённый доступ" FontSize="28" FontWeight="SemiBold" />
+          <TextBlock Text="Telegram и Tailscale RemoteClient остаются на существующем backend до отдельной регрессионной проверки." TextWrapping="Wrap" Foreground="#A6B9C6" />
+        </StackPanel>
+      </TabItem>
+      <TabItem Header="Система">
+        <StackPanel Margin="34,27" Spacing="14">
+          <TextBlock Text="Система" FontSize="28" FontWeight="SemiBold" />
+          <TextBlock Text="Это безопасная параллельная оболочка. Основной запуск по-прежнему BEEFORGE-AI.cmd." TextWrapping="Wrap" Foreground="#A6B9C6" />
+        </StackPanel>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</Window>
