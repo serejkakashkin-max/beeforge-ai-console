@@ -4,8 +4,8 @@ Reference: `pytraveler/LlamaServerLauncherAvalonia` commit `f52404637d51ec00e15e
 
 | Capability | Reference implementation | BeeForge today | BeeForge Next adoption / constraint |
 | --- | --- | --- | --- |
-| Avalonia shell, themes, MVVM | `App.axaml`, `MainWindow.axaml`, `ViewModels/` | WPF/PowerShell | Planned: new shell alongside legacy |
-| Profiles and import/export | `ConfigurationService`, `ProfileInfo`, `MainViewModel` | BeeForge `profiles.json`, import/export UI | Planned: BeeForge schema first; no forced LlamaLauncher conversion |
+| Avalonia shell, themes, MVVM | `App.axaml`, `MainWindow.axaml`, `ViewModels/` | WPF/PowerShell | Read-only preview installed alongside legacy; full parity pending |
+| Profiles and import/export | `ConfigurationService`, `ProfileInfo`, `MainViewModel` | BeeForge `profiles.json`, import/export UI | Legacy profiles listed with active selection and read-only command plan; editor/import/export pending |
 | GGUF metadata/tensors/splits | `GgufMetadataService`, `ModelScanService` | Basic model-file picker | Planned after isolated parser tests |
 | VRAM prediction and actual comparison | `VramEstimator`, `VramPlan`, `VramComparison` | Live VRAM monitoring | Planned; extend to KVarN, MoE, hybrid attention and BeeLlama logs |
 | Model/MMProj pickers | `ModelPickerViewModel`, picker windows | Local pickers | Planned; preserve current paths |

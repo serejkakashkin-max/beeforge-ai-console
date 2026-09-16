@@ -5,14 +5,24 @@
 
 ## BeeForge Next (предварительная оболочка)
 
-В ветке `feature/beeforge-next-avalonia` новый интерфейс Avalonia развивается
-параллельно со старым. Пока он **только читает** существующие профили; запуск
-модели, OpenCode, Telegram и Serena остаются в проверенной консоли. Для preview
-нужен .NET 8 SDK:
+Новый интерфейс Avalonia развивается параллельно со старым. Пока он **только
+читает** существующие профили и показывает точный план запуска выбранного
+профиля из старого генератора аргументов. Запуск модели, OpenCode, Telegram и
+Serena остаются в проверенной консоли. Для сборки preview нужен .NET 8 SDK:
 
 ```powershell
 pwsh -File .\scripts\Start-BeeForgeNextPreview.ps1
 ```
+
+Локальную автономную сборку для Windows x64 можно установить рядом со старой:
+
+```powershell
+dotnet publish .\src\BeeForge.Next.App\BeeForge.Next.App.csproj -c Release -r win-x64 --self-contained -o .\local\BeeForge.Next
+.\local\BeeForge.Next\BeeForge.Next.App.exe
+```
+
+Папка `local/` не попадает в Git. Старый профиль при открытии новой оболочки не
+переписывается; переход на новый интерфейс по умолчанию ещё не выполнен.
 
 Обычный `BEEFORGE-AI.cmd` не менялся. Подробные этапы, базовые тесты и ограничения
 зафиксированы в `docs/merge/`.

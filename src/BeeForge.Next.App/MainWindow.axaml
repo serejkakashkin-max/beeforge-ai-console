@@ -46,13 +46,16 @@
         <StackPanel Margin="34,27" Spacing="16">
           <TextBlock Text="Профили модели" FontSize="28" FontWeight="SemiBold" />
           <TextBlock Text="Список считан из старого profiles.json. Редактирование появится после тестов совместимости." TextWrapping="Wrap" Foreground="#A6B9C6" />
-          <ListBox ItemsSource="{Binding ProfileNames}" Background="#1B2B3C" BorderBrush="#365162" MinHeight="200" />
+          <ListBox ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" Background="#1B2B3C" BorderBrush="#365162" MinHeight="200" />
         </StackPanel>
       </TabItem>
       <TabItem Header="Inference">
         <StackPanel Margin="34,27" Spacing="14">
           <TextBlock Text="Inference" FontSize="28" FontWeight="SemiBold" />
-          <TextBlock Text="BeeLlama, upstream llama.cpp и custom runtime будут отдельными адаптерами. На этом этапе управление остаётся в старой консоли." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="План запуска выбранного профиля формирует старый BeeForge. Номера показывают точный порядок аргументов. Ничего не запускается." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="ПЛАН ЗАПУСКА · ТОЛЬКО ЧТЕНИЕ" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
+          <TextBox Text="{Binding CommandPreview, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" FontSize="12" MinHeight="420" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
+          <TextBlock Text="Запуск, остановка и редактирование профиля остаются в рабочей консоли до прохождения тестов паритета." TextWrapping="Wrap" Foreground="#A6B9C6" />
         </StackPanel>
       </TabItem>
       <TabItem Header="Оптимизация">
