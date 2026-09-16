@@ -1,0 +1,24 @@
+{
+  "capturedAt": "2026-09-16",
+  "sourceBranch": "main",
+  "sourceCommit": "2446f85",
+  "referenceRepositoryCommit": "f52404637d51ec00e15e857d0cd9b33eb9a0b21e",
+  "environment": "Windows x64; Windows PowerShell 5.1 and PowerShell 7; Node available; .NET 8 runtime, no SDK",
+  "tests": {
+    "powershellIsolated": { "pass": 19, "fail": 0, "excluded": ["test-mcp.ps1 (requires McpId)"] },
+    "nodeIsolated": { "pass": 4, "fail": 0 },
+    "remoteInstaller": { "status": "BASELINE_FAIL", "reason": "Copy-Item exceeds Windows temporary path length while copying bundled chrome-devtools-mcp node_modules before installer assertions" },
+    "liveIntegration": { "status": "NOT_RUN", "reason": "Would touch the user's running model, Telegram, Tailscale, or private project state" }
+  },
+  "promptSha256Utf8": {
+    "build": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "software-engineer": "2e21674c57a088eeac5a20462af5b2201deb89ea95a1c24ddedbf0011d467a6e",
+    "team-lead": "bef68a7f4d9f3c969a78917306bc15874f538da6b828be499e58e6aa9f0016a3",
+    "systems-engineer": "ca365d355e3df08b7ad468a9862e4c332851b6bca97bf7dc85c275057412373c",
+    "qa-engineer": "359c389198a4e457163e5ed2b2247434672ae5e7c4ac90699903cded07bfb051",
+    "devops-engineer": "edda2a8dbef7ce3d8cc86572f49e75aead73b383b3e07b6038fb8c65deb2e989",
+    "solution-architect": "0092e52d448dbd0d5cfed11d684e3d7aa95eb8aa621707d6dd7351dfc120eba1",
+    "platform-engineer": "320d18ec79866420a0ffb1d7eb20044057bbb77d2471b6bca5ed2180aa14aa7c",
+    "security-engineer": "deaed13437be48713c95f9ab117cf9730ef15fde991d9c36bb2df5e6ae6376bf"
+  }
+}
