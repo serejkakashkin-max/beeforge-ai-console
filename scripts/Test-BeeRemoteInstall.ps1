@@ -5,9 +5,14 @@ $temp=Join-Path ([IO.Path]::GetTempPath()) ('beeforge-install-test-'+[guid]::New
 $copy=Join-Path $temp 'BeeForge AI Console';$openCode=Join-Path $temp 'opencode';$projects=Join-Path $temp 'projects'
 try{
     New-Item -ItemType Directory -Path $copy -Force|Out-Null
-    foreach($name in @('scripts','config','opencode','tools','assets')){Copy-Item -LiteralPath (Join-Path $Root $name) -Destination (Join-Path $copy $name) -Recurse -Force}
+    foreach($name in @('scripts','config','opencode','assets')){Copy-Item -LiteralPath (Join-Path $Root $name) -Destination (Join-Path $copy $name) -Recurse -Force}
+    # Simulate a fresh clone rather than copying restored node_modules/.venv.
+    # Their deep paths can exceed MAX_PATH under the temporary test root.
+    & robocopy.exe (Join-Path $Root 'tools') (Join-Path $copy 'tools') /E /XD node_modules .venv __pycache__ /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
+    if($LASTEXITCODE-ge8){throw "Unable to copy installer tools (robocopy exit $LASTEXITCODE)"}
+    $global:LASTEXITCODE=0
     Copy-Item -LiteralPath (Join-Path $Root 'BEEFORGE-AI.cmd') -Destination $copy
-    & (Join-Path $copy 'scripts\Install-BeeForge.ps1') -Mode RemoteClient -RemoteBaseUrl 'https://desktop.example.ts.net' -RemoteModelAlias Q2 -RemoteContext 162000 -RemoteOutput 65528 -RemoteVision -ProjectRoot $projects -OpenCodeRoot $openCode -SkillRoot (Join-Path $temp 'skills') -ConfigureOpenCode -SkipDependencies -Force
+    & pwsh -NoProfile -File (Join-Path $copy 'scripts\Install-BeeForge.ps1') -Mode RemoteClient -RemoteBaseUrl 'https://desktop.example.ts.net' -RemoteModelAlias Q2 -RemoteContext 162000 -RemoteOutput 65528 -RemoteVision -ProjectRoot $projects -OpenCodeRoot $openCode -SkillRoot (Join-Path $temp 'skills') -ConfigureOpenCode -SkipDependencies -Force
     if($LASTEXITCODE-ne0){throw "Remote installer exited with $LASTEXITCODE"}
     $profiles=Get-Content -LiteralPath (Join-Path $copy 'config\profiles.json') -Raw|ConvertFrom-Json
     $profile=$profiles.profiles|Select-Object -First 1
