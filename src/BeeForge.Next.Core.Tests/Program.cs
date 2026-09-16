@@ -23,6 +23,29 @@ try
     Assert(catalog.OriginalJson == original, "full store retained verbatim in memory");
     Assert(SHA256.HashData(File.ReadAllBytes(path)).SequenceEqual(before), "profile store not modified");
 
+    var migrationPath = Path.Combine(temp, "prepared-migration");
+    var migration = ProfileSnapshotMigration.Prepare(path, migrationPath);
+    Assert(File.ReadAllBytes(migration.BackupPath).SequenceEqual(File.ReadAllBytes(path)), "byte-exact backup");
+    var migrated = LegacyProfileCatalog.Load(migration.SnapshotPath);
+    Assert(migrated.ActiveProfileId == catalog.ActiveProfileId, "active ID retained in snapshot");
+    Assert(migrated.LastGoodProfileId == catalog.LastGoodProfileId, "last-good ID retained in snapshot");
+    Assert(migrated.Profiles[0].ConnectionMode == "LocalHost", "missing mode normalized");
+    Assert(migrated.Profiles[1].ConnectionMode == "RemoteClient", "remote mode retained");
+    Assert(migrated.OriginalJson.Contains("\"unknownTop\"", StringComparison.Ordinal), "unknown root retained");
+    Assert(migrated.Profiles[0].RawJson.Contains("\"unknownField\"", StringComparison.Ordinal), "unknown profile retained");
+    Assert(ProfileSnapshotMigration.Prepare(path, migrationPath).SnapshotSha256 == migration.SnapshotSha256,
+        "migration idempotent");
+    var restoredPath = Path.Combine(temp, "restored.json");
+    migration.RestoreCopy(restoredPath);
+    Assert(File.ReadAllBytes(restoredPath).SequenceEqual(File.ReadAllBytes(path)), "reversible exact restore copy");
+    try { migration.RestoreCopy(restoredPath); throw new Exception("existing restore copy was overwritten"); }
+    catch (IOException) { }
+    Assert(SHA256.HashData(File.ReadAllBytes(path)).SequenceEqual(before), "live source still not modified");
+
+    File.WriteAllText(path, original.Replace("Q2", "new", StringComparison.Ordinal));
+    try { ProfileSnapshotMigration.Prepare(path, migrationPath); throw new Exception("stale snapshot was accepted"); }
+    catch (IOException) { }
+
     File.WriteAllText(path, "{\"profiles\":[{\"name\":\"missing id\"}]}");
     try { LegacyProfileCatalog.Load(path); throw new Exception("missing ID was accepted"); }
     catch (InvalidDataException) { }
