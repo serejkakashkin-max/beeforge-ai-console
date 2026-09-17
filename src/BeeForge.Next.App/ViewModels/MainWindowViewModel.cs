@@ -647,9 +647,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var plan = await LegacyLaunchPlanReader.ReadAsync(_launchPlanScript, _storePath,
                 selected.Id, cancellationToken);
             if (cancellationToken.IsCancellationRequested) return;
+            var capability = await RuntimeCapabilityProbe.ProbeAsync(plan, cancellationToken);
+            if (cancellationToken.IsCancellationRequested) return;
             var preview = plan.Mode == "RemoteClient"
                 ? "Удалённый профиль: локальный сервер не запускается."
                 : plan.ServerPath + Environment.NewLine +
+                  capability.Describe() + Environment.NewLine + Environment.NewLine +
                   string.Join(Environment.NewLine, plan.Arguments.Select((arg, index) => $"{index:00}  {arg}"));
             Dispatcher.UIThread.Post(() => { if (!cancellationToken.IsCancellationRequested) CommandPreview = preview; });
         }

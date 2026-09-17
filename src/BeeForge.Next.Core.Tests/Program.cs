@@ -281,6 +281,17 @@ try
     File.WriteAllText(templateCopy, original, new UTF8Encoding(false));
     var remote = await LegacyLaunchPlanReader.ReadAsync(script, templateCopy, "remote");
     Assert(remote.Mode == "RemoteClient" && remote.Arguments.Count == 0, "remote profile cannot launch local server");
+    var capability = RuntimeCapabilityProbe.Compare(
+        new[] { "--ctx-size", "32768", "--flash-attn", "on", "-mm", "model.gguf", "--custom-flag=value", "-1" },
+        "Usage: llama-server [--ctx-size N] [--flash-attn MODE] [-mm FILE] --port N\n");
+    Assert(capability.ProbeSucceeded && !capability.IsCompatible &&
+        capability.UnsupportedFlags.SequenceEqual(new[] { "--custom-flag" }),
+        "runtime capability comparison exposes only unsupported flag names");
+    Assert(RuntimeCapabilityProbe.ExtractArgumentFlags(new[] { "--port=8080", "-ngl", "99", "-1" })
+        .SetEquals(new[] { "--port" }), "runtime flag extraction ignores values and unsupported short clusters");
+    var skippedCapability = await RuntimeCapabilityProbe.ProbeAsync(remote);
+    Assert(skippedCapability.WasSkipped && !skippedCapability.ProbeSucceeded,
+        "remote profile skips local runtime capability probe");
 
     var runtimeScript = Path.Combine(repo.FullName, "scripts", "Invoke-BeeForgeNextRuntime.ps1");
     File.Copy(templatePath, templateCopy, overwrite: true);
