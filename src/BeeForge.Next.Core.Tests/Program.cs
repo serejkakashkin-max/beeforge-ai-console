@@ -24,6 +24,33 @@ try
     Assert(catalog.OriginalJson == original, "full store retained verbatim in memory");
     Assert(SHA256.HashData(File.ReadAllBytes(path)).SequenceEqual(before), "profile store not modified");
 
+    using (var gguf = new MemoryStream())
+    {
+        using (var writer = new BinaryWriter(gguf, Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(Encoding.ASCII.GetBytes("GGUF"));
+            writer.Write(3u);
+            writer.Write(42UL);
+            writer.Write(4UL);
+            WriteGgufString(writer, "general.architecture"); writer.Write(8u); WriteGgufString(writer, "qwen3");
+            WriteGgufString(writer, "qwen3.context_length"); writer.Write(4u); writer.Write(190000u);
+            WriteGgufString(writer, "qwen3.expert_count"); writer.Write(10u); writer.Write(128UL);
+            WriteGgufString(writer, "tokenizer.ggml.tokens"); writer.Write(9u); writer.Write(8u);
+            writer.Write(2UL); WriteGgufString(writer, "hello"); WriteGgufString(writer, "world");
+        }
+        gguf.Position = 0;
+        var info = GgufMetadataReader.Read(gguf);
+        Assert(info.Version == 3 && info.TensorCount == 42 && info.MetadataCount == 4, "GGUF header parsed");
+        Assert(info.Values["general.architecture"] == "qwen3" &&
+            info.Values["qwen3.context_length"] == "190000" &&
+            info.Values["qwen3.expert_count"] == "128", "GGUF architecture metadata parsed");
+        Assert(!info.Values.ContainsKey("tokenizer.ggml.tokens"), "large tokenizer arrays skipped");
+        gguf.SetLength(gguf.Length - 2);
+        gguf.Position = 0;
+        try { GgufMetadataReader.Read(gguf); throw new Exception("truncated GGUF was accepted"); }
+        catch (InvalidDataException) { }
+    }
+
     var migrationPath = Path.Combine(temp, "prepared-migration");
     var migration = ProfileSnapshotMigration.Prepare(path, migrationPath);
     Assert(File.ReadAllBytes(migration.BackupPath).SequenceEqual(File.ReadAllBytes(path)), "byte-exact backup");
@@ -119,4 +146,11 @@ finally
 static void Assert(bool condition, string name)
 {
     if (!condition) throw new Exception("Profile compatibility check failed: " + name);
+}
+
+static void WriteGgufString(BinaryWriter writer, string value)
+{
+    var bytes = Encoding.UTF8.GetBytes(value);
+    writer.Write((ulong)bytes.Length);
+    writer.Write(bytes);
 }

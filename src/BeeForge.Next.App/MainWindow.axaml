@@ -71,7 +71,8 @@
       <TabItem Header="Оптимизация">
         <StackPanel Margin="34,27" Spacing="14">
           <TextBlock Text="Оптимизация" FontSize="28" FontWeight="SemiBold" />
-          <TextBlock Text="GGUF, оценка VRAM и Auto Tune появятся после проверки точности чтения профилей и эквивалентности команд запуска." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="GGUF: только чтение заголовка выбранной модели, без загрузки весов. Оценка VRAM и Auto Tune появятся после отдельной проверки." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBox Text="{Binding ModelMetadataText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="360" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
         </StackPanel>
       </TabItem>
       <TabItem Header="AI Workspace">

@@ -15,6 +15,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private ProfileOption? _selectedProfile;
     private string _commandPreview = "Выберите профиль для просмотра аргументов запуска.";
     private string _runtimeStatusText = "Нажмите «Проверить состояние», чтобы получить данные из рабочего BeeForge.";
+    private string _modelMetadataText = "Выберите локальный профиль для просмотра GGUF.";
     private string _activeProfile = "Не выбран";
     private string _mode = "—";
     private bool _isRuntimeBusy;
@@ -31,7 +32,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Invoke-BeeForgeNextRuntime.ps1");
         if (storePath is not null && runtimeScript is not null && File.Exists(runtimeScript))
             _runtimeController = new LegacyRuntimeController(runtimeScript, storePath);
-        ProfileNames = catalog?.Profiles.Select(p => new ProfileOption(p.Id, p.Name, p.ConnectionMode)).ToArray()
+        ProfileNames = catalog?.Profiles.Select(p => new ProfileOption(p.Id, p.Name, p.ConnectionMode, p.ModelPath)).ToArray()
             ?? Array.Empty<ProfileOption>();
         ActiveProfile = catalog?.ActiveProfile?.Name ?? "Не выбран";
         Mode = catalog?.ActiveProfile?.ConnectionMode ?? "—";
@@ -69,6 +70,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _selectionCancellation?.Dispose();
             _selectionCancellation = new CancellationTokenSource();
             _ = UpdateCommandPreviewAsync(value, _selectionCancellation.Token);
+            _ = UpdateModelMetadataAsync(value, _selectionCancellation.Token);
         }
     }
 
@@ -76,6 +78,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _commandPreview;
         private set { _commandPreview = value; OnPropertyChanged(); }
+    }
+
+    public string ModelMetadataText
+    {
+        get => _modelMetadataText;
+        private set { _modelMetadataText = value; OnPropertyChanged(); }
     }
 
     public string RuntimeStatusText
@@ -254,6 +262,41 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private async Task UpdateModelMetadataAsync(ProfileOption? selected, CancellationToken cancellationToken)
+    {
+        if (selected is null || selected.Mode == "RemoteClient")
+        {
+            ModelMetadataText = "Для удалённой модели метаданные хранятся на основном ПК.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(selected.ModelPath) || !File.Exists(selected.ModelPath))
+        {
+            ModelMetadataText = "Файл GGUF этого профиля не найден на данном ПК.";
+            return;
+        }
+        ModelMetadataText = "Читаю заголовок GGUF без загрузки весов…";
+        try
+        {
+            var metadata = await Task.Run(() => GgufMetadataReader.Read(selected.ModelPath), cancellationToken);
+            if (cancellationToken.IsCancellationRequested) return;
+            var fields = metadata.Values.Select(pair => $"{pair.Key}: {pair.Value}");
+            var display = $"Файл: {Path.GetFileName(selected.ModelPath)} · GGUF v{metadata.Version} · " +
+                $"тензоров: {metadata.TensorCount} · размер: {metadata.FileSizeBytes / 1073741824.0:0.00} GiB" +
+                Environment.NewLine + string.Join(Environment.NewLine, fields);
+            Dispatcher.UIThread.Post(() => { if (!cancellationToken.IsCancellationRequested) ModelMetadataText = display; });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception)
+        {
+            if (cancellationToken.IsCancellationRequested) return;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!cancellationToken.IsCancellationRequested)
+                    ModelMetadataText = "Не удалось прочитать заголовок GGUF. Профиль и файл модели не изменены.";
+            });
+        }
+    }
+
     private static string? FindBeeForgeRoot()
     {
         var configured = Environment.GetEnvironmentVariable("BEEFORGE_ROOT");
@@ -271,7 +314,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-public sealed record ProfileOption(string Id, string Name, string Mode)
+public sealed record ProfileOption(string Id, string Name, string Mode, string ModelPath)
 {
     public override string ToString() => $"{Name} · {Mode}";
 }
