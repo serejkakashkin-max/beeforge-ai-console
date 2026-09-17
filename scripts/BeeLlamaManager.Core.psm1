@@ -760,7 +760,7 @@ function Connect-BeeRemoteProfile([string]$ProfileId) {
 
 function Get-BeeServerStatus {
     Initialize-BeeFolders
-    $status = [ordered]@{ Running=$false; Ready=$false; Remote=$false; BaseUrl=''; Pid=$null; Profile=''; Model=''; Context=$null; Uptime=''; VramUsedMiB=$null; VramTotalMiB=$null; GpuUtil=$null; GpuTempC=$null; RamUsedGiB=$null; RamTotalGiB=$null; RamAvailableGiB=$null; SharedVram='n/a'; PromptTPS=$null; DecodeTPS=$null; PromptTokens=$null; DecodedTokens=$null; SlotsBusy=$null; SlotsTotal=$null; Message='Stopped' }
+    $status = [ordered]@{ Running=$false; Ready=$false; Remote=$false; BaseUrl=''; Pid=$null; Profile=''; Model=''; Context=$null; Uptime=''; VramUsedMiB=$null; VramTotalMiB=$null; GpuUtil=$null; GpuTempC=$null; CpuUtil=$null; RamUsedGiB=$null; RamTotalGiB=$null; RamAvailableGiB=$null; SharedVram='n/a'; PromptTPS=$null; DecodeTPS=$null; PromptTokens=$null; DecodedTokens=$null; SlotsBusy=$null; SlotsTotal=$null; Message='Stopped' }
     try {
         $activeProfile = Get-BeeProfile
         if ((Get-BeeProfileConnectionMode $activeProfile) -eq 'RemoteClient') {
@@ -791,6 +791,7 @@ function Get-BeeServerStatus {
         $status.VramUsedMiB=[int]$gpu[0].Trim(); $status.VramTotalMiB=[int]$gpu[1].Trim(); $status.GpuUtil=[int]$gpu[2].Trim(); $status.GpuTempC=[int]$gpu[3].Trim()
     } catch {}
     try { $os=Get-CimInstance Win32_OperatingSystem; $status.RamUsedGiB=[math]::Round((($os.TotalVisibleMemorySize-$os.FreePhysicalMemory)/1MB),1); $status.RamTotalGiB=[math]::Round(($os.TotalVisibleMemorySize/1MB),1); $status.RamAvailableGiB=[math]::Round(($os.FreePhysicalMemory/1MB),1) } catch {}
+    try { $cpu=@(Get-CimInstance Win32_Processor | ForEach-Object { [double]$_.LoadPercentage }); if ($cpu.Count -gt 0) { $status.CpuUtil=[int][math]::Round(($cpu | Measure-Object -Average).Average) } } catch {}
     if ($status.Running) {
         $timing=Get-BeeLatestTiming
         $status.PromptTPS=$timing.PromptTPS; $status.DecodeTPS=$timing.DecodeTPS; $status.PromptTokens=$timing.PromptTokens; $status.DecodedTokens=$timing.DecodedTokens

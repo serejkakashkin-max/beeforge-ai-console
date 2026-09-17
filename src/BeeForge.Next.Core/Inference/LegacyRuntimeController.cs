@@ -28,7 +28,7 @@ public sealed class LegacyRuntimeController
             GetString(root, "Profile"), GetString(root, "Model"), GetString(root, "Message"),
             GetNullableInt(root, "Pid"), GetNullableDouble(root, "PromptTPS"), GetNullableDouble(root, "DecodeTPS"),
             GetNullableInt(root, "VramUsedMiB"), GetNullableInt(root, "VramTotalMiB"),
-            GetNullableInt(root, "GpuUtil"), GetNullableInt(root, "GpuTempC"),
+            GetNullableInt(root, "GpuUtil"), GetNullableInt(root, "GpuTempC"), GetNullableInt(root, "CpuUtil"),
             GetNullableDouble(root, "RamUsedGiB"), GetNullableDouble(root, "RamTotalGiB"), GetNullableDouble(root, "RamAvailableGiB"),
             GetNullableInt(root, "Context"), GetNullableInt(root, "PromptTokens"), GetNullableInt(root, "DecodedTokens"),
             GetNullableInt(root, "SlotsBusy"), GetNullableInt(root, "SlotsTotal"),
@@ -44,7 +44,7 @@ public sealed class LegacyRuntimeController
             GetString(root, "Profile"), GetString(root, "Model"), GetString(root, "Message"),
             GetNullableInt(root, "Pid"), GetNullableDouble(root, "PromptTPS"), GetNullableDouble(root, "DecodeTPS"),
             GetNullableInt(root, "VramUsedMiB"), GetNullableInt(root, "VramTotalMiB"),
-            GetNullableInt(root, "GpuUtil"), GetNullableInt(root, "GpuTempC"),
+            GetNullableInt(root, "GpuUtil"), GetNullableInt(root, "GpuTempC"), GetNullableInt(root, "CpuUtil"),
             GetNullableDouble(root, "RamUsedGiB"), GetNullableDouble(root, "RamTotalGiB"), GetNullableDouble(root, "RamAvailableGiB"),
             GetNullableInt(root, "Context"), GetNullableInt(root, "PromptTokens"), GetNullableInt(root, "DecodedTokens"),
             GetNullableInt(root, "SlotsBusy"), GetNullableInt(root, "SlotsTotal"),
@@ -118,6 +118,6 @@ public sealed class LegacyRuntimeController
 
 public sealed record LegacyRuntimeStatus(bool Running, bool Ready, bool Remote, bool Leased, string Profile,
     string Model, string Message, int? Pid, double? PromptTokensPerSecond, double? DecodeTokensPerSecond,
-    int? VramUsedMiB, int? VramTotalMiB, int? GpuUtilization, int? GpuTemperatureC,
+    int? VramUsedMiB, int? VramTotalMiB, int? GpuUtilization, int? GpuTemperatureC, int? CpuUtilization,
     double? RamUsedGiB, double? RamTotalGiB, double? RamAvailableGiB, int? ContextTokens,
     int? PromptTokens, int? DecodedTokens, int? SlotsBusy, int? SlotsTotal, string Uptime);

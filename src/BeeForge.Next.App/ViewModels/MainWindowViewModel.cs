@@ -545,7 +545,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public async Task RefreshLogAsync(string kind)
     {
         if (_logReader is null) { LogText = "Каталог журналов BeeForge не найден."; return; }
-        try { LogText = await Task.Run(() => _logReader.Read(kind)); }
+        try
+        {
+            var text = await Task.Run(() => _logReader.Read(kind));
+            LogText = kind == "server" ? CrashAdvisor.AppendAdvice(text) : text;
+        }
         catch (Exception) { LogText = "Не удалось прочитать журнал. Работа модели не затронута."; }
     }
 
@@ -702,6 +706,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var ram = status.RamUsedGiB is null || status.RamTotalGiB is null
             ? "RAM: —" : $"RAM: {status.RamUsedGiB:0.0} / {status.RamTotalGiB:0.0} GiB";
         var gpu = status.GpuUtilization is null ? "GPU: —" : $"GPU: {status.GpuUtilization}%";
+        var cpu = status.CpuUtilization is null ? "CPU: —" : $"CPU: {status.CpuUtilization}%";
         var temp = status.GpuTemperatureC is null ? "температура: —" : $"температура: {status.GpuTemperatureC} °C";
         var context = status.ContextTokens is null ? "контекст: —" : $"контекст: {status.ContextTokens:N0}";
         var slots = status.SlotsBusy is null || status.SlotsTotal is null ? "слоты: —" :
@@ -714,7 +719,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var predictedMiB = estimate.Estimate.TotalBytes / 1048576.0;
             comparison = $" · VRAM факт/оценка {actual / 1024.0:0.0}/{predictedMiB / 1024.0:0.0} GiB ({actual - predictedMiB:+0;-0;0} MiB)";
         }
-        return $"{vram} · {gpu} · {temp} · {ram} · {context} · {slots}{comparison} · время работы: {(string.IsNullOrWhiteSpace(status.Uptime) ? "—" : status.Uptime)}{tokens}";
+        return $"{vram} · {gpu} · {temp} · {cpu} · {ram} · {context} · {slots}{comparison} · время работы: {(string.IsNullOrWhiteSpace(status.Uptime) ? "—" : status.Uptime)}{tokens}";
     }
 
     public static MainWindowViewModel LoadFromLegacyStore()

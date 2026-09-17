@@ -291,6 +291,9 @@ try
         "Hugging Face URLs are encoded safely");
     try { HuggingFaceService.ResolveUrl("../bad", "x.gguf"); throw new Exception("invalid HF repo accepted"); }
     catch (ArgumentException) { }
+    var crashAdvice = CrashAdvisor.Analyze("CUDA error: out of memory\nunknown argument: --bad");
+    Assert(crashAdvice.Count == 2 && crashAdvice.Any(x => x.Contains("памяти", StringComparison.OrdinalIgnoreCase)) &&
+        crashAdvice.Any(x => x.Contains("--help", StringComparison.OrdinalIgnoreCase)), "crash advisor classifies bounded known failures");
     var capability = RuntimeCapabilityProbe.Compare(
         new[] { "--ctx-size", "32768", "--flash-attn", "on", "-mm", "model.gguf", "--custom-flag=value", "-1" },
         "Usage: llama-server [--ctx-size N] [--flash-attn MODE] [-mm FILE] --port N\n");
