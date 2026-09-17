@@ -47,8 +47,18 @@
       <TabItem Header="Модели">
         <StackPanel Margin="34,27" Spacing="16">
           <TextBlock Text="Профили модели" FontSize="28" FontWeight="SemiBold" />
-          <TextBlock Text="Список считан из старого profiles.json. Редактирование появится после тестов совместимости." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="Локальные и удалённые профили. Изменения сохраняются с резервной копией и применяются при следующем запуске модели." TextWrapping="Wrap" Foreground="#A6B9C6" />
           <ListBox ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" Background="#1B2B3C" BorderBrush="#365162" MinHeight="200" />
+          <WrapPanel>
+            <Button Content="Новый" Click="NewProfile_Click" Margin="0,0,8,8" />
+            <Button Content="Редактировать" Click="EditProfile_Click" Margin="0,0,8,8" />
+            <Button Content="Клонировать" Click="CloneProfile_Click" Margin="0,0,8,8" />
+            <Button Content="Импорт" Click="ImportProfile_Click" Margin="0,0,8,8" />
+            <Button Content="Экспорт" Click="ExportProfile_Click" Margin="0,0,8,8" />
+            <Button Content="Удалить" Click="DeleteProfile_Click" Margin="0,0,8,8" />
+            <Button Content="Обновить" Click="RefreshProfiles_Click" Margin="0,0,8,8" />
+          </WrapPanel>
+          <TextBlock Text="{Binding ProfileMessage}" TextWrapping="Wrap" Foreground="#B9EBD9" />
         </StackPanel>
       </TabItem>
       <TabItem Header="Inference">
@@ -67,7 +77,7 @@
           <TextBlock Text="{Binding RuntimeDetailsText}" TextWrapping="Wrap" Foreground="#A6B9C6" />
           <TextBlock Text="ПЛАН ЗАПУСКА · ТОЛЬКО ЧТЕНИЕ" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
           <TextBox Text="{Binding CommandPreview, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" FontSize="12" MinHeight="420" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
-          <TextBlock Text="Редактирование профиля остаётся в рабочей старой консоли до проверки паритета сохранения." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="Настройки профиля доступны в разделе «Модели»." TextWrapping="Wrap" Foreground="#A6B9C6" />
         </StackPanel>
       </TabItem>
       <TabItem Header="Оптимизация">
@@ -123,7 +133,27 @@
       <TabItem Header="Удалённый доступ">
         <StackPanel Margin="34,27" Spacing="14">
           <TextBlock Text="Удалённый доступ" FontSize="28" FontWeight="SemiBold" />
-          <TextBlock Text="Telegram и Tailscale RemoteClient остаются на существующем backend до отдельной регрессионной проверки." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="Действия используют существующий backend BeeForge. Удалённый доступ передаёт модель ноутбуку и блокирует локальные запросы; файлы проектов остаются на каждом устройстве." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <WrapPanel IsEnabled="{Binding CanUseServices}">
+            <Button Content="Состояние Tailscale" Tag="RemoteStatus" Click="Service_Click" Margin="0,0,8,8" />
+            <Button Content="Включить доступ" Tag="RemoteEnable" Click="Service_Click" Margin="0,0,8,8" />
+            <Button Content="Выключить доступ" Tag="RemoteDisable" Click="Service_Click" Margin="0,0,8,8" />
+            <Button Content="Команда для ноутбука" Tag="RemoteInstallCommand" Click="Service_Click" Margin="0,0,8,8" />
+          </WrapPanel>
+          <TextBlock Text="TELEGRAM" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
+          <WrapPanel IsEnabled="{Binding CanUseServices}">
+            <Button Content="Состояние бота" Tag="TelegramStatus" Click="Service_Click" Margin="0,0,8,8" />
+            <Button Content="Запустить бота" Tag="TelegramStart" Click="Service_Click" Margin="0,0,8,8" />
+            <Button Content="Остановить бота" Tag="TelegramStop" Click="Service_Click" Margin="0,0,8,8" />
+          </WrapPanel>
+          <TextBlock Text="ПРАВА И ПАМЯТЬ КОМАНДЫ" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
+          <WrapPanel IsEnabled="{Binding CanUseServices}">
+            <Button Content="Состояние прав" Tag="FullAccessStatus" Click="Service_Click" Margin="0,0,8,8" />
+            <Button Content="Полный доступ" Tag="FullAccessEnable" Click="Service_Click" Margin="0,0,8,8" />
+            <Button Content="Выключить полный доступ" Tag="FullAccessDisable" Click="Service_Click" Margin="0,0,8,8" />
+            <Button Content="Память проектов Serena" Tag="SerenaProjects" Click="Service_Click" Margin="0,0,8,8" />
+          </WrapPanel>
+          <TextBox Text="{Binding ServiceText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="300" />
         </StackPanel>
       </TabItem>
       <TabItem Header="Система">

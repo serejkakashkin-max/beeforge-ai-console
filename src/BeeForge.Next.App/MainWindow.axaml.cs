@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using BeeForge.Next.App.ViewModels;
 using BeeForge.Next.Core.Benchmarking;
 using Avalonia.Platform.Storage;
+using BeeForge.Next.Core.Workspace;
 
 namespace BeeForge.Next.App;
 
@@ -22,6 +23,115 @@ public partial class MainWindow : Window
     }
 
     private MainWindowViewModel? ViewModel => DataContext as MainWindowViewModel;
+
+    private async void Service_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } vm || sender is not Button { Tag: string tag } ||
+            !Enum.TryParse<ServiceAction>(tag, out var action)) return;
+        var explanation = action switch {
+            ServiceAction.RemoteEnable => "Модель будет предоставлена устройствам Tailscale. Локальная работа с моделью будет заблокирована до выключения удалённого доступа. Публичный доступ не включается.",
+            ServiceAction.RemoteDisable => "Удалённый доступ к модели будет выключен; локальная работа снова станет доступна. Подключённый ноутбук потеряет доступ.",
+            ServiceAction.FullAccessEnable => "Агенты смогут выполнять действия без дополнительных подтверждений. Назначенные каждому агенту MCP и skills остаются ограниченными его ролью.",
+            ServiceAction.FullAccessDisable => "Будет восстановлен режим разрешений до включения полного доступа.",
+            ServiceAction.TelegramStart => "Будет запущен существующий Telegram Bridge с сохранёнными настройками и автозапуском.",
+            ServiceAction.TelegramStop => "Telegram Bridge будет остановлен. Модель и OpenCode продолжат работать.",
+            _ => null
+        };
+        if (explanation is not null && !await new ConfirmRuntimeWindow("Подтвердить действие", explanation).ShowDialog<bool>(this)) return;
+        await vm.RunServiceAsync(action);
+    }
+
+    private void RefreshProfiles_Click(object? sender, RoutedEventArgs e) => ViewModel?.ReloadProfiles();
+
+    private async void EditProfile_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { SelectedProfile: { } selected } vm) return;
+        try
+        {
+            var snapshot = vm.ReadProfileCatalog();
+            var profile = snapshot.Profiles.Single(p => p.Id == selected.Id);
+            var edited = await new ProfileEditorWindow(profile.RawJson).ShowDialog<string?>(this);
+            if (edited is not null) vm.SaveProfile(snapshot, profile.Id, edited);
+        }
+        catch (Exception ex) { vm.SetProfileMessage(ex.Message); }
+    }
+
+    private async void NewProfile_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        try
+        {
+            var snapshot = vm.ReadProfileCatalog();
+            var basis = snapshot.Profiles.FirstOrDefault(p => p.Id == vm.SelectedProfile?.Id) ?? snapshot.Profiles.First();
+            var draft = System.Text.Json.Nodes.JsonNode.Parse(basis.RawJson)!.AsObject();
+            draft["name"] = "Новый профиль"; draft["alias"] = "new-model";
+            var edited = await new ProfileEditorWindow(draft.ToJsonString()).ShowDialog<string?>(this);
+            if (edited is not null) vm.AddProfile(snapshot, edited, false);
+        }
+        catch (Exception ex) { vm.SetProfileMessage(ex.Message); }
+    }
+
+    private void CloneProfile_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { SelectedProfile: { } selected } vm) return;
+        try
+        {
+            var snapshot = vm.ReadProfileCatalog();
+            vm.AddProfile(snapshot, snapshot.Profiles.Single(p => p.Id == selected.Id).RawJson, true);
+        }
+        catch (Exception ex) { vm.SetProfileMessage(ex.Message); }
+    }
+
+    private async void DeleteProfile_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { SelectedProfile: { } selected } vm) return;
+        try
+        {
+            var snapshot = vm.ReadProfileCatalog();
+            var dialog = new ConfirmRuntimeWindow("Удалить профиль?", $"Будет удалён профиль «{selected.Name}». Файлы модели останутся на диске. Предыдущее состояние профилей будет сохранено в резервной копии.");
+            if (await dialog.ShowDialog<bool>(this)) vm.DeleteProfile(snapshot, selected.Id);
+        }
+        catch (Exception ex) { vm.SetProfileMessage(ex.Message); }
+    }
+
+    private async void ImportProfile_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        try
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions {
+                Title = "Импорт профиля BeeForge", AllowMultiple = false,
+                FileTypeFilter = new[] { new FilePickerFileType("JSON") { Patterns = new[] { "*.json" } } } });
+            if (files.Count == 0) return;
+            await using var stream = await files[0].OpenReadAsync();
+            if (stream.Length > 1024 * 1024) throw new IOException("Файл профиля слишком большой.");
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+            var snapshot = vm.ReadProfileCatalog();
+            var edited = await new ProfileEditorWindow(json).ShowDialog<string?>(this);
+            if (edited is not null) vm.AddProfile(snapshot, edited, false);
+        }
+        catch (Exception ex) { vm.SetProfileMessage(ex.Message); }
+    }
+
+    private async void ExportProfile_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { SelectedProfile: { } selected } vm) return;
+        try
+        {
+            var profile = vm.ReadProfileCatalog().Profiles.Single(p => p.Id == selected.Id);
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions {
+                Title = "Экспорт профиля", SuggestedFileName = selected.Id + ".json",
+                FileTypeChoices = new[] { new FilePickerFileType("JSON") { Patterns = new[] { "*.json" } } } });
+            if (file is null) return;
+            await using var stream = await file.OpenWriteAsync();
+            stream.SetLength(0);
+            await using var writer = new StreamWriter(stream);
+            await writer.WriteAsync(profile.RawJson);
+            vm.SetProfileMessage("Профиль экспортирован.");
+        }
+        catch (Exception ex) { vm.SetProfileMessage(ex.Message); }
+    }
 
     private async void RefreshRuntime_Click(object? sender, RoutedEventArgs e)
     {

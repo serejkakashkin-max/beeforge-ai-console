@@ -22,6 +22,8 @@ benchmarks/*.json
 benchmarks/*.log
 benchmarks/next/
 *.before-tune-*.bak
+**/.profile-backups/
+**/.profile-save-*.tmp
 *.gguf
 *.safetensors
 *.onnx

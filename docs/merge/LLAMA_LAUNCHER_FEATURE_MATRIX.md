@@ -5,7 +5,7 @@ Reference: `pytraveler/LlamaServerLauncherAvalonia` commit `f52404637d51ec00e15e
 | Capability | Reference implementation | BeeForge today | BeeForge Next adoption / constraint |
 | --- | --- | --- | --- |
 | Avalonia shell, themes, MVVM | `App.axaml`, `MainWindow.axaml`, `ViewModels/` | WPF/PowerShell | Read-only preview installed alongside legacy; full parity pending |
-| Profiles and import/export | `ConfigurationService`, `ProfileInfo`, `MainViewModel` | BeeForge `profiles.json`, import/export UI | Legacy profiles listed with active selection and read-only command plan; editor/import/export pending |
+| Profiles and import/export | `ConfigurationService`, `ProfileInfo`, `MainViewModel` | BeeForge `profiles.json`, import/export UI | Next create/edit/clone/delete/import/export; unknown fields retained, exact-byte backup, stale-write rejection; GUI acceptance pending |
 | GGUF metadata/tensors/splits | `GgufMetadataService`, `ModelScanService` | Basic model-file picker | Planned after isolated parser tests |
 | VRAM prediction and actual comparison | `VramEstimator`, `VramPlan`, `VramComparison` | Live VRAM monitoring | Planned; extend to KVarN, MoE, hybrid attention and BeeLlama logs |
 | Model/MMProj pickers | `ModelPickerViewModel`, picker windows | Local pickers | Planned; preserve current paths |
@@ -22,6 +22,6 @@ Reference: `pytraveler/LlamaServerLauncherAvalonia` commit `f52404637d51ec00e15e
 | Crash advisor/process job | `ServerCrashAdvisor`, `WindowsProcessJob` | PID/ownership checks | Planned only after parity on process ownership |
 | Contextual offline help | `HelpService`, bundled docs | Tutorial/README | Planned in new shell |
 | llama-server MCP | `McpConfigService` | OpenCode MCP only | Planned as **separate** inference integration, disabled by default |
-| Telegram, Team Guard, Serena, Tailscale | Not provided by reference | Core BeeForge features | Preserve BeeForge services unchanged |
+| Telegram, Team Guard, Serena, Tailscale | Not provided by reference | Core BeeForge features | Existing services unchanged; Next allowlisted controls for Telegram start/stop/status, Tailscale access/installer command, Full Access and read-only Serena summaries. Settings editors and live end-to-end acceptance pending |
 
 Reference feature list: [upstream README](https://github.com/pytraveler/LlamaServerLauncherAvalonia). Before adapting source, inspect the specific file's provenance and retain the MIT notice described in `LICENSE_ATTRIBUTION.md`.

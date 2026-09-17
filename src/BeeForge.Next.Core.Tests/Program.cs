@@ -26,6 +26,27 @@ try
     Assert(catalog.OriginalJson == original, "full store retained verbatim in memory");
     Assert(SHA256.HashData(File.ReadAllBytes(path)).SequenceEqual(before), "profile store not modified");
 
+    var editablePath = Path.Combine(temp, "editable.json");
+    File.WriteAllText(editablePath, original, new UTF8Encoding(false));
+    var editor = new ProfileStoreEditor(editablePath);
+    var editedProfile = System.Text.Json.Nodes.JsonNode.Parse(catalog.Profiles[0].RawJson)!.AsObject();
+    editedProfile["name"] = "Изменённый профиль";
+    var editorBackup = editor.Save(original, "local", editedProfile.ToJsonString());
+    Assert(File.ReadAllBytes(editorBackup).SequenceEqual(Encoding.UTF8.GetBytes(original)), "profile edit keeps exact backup bytes");
+    var editedCatalog = LegacyProfileCatalog.Load(editablePath);
+    Assert(editedCatalog.ActiveProfileId == "local" && editedCatalog.LastGoodProfileId == "remote" &&
+        editedCatalog.Profiles[0].RawJson.Contains("unknownField", StringComparison.Ordinal), "profile edit retains IDs and unknown extensions");
+    try { editor.Save(original, "local", editedProfile.ToJsonString()); throw new Exception("stale editor replaced newer profile"); }
+    catch (IOException) { }
+    var copiedId = editor.Add(editedCatalog.OriginalJson, editedCatalog.Profiles[0].RawJson);
+    var copiedCatalog = LegacyProfileCatalog.Load(editablePath);
+    Assert(copiedCatalog.Profiles.Single(p => p.Id == copiedId).Alias == "Q2-copy" &&
+        copiedCatalog.Profiles.Count == 3, "cloning assigns fresh ID and unique alias");
+    editor.Delete(copiedCatalog.OriginalJson, "local");
+    var removedCatalog = LegacyProfileCatalog.Load(editablePath);
+    Assert(removedCatalog.ActiveProfileId == "remote" && removedCatalog.Profiles.Count == 2,
+        "profile deletion reassigns active ID like the legacy UI");
+
     var openCodeFixture = Path.Combine(temp, "opencode.json");
     File.WriteAllText(openCodeFixture, """
         {"model":"beellama/Q2","agent":{"team-lead":{"mode":"primary","model":"beellama/Q2","prompt":"SECRET_PROMPT_VALUE","disable":false},"qa-engineer":{"mode":"subagent","disable":true}},"mcp":{"serena":{"enabled":true,"command":["SECRET_MCP_VALUE"]},"docker":{"enabled":false}}}
@@ -229,6 +250,14 @@ try
     File.WriteAllText(templateCopy, original, new UTF8Encoding(false));
     runtime = new LegacyRuntimeController(runtimeScript, templateCopy);
     var remoteBefore = SHA256.HashData(File.ReadAllBytes(templateCopy));
+    var services = new LegacyServiceController(Path.Combine(repo.FullName, "scripts", "Invoke-BeeForgeNextServices.ps1"), templateCopy);
+    foreach (var action in new[] { ServiceAction.TelegramStart, ServiceAction.RemoteEnable, ServiceAction.RemoteDisable,
+        ServiceAction.RemoteInstallCommand, ServiceAction.FullAccessEnable })
+    {
+        try { await services.InvokeAsync(action, "remote"); throw new Exception("client or fixture mutated host services: " + action); }
+        catch (IOException) { }
+    }
+    Assert(SHA256.HashData(File.ReadAllBytes(templateCopy)).SequenceEqual(remoteBefore), "service guards preserve profile bytes");
     try { await runtime.StartAsync("remote"); throw new Exception("remote profile started local runtime"); }
     catch (InvalidDataException) { }
     try { await runtime.StopAsync("remote"); throw new Exception("remote profile stopped inference host"); }

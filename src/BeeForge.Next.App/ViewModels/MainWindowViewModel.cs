@@ -21,6 +21,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private CancellationTokenSource? _benchmarkCancellation;
     private readonly LegacyLogTailReader? _logReader;
     private readonly string? _openCodeConfigPath;
+    private readonly LegacyServiceController? _services;
+    private bool _servicesBusy;
+    private string _serviceText = "Выберите действие. Состояние читается из существующего BeeForge.";
+    public bool CanUseServices => !_servicesBusy && _services is not null;
+    public string ServiceText { get => _serviceText; private set { _serviceText = value; OnPropertyChanged(); } }
+
+    public async Task RunServiceAsync(ServiceAction action)
+    {
+        if (!CanUseServices) return;
+        _servicesBusy = true; OnPropertyChanged(nameof(CanUseServices));
+        ServiceText = "Выполняется…";
+        try
+        {
+            var result = await _services!.InvokeAsync(action, SelectedProfile?.Id);
+            ServiceText = System.Text.Json.JsonSerializer.Serialize(result, new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+            if (action is ServiceAction.RemoteEnable or ServiceAction.RemoteDisable) await RefreshRuntimeStatusAsync();
+        }
+        catch (Exception ex) { ServiceText = ex.Message; }
+        finally { _servicesBusy = false; OnPropertyChanged(nameof(CanUseServices)); }
+    }
     private CancellationTokenSource? _selectionCancellation;
     private ProfileOption? _selectedProfile;
     private string _commandPreview = "Выберите профиль для просмотра аргументов запуска.";
@@ -55,6 +75,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _runtimeController = new LegacyRuntimeController(runtimeScript, storePath);
         if (root is not null)
         {
+            if (storePath is not null) _services = new LegacyServiceController(Path.Combine(root, "scripts", "Invoke-BeeForgeNextServices.ps1"), storePath);
             _benchmarkStore = new BenchmarkRunStore(root);
             _benchmarkRunner = new StandardBenchmarkRunner(new HttpBenchmarkProbe(), _benchmarkStore);
         }
@@ -83,8 +104,53 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _mode;
         private set { _mode = value; OnPropertyChanged(); }
     }
-    public int ProfileCount { get; }
-    public IReadOnlyList<ProfileOption> ProfileNames { get; }
+    public int ProfileCount { get; private set; }
+    public IReadOnlyList<ProfileOption> ProfileNames { get; private set; }
+    private string _profileMessage = "Выберите профиль для редактирования или создайте новый.";
+    public string ProfileMessage { get => _profileMessage; private set { _profileMessage = value; OnPropertyChanged(); } }
+
+    public LegacyProfileCatalog ReadProfileCatalog() => LegacyProfileCatalog.Load(
+        _storePath ?? throw new IOException("Хранилище профилей не найдено."));
+
+    public void ReloadProfiles(string? selectedId = null)
+    {
+        try
+        {
+            var catalog = ReadProfileCatalog();
+            var selected = selectedId ?? SelectedProfile?.Id;
+            ProfileNames = catalog.Profiles.Select(p => new ProfileOption(p.Id, p.Name, p.ConnectionMode, p.ModelPath)).ToArray();
+            ProfileCount = ProfileNames.Count;
+            ActiveProfile = catalog.ActiveProfile?.Name ?? "Не выбран";
+            _activeProfileId = catalog.ActiveProfileId;
+            OnPropertyChanged(nameof(ProfileNames)); OnPropertyChanged(nameof(ProfileCount));
+            SelectedProfile = ProfileNames.FirstOrDefault(p => p.Id == selected) ?? ProfileNames.FirstOrDefault();
+            ProfileMessage = "Профили обновлены.";
+        }
+        catch (Exception ex) { ProfileMessage = ex.Message; }
+    }
+
+    public void SaveProfile(LegacyProfileCatalog snapshot, string id, string json)
+    {
+        new ProfileStoreEditor(snapshot.Path).Save(snapshot.OriginalJson, id, json);
+        ReloadProfiles(id);
+        ProfileMessage = "Профиль сохранён. Резервная копия создана; параметры вступят в силу при следующем запуске модели.";
+    }
+
+    public void AddProfile(LegacyProfileCatalog snapshot, string json, bool copyName)
+    {
+        var id = new ProfileStoreEditor(snapshot.Path).Add(snapshot.OriginalJson, json, copyName);
+        ReloadProfiles(id);
+        ProfileMessage = "Новый профиль сохранён.";
+    }
+
+    public void DeleteProfile(LegacyProfileCatalog snapshot, string id)
+    {
+        var next = new ProfileStoreEditor(snapshot.Path).Delete(snapshot.OriginalJson, id);
+        ReloadProfiles(next);
+        ProfileMessage = "Профиль удалён. Предыдущее состояние доступно в резервной копии.";
+    }
+
+    public void SetProfileMessage(string message) => ProfileMessage = message;
 
     public ProfileOption? SelectedProfile
     {
