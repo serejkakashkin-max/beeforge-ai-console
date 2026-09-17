@@ -45,7 +45,7 @@
         </ScrollViewer>
       </TabItem>
       <TabItem Header="Модели">
-        <StackPanel Margin="34,27" Spacing="16">
+        <ScrollViewer><StackPanel Margin="34,27" Spacing="16">
           <TextBlock Text="Профили модели" FontSize="28" FontWeight="SemiBold" />
           <TextBlock Text="Локальные и удалённые профили. Изменения сохраняются с резервной копией и применяются при следующем запуске модели." TextWrapping="Wrap" Foreground="#A6B9C6" />
           <ListBox ItemsSource="{Binding ProfileNames}" SelectedItem="{Binding SelectedProfile, Mode=TwoWay}" Background="#1B2B3C" BorderBrush="#365162" MinHeight="200" />
@@ -59,7 +59,19 @@
             <Button Content="Обновить" Click="RefreshProfiles_Click" Margin="0,0,8,8" />
           </WrapPanel>
           <TextBlock Text="{Binding ProfileMessage}" TextWrapping="Wrap" Foreground="#B9EBD9" />
-        </StackPanel>
+          <TextBlock Text="HUGGING FACE · GGUF" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBox Text="{Binding HfQuery, Mode=TwoWay}" Width="360" PlaceholderText="Поиск модели" />
+            <Button Content="Найти" Click="HfSearch_Click" IsEnabled="{Binding CanUseHf}" />
+            <Button Content="Файлы выбранного" Click="HfFiles_Click" IsEnabled="{Binding CanUseHf}" />
+            <Button Content="Скачать GGUF" Click="HfDownload_Click" IsEnabled="{Binding CanUseHf}" />
+          </StackPanel>
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+            <ListBox Grid.Column="0" ItemsSource="{Binding HfRepos}" SelectedItem="{Binding SelectedHfRepo, Mode=TwoWay}" MinHeight="150" MaxHeight="220" Background="#1B2B3C" />
+            <ListBox Grid.Column="1" ItemsSource="{Binding HfFiles}" SelectedItem="{Binding SelectedHfFile, Mode=TwoWay}" MinHeight="150" MaxHeight="220" Background="#1B2B3C" />
+          </Grid>
+          <TextBlock Text="{Binding HfStatus}" TextWrapping="Wrap" Foreground="#B9EBD9" />
+        </StackPanel></ScrollViewer>
       </TabItem>
       <TabItem Header="Inference">
         <StackPanel Margin="34,27" Spacing="14">

@@ -43,6 +43,17 @@ public partial class MainWindow : Window
 
     private void RefreshProfiles_Click(object? sender, RoutedEventArgs e) => ViewModel?.ReloadProfiles();
 
+    private async void HfSearch_Click(object? sender, RoutedEventArgs e) { if (ViewModel is { } vm) await vm.SearchHfAsync(); }
+    private async void HfFiles_Click(object? sender, RoutedEventArgs e) { if (ViewModel is { } vm) await vm.LoadHfFilesAsync(); }
+    private async void HfDownload_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { SelectedHfFile: not null } vm) return;
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Папка для GGUF", AllowMultiple = false });
+        if (folders.Count == 0) return;
+        var path = folders[0].TryGetLocalPath();
+        if (!string.IsNullOrWhiteSpace(path)) await vm.DownloadHfAsync(path);
+    }
+
     private async void EditProfile_Click(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is not { SelectedProfile: { } selected } vm) return;

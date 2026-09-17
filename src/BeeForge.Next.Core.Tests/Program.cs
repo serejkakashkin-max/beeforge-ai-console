@@ -286,6 +286,11 @@ try
         "offline help loads bundled runtime documentation");
     try { help.Read("../secret"); throw new Exception("unknown help topic accepted"); }
     catch (ArgumentException) { }
+    Assert(HuggingFaceService.SearchUrl("qwen 27b").Contains("qwen%2027b", StringComparison.Ordinal) &&
+        HuggingFaceService.ResolveUrl("org/repo", "folder/model Q4.gguf").Contains("model%20Q4.gguf", StringComparison.Ordinal),
+        "Hugging Face URLs are encoded safely");
+    try { HuggingFaceService.ResolveUrl("../bad", "x.gguf"); throw new Exception("invalid HF repo accepted"); }
+    catch (ArgumentException) { }
     var capability = RuntimeCapabilityProbe.Compare(
         new[] { "--ctx-size", "32768", "--flash-attn", "on", "-mm", "model.gguf", "--custom-flag=value", "-1" },
         "Usage: llama-server [--ctx-size N] [--flash-attn MODE] [-mm FILE] --port N\n");

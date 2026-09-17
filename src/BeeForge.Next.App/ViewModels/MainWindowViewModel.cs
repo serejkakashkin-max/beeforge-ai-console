@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 using Avalonia.Threading;
 using BeeForge.Next.Core.Benchmarking;
@@ -25,6 +26,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly RuntimeCatalog? _runtimeCatalog;
     private readonly RuntimeInstaller? _runtimeInstaller;
     private readonly OfflineHelpService? _help;
+    private readonly HuggingFaceService _hf = new();
     private bool _servicesBusy;
     private string _serviceText = "Выберите действие. Состояние читается из существующего BeeForge.";
     private string _runtimeCatalogText = "Установленные runtime ещё не проверены.";
@@ -74,6 +76,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _isRuntimeBusy;
     private bool _leaseKnown;
     private bool _isLeased;
+    private bool _hfBusy;
+    private string _hfQuery = "Qwen GGUF";
+    private HfRepo? _selectedHfRepo;
+    private HfFile? _selectedHfFile;
+    private string _hfStatus = "Найдите GGUF-модель на Hugging Face.";
+    public ObservableCollection<HfRepo> HfRepos { get; } = new();
+    public ObservableCollection<HfFile> HfFiles { get; } = new();
+    public string HfQuery { get => _hfQuery; set { _hfQuery = value; OnPropertyChanged(); } }
+    public HfRepo? SelectedHfRepo { get => _selectedHfRepo; set { _selectedHfRepo = value; OnPropertyChanged(); } }
+    public HfFile? SelectedHfFile { get => _selectedHfFile; set { _selectedHfFile = value; OnPropertyChanged(); } }
+    public string HfStatus { get => _hfStatus; private set { _hfStatus = value; OnPropertyChanged(); } }
+    public bool CanUseHf => !_hfBusy;
 
     private MainWindowViewModel(string status, LegacyProfileCatalog? catalog,
         string? storePath, string? launchPlanScript, string? root)
@@ -109,6 +123,50 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public async Task SearchHfAsync()
+    {
+        if (_hfBusy) return;
+        _hfBusy = true; OnPropertyChanged(nameof(CanUseHf)); HfStatus = "Поиск…";
+        try
+        {
+            var results = await _hf.SearchAsync(HfQuery);
+            HfRepos.Clear(); foreach (var item in results) HfRepos.Add(item);
+            HfFiles.Clear(); SelectedHfRepo = HfRepos.FirstOrDefault(); SelectedHfFile = null;
+            HfStatus = results.Count == 0 ? "GGUF-репозитории не найдены." : $"Найдено: {results.Count}. Выберите репозиторий и загрузите список файлов.";
+        }
+        catch (Exception) { HfStatus = "Поиск Hugging Face не удался. Проверьте сеть или доступ к репозиторию."; }
+        finally { _hfBusy = false; OnPropertyChanged(nameof(CanUseHf)); }
+    }
+
+    public async Task LoadHfFilesAsync()
+    {
+        if (_hfBusy || SelectedHfRepo is null) return;
+        _hfBusy = true; OnPropertyChanged(nameof(CanUseHf)); HfStatus = "Читаю список GGUF…";
+        try
+        {
+            var files = await _hf.ListGgufAsync(SelectedHfRepo.Id);
+            HfFiles.Clear(); foreach (var item in files) HfFiles.Add(item);
+            SelectedHfFile = HfFiles.FirstOrDefault(); HfStatus = $"GGUF-файлов: {files.Count}.";
+        }
+        catch (Exception) { HfStatus = "Не удалось получить список файлов. Для gated-модели задайте HF_TOKEN локально."; }
+        finally { _hfBusy = false; OnPropertyChanged(nameof(CanUseHf)); }
+    }
+
+    public async Task DownloadHfAsync(string directory)
+    {
+        if (_hfBusy || SelectedHfRepo is null || SelectedHfFile is null) return;
+        _hfBusy = true; OnPropertyChanged(nameof(CanUseHf));
+        var progress = new Progress<HfDownloadProgress>(p => HfStatus = $"Загрузка {SelectedHfFile.Path}: {p.Percent:0.0}% · {p.BytesDone / 1048576.0:0} MiB");
+        try
+        {
+            var path = await _hf.DownloadAsync(SelectedHfRepo.Id, SelectedHfFile, directory, progress);
+            HfStatus = "Готово: " + path;
+        }
+        catch (OperationCanceledException) { HfStatus = "Загрузка остановлена; .part сохранён для продолжения."; }
+        catch (Exception) { HfStatus = "Загрузка не завершилась; частичный файл сохранён для продолжения."; }
+        finally { _hfBusy = false; OnPropertyChanged(nameof(CanUseHf)); }
+    }
 
     public void ShowHelp(string topic)
     {
