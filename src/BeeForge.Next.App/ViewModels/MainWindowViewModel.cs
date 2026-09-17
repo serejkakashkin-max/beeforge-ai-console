@@ -140,8 +140,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set { _teamText = value; OnPropertyChanged(); }
     }
 
-    public string BenchmarkInputText { get; set; } = "4096";
-    public string BenchmarkOutputText { get; set; } = "256";
+    private string _benchmarkInputText = "4096";
+    private string _benchmarkOutputText = "256";
+    public string BenchmarkInputText
+    {
+        get => _benchmarkInputText;
+        set { _benchmarkInputText = value; OnPropertyChanged(); }
+    }
+    public string BenchmarkOutputText
+    {
+        get => _benchmarkOutputText;
+        set { _benchmarkOutputText = value; OnPropertyChanged(); }
+    }
+    public void SetBenchmarkPreset(string preset)
+    {
+        (BenchmarkInputText, BenchmarkOutputText) = preset switch
+        {
+            "short" => ("512", "128"),
+            "long" => ("32768", "256"),
+            _ => ("4096", "256")
+        };
+    }
     public string BenchmarkTimeoutText { get; set; } = "900";
     public string BenchmarkRepeatsText { get; set; } = "3";
     public IReadOnlyList<string> OptimizationObjectives { get; } =
@@ -237,10 +256,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public Task RefreshBenchmarkStatusAsync()
     {
-        if (_benchmarkStore is null || IsBenchmarkBusy || SelectedProfile is null) return Task.CompletedTask;
+        if (_benchmarkStore is null || IsBenchmarkBusy) return Task.CompletedTask;
         try
         {
-            var runs = _benchmarkStore.Load(SelectedProfile.Id, 20);
+            var runs = _benchmarkStore.Load(limit: 50);
             BenchmarkRunOptions = runs.Select(run => new BenchmarkRunOption(run)).ToArray();
             var newest = runs.FirstOrDefault();
             var previous = newest is null ? null : runs.Skip(1).FirstOrDefault(run =>

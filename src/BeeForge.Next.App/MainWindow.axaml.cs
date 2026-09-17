@@ -77,6 +77,10 @@ public partial class MainWindow : Window
         if (ViewModel is { } vm) await vm.RefreshBenchmarkStatusAsync();
     }
 
+    private void PresetShort_Click(object? sender, RoutedEventArgs e) => ViewModel?.SetBenchmarkPreset("short");
+    private void PresetStandard_Click(object? sender, RoutedEventArgs e) => ViewModel?.SetBenchmarkPreset("standard");
+    private void PresetLong_Click(object? sender, RoutedEventArgs e) => ViewModel?.SetBenchmarkPreset("long");
+
     private async void StartBenchmark_Click(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is not { CanRunBenchmark: true, SelectedProfile: { } selected } vm) return;

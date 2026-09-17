@@ -64,6 +64,9 @@ try
         "benchmark discards warmup and computes repeated metrics");
     Assert(benchmarkStore.Load("local").Single().Id == benchmarkRun.Id,
         "benchmark history survives reload");
+    await benchmarkStore.SaveAsync(benchmarkRun with { Id = "other-profile", ProfileId = "other" });
+    Assert(benchmarkStore.Load(limit: 10).Count == 2 && benchmarkStore.Load("local").Count == 1,
+        "benchmark comparison can include other profiles without mixing profile folders");
     var comparisonRun = benchmarkRun with { Id = "comparison2", ProfileName = "Test|Profile",
         PrefillTokensPerSecond = 30, DecodeTokensPerSecond = 60 };
     var comparison = BenchmarkComparisonReport.Render(new[] { comparisonRun, benchmarkRun });
