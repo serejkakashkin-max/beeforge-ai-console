@@ -27,6 +27,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly RuntimeInstaller? _runtimeInstaller;
     private readonly OfflineHelpService? _help;
     private readonly HuggingFaceService _hf = new();
+    private readonly ScenarioStore? _scenarioStore;
     private bool _servicesBusy;
     private string _serviceText = "Выберите действие. Состояние читается из существующего BeeForge.";
     private string _runtimeCatalogText = "Установленные runtime ещё не проверены.";
@@ -89,6 +90,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public HfFile? SelectedHfFile { get => _selectedHfFile; set { _selectedHfFile = value; OnPropertyChanged(); } }
     public string HfStatus { get => _hfStatus; private set { _hfStatus = value; OnPropertyChanged(); } }
     public bool CanUseHf => !_hfBusy;
+    public ObservableCollection<BeeScenario> Scenarios { get; } = new();
+    private BeeScenario? _selectedScenario;
+    public BeeScenario? SelectedScenario { get => _selectedScenario; set { _selectedScenario = value; OnPropertyChanged(); } }
 
     private MainWindowViewModel(string status, LegacyProfileCatalog? catalog,
         string? storePath, string? launchPlanScript, string? root)
@@ -109,6 +113,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _runtimeCatalog = new RuntimeCatalog(root);
             _runtimeInstaller = new RuntimeInstaller(root);
             _help = new OfflineHelpService(root);
+            _scenarioStore = new ScenarioStore(root);
         }
         if (_runtimeController is not null && launchPlanScript is not null)
             _autoTuner = new IsolatedAutoTuner(launchPlanScript, _runtimeController);
@@ -121,9 +126,39 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ProfileCount = ProfileNames.Count;
         SelectedProfile = ProfileNames.FirstOrDefault(p => p.Id == catalog?.ActiveProfileId)
             ?? ProfileNames.FirstOrDefault();
+        ReloadScenarios();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public void ReloadScenarios()
+    {
+        Scenarios.Clear();
+        if (_scenarioStore is null) return;
+        try { foreach (var scenario in _scenarioStore.Load()) Scenarios.Add(scenario); }
+        catch { }
+        SelectedScenario ??= Scenarios.FirstOrDefault();
+    }
+
+    public void AddScenario(string name, IReadOnlyList<string> profileIds)
+    {
+        if (_scenarioStore is null) return;
+        var scenario = _scenarioStore.Add(name, profileIds);
+        ReloadScenarios(); SelectedScenario = Scenarios.FirstOrDefault(x => x.Id == scenario.Id);
+    }
+
+    public void DeleteSelectedScenario()
+    {
+        if (_scenarioStore is null || SelectedScenario is null) return;
+        _scenarioStore.Delete(SelectedScenario.Id); SelectedScenario = null; ReloadScenarios();
+    }
+
+    public void SelectScenarioFirstProfile()
+    {
+        var id = SelectedScenario?.ProfileIds.FirstOrDefault();
+        if (id is null) return;
+        SelectedProfile = ProfileNames.FirstOrDefault(x => x.Id == id) ?? SelectedProfile;
+    }
 
     public async Task SearchHfAsync()
     {

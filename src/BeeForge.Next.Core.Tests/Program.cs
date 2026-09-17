@@ -294,6 +294,11 @@ try
     var crashAdvice = CrashAdvisor.Analyze("CUDA error: out of memory\nunknown argument: --bad");
     Assert(crashAdvice.Count == 2 && crashAdvice.Any(x => x.Contains("памяти", StringComparison.OrdinalIgnoreCase)) &&
         crashAdvice.Any(x => x.Contains("--help", StringComparison.OrdinalIgnoreCase)), "crash advisor classifies bounded known failures");
+    var scenarioRoot = Path.Combine(temp, "scenario-root"); Directory.CreateDirectory(Path.Combine(scenarioRoot, "config"));
+    var scenarioStore = new ScenarioStore(scenarioRoot);
+    var scenario = scenarioStore.Add("Coding", new[] { "one", "two", "one" });
+    Assert(scenarioStore.Load().Single().ProfileIds.SequenceEqual(new[] { "one", "two" }), "scenario store preserves ordered distinct profiles");
+    scenarioStore.Delete(scenario.Id); Assert(scenarioStore.Load().Count == 0, "scenario deletion");
     var capability = RuntimeCapabilityProbe.Compare(
         new[] { "--ctx-size", "32768", "--flash-attn", "on", "-mm", "model.gguf", "--custom-flag=value", "-1" },
         "Usage: llama-server [--ctx-size N] [--flash-attn MODE] [-mm FILE] --port N\n");

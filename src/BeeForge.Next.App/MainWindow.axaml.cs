@@ -54,6 +54,15 @@ public partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(path)) await vm.DownloadHfAsync(path);
     }
 
+    private async void NewScenario_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        var draft = await new ScenarioEditorWindow(vm.ProfileNames).ShowDialog<ScenarioDraft?>(this);
+        if (draft is not null) vm.AddScenario(draft.Name, draft.ProfileIds);
+    }
+    private void DeleteScenario_Click(object? sender, RoutedEventArgs e) => ViewModel?.DeleteSelectedScenario();
+    private void SelectScenarioProfile_Click(object? sender, RoutedEventArgs e) => ViewModel?.SelectScenarioFirstProfile();
+
     private async void EditProfile_Click(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is not { SelectedProfile: { } selected } vm) return;

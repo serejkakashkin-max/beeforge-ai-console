@@ -71,6 +71,13 @@
             <ListBox Grid.Column="1" ItemsSource="{Binding HfFiles}" SelectedItem="{Binding SelectedHfFile, Mode=TwoWay}" MinHeight="150" MaxHeight="220" Background="#1B2B3C" />
           </Grid>
           <TextBlock Text="{Binding HfStatus}" TextWrapping="Wrap" Foreground="#B9EBD9" />
+          <TextBlock Text="СЦЕНАРИИ · БЕЗ АВТОЗАПУСКА" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
+          <ListBox ItemsSource="{Binding Scenarios}" SelectedItem="{Binding SelectedScenario, Mode=TwoWay}" MinHeight="90" MaxHeight="150" Background="#1B2B3C" />
+          <WrapPanel>
+            <Button Content="Новый сценарий" Click="NewScenario_Click" Margin="0,0,8,8" />
+            <Button Content="Выбрать первый профиль" Click="SelectScenarioProfile_Click" Margin="0,0,8,8" />
+            <Button Content="Удалить сценарий" Click="DeleteScenario_Click" Margin="0,0,8,8" />
+          </WrapPanel>
         </StackPanel></ScrollViewer>
       </TabItem>
       <TabItem Header="Inference">
