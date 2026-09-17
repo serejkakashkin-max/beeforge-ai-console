@@ -760,7 +760,7 @@ function Connect-BeeRemoteProfile([string]$ProfileId) {
 
 function Get-BeeServerStatus {
     Initialize-BeeFolders
-    $status = [ordered]@{ Running=$false; Ready=$false; Remote=$false; BaseUrl=''; Pid=$null; Profile=''; Model=''; Context=$null; Uptime=''; VramUsedMiB=$null; VramTotalMiB=$null; GpuUtil=$null; RamUsedGiB=$null; RamTotalGiB=$null; RamAvailableGiB=$null; SharedVram='n/a'; PromptTPS=$null; DecodeTPS=$null; PromptTokens=$null; DecodedTokens=$null; Message='Stopped' }
+    $status = [ordered]@{ Running=$false; Ready=$false; Remote=$false; BaseUrl=''; Pid=$null; Profile=''; Model=''; Context=$null; Uptime=''; VramUsedMiB=$null; VramTotalMiB=$null; GpuUtil=$null; GpuTempC=$null; RamUsedGiB=$null; RamTotalGiB=$null; RamAvailableGiB=$null; SharedVram='n/a'; PromptTPS=$null; DecodeTPS=$null; PromptTokens=$null; DecodedTokens=$null; Message='Stopped' }
     try {
         $activeProfile = Get-BeeProfile
         if ((Get-BeeProfileConnectionMode $activeProfile) -eq 'RemoteClient') {
@@ -787,8 +787,8 @@ function Get-BeeServerStatus {
         }
     }
     try {
-        $gpu = (& nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits 2>$null | Select-Object -First 1) -split ','
-        $status.VramUsedMiB=[int]$gpu[0].Trim(); $status.VramTotalMiB=[int]$gpu[1].Trim(); $status.GpuUtil=[int]$gpu[2].Trim()
+        $gpu = (& nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader,nounits 2>$null | Select-Object -First 1) -split ','
+        $status.VramUsedMiB=[int]$gpu[0].Trim(); $status.VramTotalMiB=[int]$gpu[1].Trim(); $status.GpuUtil=[int]$gpu[2].Trim(); $status.GpuTempC=[int]$gpu[3].Trim()
     } catch {}
     try { $os=Get-CimInstance Win32_OperatingSystem; $status.RamUsedGiB=[math]::Round((($os.TotalVisibleMemorySize-$os.FreePhysicalMemory)/1MB),1); $status.RamTotalGiB=[math]::Round(($os.TotalVisibleMemorySize/1MB),1); $status.RamAvailableGiB=[math]::Round(($os.FreePhysicalMemory/1MB),1) } catch {}
     if ($status.Running) {
