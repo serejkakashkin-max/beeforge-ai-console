@@ -67,7 +67,7 @@ try
     try { _ = HttpBenchmarkProbe.CompletionUrl(new Uri("http://example.com/v1")); throw new Exception("public HTTP benchmark accepted"); }
     catch (ArgumentException) { }
     var tuningCandidates = AutoTunePlanner.Candidates(catalog.Profiles[0].RawJson);
-    Assert(tuningCandidates.Count is >= 3 and <= 5 && tuningCandidates[0].Name == "Исходные",
+    Assert(tuningCandidates.Count is >= 3 and <= 6 && tuningCandidates[0].Name == "Исходные",
         "bounded auto-tune trial plan includes baseline");
     var trialJson = AutoTunePlanner.CreateTrialProfileJson(catalog.Profiles[0].RawJson, tuningCandidates[1], 29876);
     Assert(trialJson.Contains("\"port\":29876", StringComparison.Ordinal) &&
@@ -81,6 +81,12 @@ try
         new AutoTuneTrial(tuningCandidates[0], 100, 100, null),
         new AutoTuneTrial(tuningCandidates[1], 130, 130, null) });
     Assert(gain.Suggested == tuningCandidates[1], "optimizer selects verified improvement");
+    var objectiveTrials = new[] {
+        new AutoTuneTrial(tuningCandidates[0], 100, 100, null),
+        new AutoTuneTrial(tuningCandidates[1], 120, 96, null) };
+    Assert(AutoTuneResult.FromTrials(objectiveTrials, OptimizationObjective.Prefill).Suggested == tuningCandidates[1] &&
+        AutoTuneResult.FromTrials(objectiveTrials, OptimizationObjective.Decode).Suggested is null,
+        "optimizer respects PP/TG objective");
     var tuneStorePath = Path.Combine(temp, "tune-profiles.json");
     File.WriteAllText(tuneStorePath, original, new UTF8Encoding(false));
     var tunedId = AutoTuneProfileCreator.CreateCopy(tuneStorePath, "local",

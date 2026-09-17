@@ -92,7 +92,11 @@
           <TextBlock Text="ИСТОРИЯ ПО ВЫБРАННОМУ ПРОФИЛЮ" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
           <TextBox Text="{Binding BenchmarkHistoryText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="150" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
           <TextBlock Text="АВТОПОДБОР ПАРАМЕТРОВ" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
-          <TextBlock Text="После остановки локальной модели BeeForge проверит исходный профиль и несколько вариантов batch, ubatch, потоков и Flash Attention. Каждый вариант запускается временно, результаты сравниваются; рабочий профиль не перезаписывается." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="После остановки локальной модели BeeForge проверит исходный профиль и варианты batch, ubatch, потоков, batch-потоков и Flash Attention. Каждый вариант запускается временно, результаты сравниваются; рабочий профиль не перезаписывается." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <TextBlock Text="Цель:" VerticalAlignment="Center" Foreground="#A6B9C6" />
+            <ComboBox ItemsSource="{Binding OptimizationObjectives}" SelectedItem="{Binding SelectedOptimizationObjective, Mode=TwoWay}" Width="185" />
+          </StackPanel>
           <StackPanel Orientation="Horizontal" Spacing="9">
             <Button Content="Подобрать настройки" Click="AutoTune_Click" IsEnabled="{Binding CanAutoTune}" Background="#176E68" Foreground="White" Padding="14,9" />
             <Button Content="Сохранить как новый профиль" Click="SaveAutoTune_Click" IsEnabled="{Binding CanSaveTune}" Background="#294455" Foreground="#EAF2F7" Padding="14,9" />

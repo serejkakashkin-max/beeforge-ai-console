@@ -143,6 +143,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string BenchmarkOutputText { get; set; } = "256";
     public string BenchmarkTimeoutText { get; set; } = "900";
     public string BenchmarkRepeatsText { get; set; } = "3";
+    public IReadOnlyList<string> OptimizationObjectives { get; } =
+        new[] { "Баланс PP/TG", "Максимум PP", "Максимум TG" };
+    public string SelectedOptimizationObjective { get; set; } = "Баланс PP/TG";
     public string BenchmarkHistoryText
     {
         get => _benchmarkHistoryText;
@@ -190,7 +193,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var progress = new Progress<string>(message => BenchmarkStatusText = message);
-            _tuneResult = await _autoTuner.RunAsync(profile.Id, profile.RawJson,
+            var objective = SelectedOptimizationObjective switch
+            {
+                "Максимум PP" => OptimizationObjective.Prefill,
+                "Максимум TG" => OptimizationObjective.Decode,
+                _ => OptimizationObjective.Balanced
+            };
+            _tuneResult = await _autoTuner.RunAsync(profile.Id, profile.RawJson, objective,
                 progress, _benchmarkCancellation.Token);
             var lines = _tuneResult.Trials.Select(t => t.Error is null
                 ? $"{t.Candidate.Name}: PP {t.Prefill:0.0}, TG {t.Decode:0.0} tok/s"

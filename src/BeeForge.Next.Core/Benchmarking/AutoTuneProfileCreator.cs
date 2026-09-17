@@ -25,6 +25,7 @@ public static class AutoTuneProfileCreator
         clone["batch"] = candidate.Batch;
         clone["ubatch"] = candidate.UBatch;
         clone["threads"] = candidate.Threads;
+        clone["threadsBatch"] = candidate.ThreadsBatch;
         clone["flashAttention"] = candidate.FlashAttention;
         profiles.Add(clone);
         var fullPath = Path.GetFullPath(storePath);

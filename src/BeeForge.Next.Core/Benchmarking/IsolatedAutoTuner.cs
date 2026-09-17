@@ -22,7 +22,7 @@ public sealed class IsolatedAutoTuner
         _probe = probe ?? new HttpBenchmarkProbe();
     }
 
-    public async Task<AutoTuneResult> RunAsync(string profileId, string profileJson,
+    public async Task<AutoTuneResult> RunAsync(string profileId, string profileJson, OptimizationObjective objective,
         IProgress<string>? progress, CancellationToken cancellationToken)
     {
         var candidates = AutoTunePlanner.Candidates(profileJson);
@@ -47,7 +47,7 @@ public sealed class IsolatedAutoTuner
                 if (trials.Count == 1) break; // No trustworthy baseline.
             }
         }
-        var provisional = AutoTuneResult.FromTrials(trials);
+        var provisional = AutoTuneResult.FromTrials(trials, objective);
         if (provisional.Suggested is null) return provisional;
         // Re-run both candidates after the search. A one-off spike must not
         // generate a production profile recommendation.
@@ -68,7 +68,7 @@ public sealed class IsolatedAutoTuner
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) { confirmation.Add(new AutoTuneTrial(candidate, 0, 0, ex.GetType().Name)); }
         }
-        var confirmed = AutoTuneResult.FromTrials(confirmation);
+        var confirmed = AutoTuneResult.FromTrials(confirmation, objective);
         return confirmed.Suggested is null ? new AutoTuneResult(trials.Concat(confirmation).ToArray(), null, 0)
             : new AutoTuneResult(trials.Concat(confirmation).ToArray(), confirmed.Suggested,
                 confirmed.ImprovementPercent);
