@@ -18,6 +18,9 @@ public static class AutoTunePlanner
         var modelLayerCount = Read(root, "modelLayerCount", 0);
         var cpuMoeLayers = Read(root, "cpuMoeLayers", 0);
         var baseline = new AutoTuneCandidate("Исходные", batch, ubatch, threads, threadsBatch, flash);
+        if (batch is < 128 or > 8192 || ubatch is < 64 or > 8192 || ubatch > batch ||
+            threads is < 1 or > 128 || threadsBatch is < 1 or > 128)
+            throw new InvalidDataException("Исходный профиль вне поддерживаемого диапазона автоподбора. Его параметры не будут подменены.");
         var candidates = new List<AutoTuneCandidate>
         {
             baseline,
@@ -39,7 +42,8 @@ public static class AutoTunePlanner
             candidates.Add(baseline with { Name = "Меньше CPU MoE", CpuMoeLayers = cpuMoeLayers - 1 });
         else if (Read(root, "moeLayerCount", 0) > 0)
             candidates.Add(baseline with { Name = "Один CPU MoE", CpuMoeLayers = 1 });
-        return candidates.Where(c => c.Batch is >= 128 and <= 8192 && c.UBatch is >= 64 and <= 8192 &&
+        var quantizedKv = new[] { "kvK", "kvV" }.Any(k => root[k]?.ToString() is { } s && s is not ("f16" or "f32" or "bf16"));
+        return candidates.Where(c => (!quantizedKv || c.FlashAttention == flash) && c.Batch is >= 128 and <= 8192 && c.UBatch is >= 64 and <= 8192 &&
             c.UBatch <= c.Batch && c.Threads is >= 1 and <= 128 && c.ThreadsBatch is >= 1 and <= 128)
             .DistinctBy(c => (c.Batch, c.UBatch, c.Threads, c.ThreadsBatch, c.FlashAttention,
                 c.GpuLayers, c.CpuMoeLayers)).ToArray();

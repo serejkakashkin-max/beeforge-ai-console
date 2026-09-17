@@ -24,13 +24,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LegacyServiceController? _services;
     private bool _servicesBusy;
     private string _serviceText = "Выберите действие. Состояние читается из существующего BeeForge.";
-    public bool CanUseServices => !_servicesBusy && _services is not null;
+    public bool CanUseServices => !_servicesBusy && !IsBenchmarkBusy && !IsRuntimeBusy && _services is not null;
     public string ServiceText { get => _serviceText; private set { _serviceText = value; OnPropertyChanged(); } }
 
     public async Task RunServiceAsync(ServiceAction action)
     {
         if (!CanUseServices) return;
-        _servicesBusy = true; OnPropertyChanged(nameof(CanUseServices));
+        _servicesBusy = true; NotifyActionAvailability();
         ServiceText = "Выполняется…";
         try
         {
@@ -39,7 +39,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             if (action is ServiceAction.RemoteEnable or ServiceAction.RemoteDisable) await RefreshRuntimeStatusAsync();
         }
         catch (Exception ex) { ServiceText = ex.Message; }
-        finally { _servicesBusy = false; OnPropertyChanged(nameof(CanUseServices)); }
+        finally { _servicesBusy = false; NotifyActionAvailability(); }
+    }
+
+    private void NotifyActionAvailability()
+    {
+        foreach (var name in new[] { nameof(CanUseServices), nameof(CanControlLocal), nameof(CanConnectRemote),
+            nameof(CanRunBenchmark), nameof(CanAutoTune) }) OnPropertyChanged(name);
     }
     private CancellationTokenSource? _selectionCancellation;
     private ProfileOption? _selectedProfile;
@@ -253,6 +259,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set
         {
             _isBenchmarkBusy = value;
+            NotifyActionAvailability();
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanRunBenchmark));
             OnPropertyChanged(nameof(CanStopBenchmark));
@@ -261,13 +268,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(CanSaveTune));
         }
     }
-    public bool CanRunBenchmark => !IsBenchmarkBusy && !IsRuntimeBusy && _runtimeReady &&
+    public bool CanRunBenchmark => !IsBenchmarkBusy && !IsRuntimeBusy && !_servicesBusy && _runtimeReady &&
         !_isLeased && SelectedProfile?.Id == _activeProfileId &&
         SelectedProfile?.Mode == "LocalHost" && _benchmarkRunner is not null;
     public bool CanStopBenchmark => IsBenchmarkBusy && _benchmarkCancellation is not null;
     public bool CanRefreshBenchmark => !IsBenchmarkBusy && _benchmarkStore is not null;
     public void SetBenchmarkMessage(string message) => BenchmarkStatusText = message;
-    public bool CanAutoTune => !IsBenchmarkBusy && !IsRuntimeBusy && _leaseKnown && !_isLeased &&
+    public bool CanAutoTune => !IsBenchmarkBusy && !IsRuntimeBusy && !_servicesBusy && _leaseKnown && !_isLeased &&
         !_runtimeRunning && SelectedProfile?.Mode == "LocalHost" && _autoTuner is not null;
     public bool CanSaveTune => !IsBenchmarkBusy && _tuneResult?.Suggested is not null &&
         SelectedProfile?.Mode == "LocalHost";
@@ -457,6 +464,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set
         {
             _isRuntimeBusy = value;
+            NotifyActionAvailability();
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanControlLocal));
             OnPropertyChanged(nameof(CanConnectRemote));
@@ -466,10 +474,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool CanControlLocal => !IsRuntimeBusy && _leaseKnown && !_isLeased &&
+    public bool CanControlLocal => !IsRuntimeBusy && !IsBenchmarkBusy && !_servicesBusy && _leaseKnown && !_isLeased &&
         SelectedProfile?.Mode == "LocalHost" &&
         _runtimeController is not null;
-    public bool CanConnectRemote => !IsRuntimeBusy && SelectedProfile?.Mode == "RemoteClient" &&
+    public bool CanConnectRemote => !IsRuntimeBusy && !IsBenchmarkBusy && !_servicesBusy && SelectedProfile?.Mode == "RemoteClient" &&
         _runtimeController is not null;
     public bool CanRefreshRuntime => !IsRuntimeBusy && _runtimeController is not null;
 

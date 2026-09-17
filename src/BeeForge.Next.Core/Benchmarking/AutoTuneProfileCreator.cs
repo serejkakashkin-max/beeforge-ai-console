@@ -35,7 +35,7 @@ public static class AutoTuneProfileCreator
         var backup = fullPath + ".before-tune-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + ".bak";
         try
         {
-            File.WriteAllText(temp, root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(temp, root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }), new System.Text.UTF8Encoding(true));
             if (File.ReadAllText(fullPath) != catalog.OriginalJson)
                 throw new IOException("Хранилище профилей изменилось; сохранение отменено.");
             File.Replace(temp, fullPath, backup);

@@ -106,6 +106,25 @@ try
         "\"flashAttention\":true,\"gpuLayers\":20,\"modelLayerCount\":30}";
     Assert(AutoTunePlanner.Candidates(numericGpuProfile).Any(c => c.GpuLayers == "21"),
         "known numeric GPU layers receive a bounded candidate");
+    var adaptive = new AdaptiveAutoTuneSearch(numericGpuProfile);
+    var adaptiveTwin = new AdaptiveAutoTuneSearch(numericGpuProfile);
+    var adaptiveBaseline = new AutoTuneTrial(tuningCandidates[0], 100, 100, null);
+    for (var i = 0; i < 30; i++)
+    {
+        var proposal = adaptive.Ask();
+        Assert(proposal == adaptiveTwin.Ask(), "TPE seeded search is reproducible");
+        Assert(proposal.Batch is >= 128 and <= 8192 && proposal.Threads > 0,
+            "TPE search obeys bounded parameter space");
+        var score = 100.0 + proposal.Threads;
+        var outcome = new AutoTuneTrial(proposal, score, score, i % 9 == 0 ? "fixture failure" : null);
+        adaptive.Tell(outcome, adaptiveBaseline, OptimizationObjective.Balanced);
+        adaptiveTwin.Tell(outcome, adaptiveBaseline, OptimizationObjective.Balanced);
+    }
+    var engineStudy = LlamaServerLauncher.Optimization.Study.Study.Create(
+        new LlamaServerLauncher.Optimization.Storage.InMemoryStorage(),
+        new LlamaServerLauncher.Optimization.Samplers.TPESampler(seed: 42));
+    engineStudy.Optimize(t => Math.Pow(t.SuggestFloat("x", -10, 10) - 2, 2), 100);
+    Assert(engineStudy.BestValue < 0.1, "upstream TPE converges on deterministic quadratic fixture");
     var trialJson = AutoTunePlanner.CreateTrialProfileJson(catalog.Profiles[0].RawJson, tuningCandidates[1], 29876);
     Assert(trialJson.Contains("\"port\":29876", StringComparison.Ordinal) &&
         catalog.Profiles[0].RawJson.Contains("\"unknownField\":\"preserve\"", StringComparison.Ordinal),
@@ -290,6 +309,20 @@ try
     try { LegacyProfileCatalog.Load(path); throw new Exception("missing ID was accepted"); }
     catch (InvalidDataException) { }
 
+    if (OperatingSystem.IsWindows())
+    {
+        var childStart = new System.Diagnostics.ProcessStartInfo("pwsh") { UseShellExecute = false, CreateNoWindow = true };
+        foreach (var argument in new[] { "-NoProfile", "-Command", "Start-Sleep -Seconds 120" }) childStart.ArgumentList.Add(argument);
+        using var child = System.Diagnostics.Process.Start(childStart)!;
+        try
+        {
+            using (var job = new WindowsProcessJob()) job.Assign(child);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await child.WaitForExitAsync(timeout.Token);
+            Assert(child.HasExited, "trial process terminates when its Windows job closes");
+        }
+        finally { if (!child.HasExited) child.Kill(entireProcessTree: true); }
+    }
     Console.WriteLine("NEXT_PROFILE_READONLY_TEST_OK");
 }
 finally

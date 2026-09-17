@@ -5,4 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../third_party/LlamaServerLauncher/Optimization/**/*.cs" Link="Upstream/Optimization/%(RecursiveDir)%(Filename)%(Extension)" />
+    <None Include="../../third_party/LlamaServerLauncher/LICENSE" Link="licenses/LlamaServerLauncher-MIT.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

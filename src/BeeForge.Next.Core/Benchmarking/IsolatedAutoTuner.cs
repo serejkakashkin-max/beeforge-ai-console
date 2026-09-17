@@ -27,6 +27,13 @@ public sealed class IsolatedAutoTuner
     {
         var candidates = AutoTunePlanner.Candidates(profileJson);
         var trials = new List<AutoTuneTrial>();
+        string CandidateKey(AutoTuneCandidate candidate)
+        {
+            var p = System.Text.Json.Nodes.JsonNode.Parse(AutoTunePlanner.CreateTrialProfileJson(profileJson, candidate, 18080))!;
+            p["gpuLayers"] = p["gpuLayers"]?.ToString() ?? "all";
+            p["cpuMoeLayers"] ??= 0;
+            return p.ToJsonString();
+        }
         foreach (var candidate in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -45,6 +52,42 @@ public sealed class IsolatedAutoTuner
             {
                 trials.Add(new AutoTuneTrial(candidate, 0, 0, ex.GetType().Name));
                 if (trials.Count == 1) break; // No trustworthy baseline.
+            }
+        }
+        // Upstream TPE uses observed outcomes to explore combinations, not only one-field changes.
+        if (trials.Count > 0 && trials[0].Valid)
+        {
+            var search = new AdaptiveAutoTuneSearch(profileJson);
+            for (var i = 0; i < 12; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var candidate = search.Ask();
+                if (candidate.UBatch > candidate.Batch)
+                {
+                    search.Tell(new AutoTuneTrial(candidate, 0, 0, "UBatch exceeds batch"), trials[0], objective);
+                    continue;
+                }
+                var key = CandidateKey(candidate);
+                var previous = trials.FirstOrDefault(t => CandidateKey(t.Candidate) == key);
+                if (previous is not null)
+                {
+                    search.Tell(previous, trials[0], objective);
+                    continue; // Reuse evidence; confirmation below is deliberately measured again.
+                }
+                var status = await _runtime.GetStatusAsync(cancellationToken);
+                if (status.Running || status.Ready || status.Leased || status.Remote)
+                    throw new InvalidOperationException("Автоподбор остановлен: рабочая модель или удалённый доступ активны.");
+                progress?.Report($"Адаптивный поиск TPE {i + 1}/12…");
+                AutoTuneTrial trial;
+                try
+                {
+                    var sample = await TrialAsync(profileId, profileJson, candidate, cancellationToken);
+                    trial = new AutoTuneTrial(candidate, sample.PrefillTokensPerSecond, sample.DecodeTokensPerSecond, null);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) { trial = new AutoTuneTrial(candidate, 0, 0, ex.GetType().Name); }
+                trials.Add(trial);
+                search.Tell(trial, trials[0], objective);
             }
         }
         var provisional = AutoTuneResult.FromTrials(trials, objective);
@@ -80,6 +123,7 @@ public sealed class IsolatedAutoTuner
         var temporaryDirectory = Path.Combine(Path.GetTempPath(), "beeforge-tune-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temporaryDirectory);
         Process? process = null;
+        using var processJob = new WindowsProcessJob();
         Task? outputDrain = null;
         Task? errorDrain = null;
         try
@@ -101,6 +145,7 @@ public sealed class IsolatedAutoTuner
             };
             foreach (var arg in plan.Arguments) start.ArgumentList.Add(arg);
             process = Process.Start(start) ?? throw new IOException("Не удалось запустить пробный сервер.");
+            processJob.Assign(process); // Fail closed if Windows cannot supervise this trial.
             outputDrain = process.StandardOutput.BaseStream.CopyToAsync(Stream.Null);
             errorDrain = process.StandardError.BaseStream.CopyToAsync(Stream.Null);
             var endpoint = new Uri($"http://127.0.0.1:{port}/v1");

@@ -110,7 +110,7 @@
           <ListBox Name="BenchmarkRunsList" ItemsSource="{Binding BenchmarkRunOptions}" SelectionMode="Multiple" MinHeight="110" MaxHeight="180" Background="#1B2B3C" />
           <Button Content="Сохранить сравнение Markdown" Click="ExportBenchmark_Click" Background="#294455" Foreground="#EAF2F7" Padding="14,9" HorizontalAlignment="Left" />
           <TextBlock Text="АВТОПОДБОР ПАРАМЕТРОВ" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
-          <TextBlock Text="После остановки локальной модели BeeForge проверит исходный профиль и варианты batch, ubatch, потоков, Flash Attention, а при наличии данных — GPU-слоёв и CPU MoE. Каждый вариант запускается временно; рабочий профиль не перезаписывается." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="После остановки локальной модели: исходный профиль → контрольные варианты → 12 шагов адаптивного TPE-поиска из LlamaServerLauncher → повторная проверка. Подбираются batch, ubatch, потоки, Flash Attention и доступные варианты GPU/CPU MoE. Дубли не запускаются повторно. KV-качество и рабочий профиль не меняются." TextWrapping="Wrap" Foreground="#A6B9C6" />
           <StackPanel Orientation="Horizontal" Spacing="10">
             <TextBlock Text="Цель:" VerticalAlignment="Center" Foreground="#A6B9C6" />
             <ComboBox ItemsSource="{Binding OptimizationObjectives}" SelectedItem="{Binding SelectedOptimizationObjective, Mode=TwoWay}" Width="185" />
