@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using BeeForge.Next.Core.Inference;
+using LlamaServerLauncher.Services;
 
 namespace BeeForge.Next.Core.Benchmarking;
 
@@ -27,6 +28,22 @@ public sealed class IsolatedAutoTuner
     {
         var candidates = AutoTunePlanner.Candidates(profileJson);
         var trials = new List<AutoTuneTrial>();
+        var profileNode = System.Text.Json.Nodes.JsonNode.Parse(profileJson)!.AsObject();
+        var modelPath = profileNode["modelPath"]?.ToString();
+        GgufModelInfo? modelInfo = null;
+        if (!string.IsNullOrWhiteSpace(modelPath) && File.Exists(modelPath))
+        {
+            try { modelInfo = GgufMetadataService.TryReadDetailed(modelPath); } catch { }
+        }
+        bool MemoryFits(AutoTuneCandidate candidate, LegacyRuntimeStatus status)
+        {
+            if (modelInfo is null || status.VramTotalMiB is null) return true;
+            var candidateJson = AutoTunePlanner.CreateTrialProfileJson(profileJson, candidate, 18080);
+            var estimate = VramPlanner.Estimate(modelInfo, candidateJson);
+            if (!estimate.CanJudgeFit || estimate.Estimate is null) return true;
+            var budget = status.VramTotalMiB.Value * 1024L * 1024L * 95 / 100;
+            return estimate.Estimate.TotalBytes <= budget;
+        }
         string CandidateKey(AutoTuneCandidate candidate)
         {
             var p = System.Text.Json.Nodes.JsonNode.Parse(AutoTunePlanner.CreateTrialProfileJson(profileJson, candidate, 18080))!;
@@ -40,6 +57,12 @@ public sealed class IsolatedAutoTuner
             var status = await _runtime.GetStatusAsync(cancellationToken);
             if (status.Running || status.Ready || status.Leased || status.Remote)
                 throw new InvalidOperationException("Остановите рабочую модель и выключите удалённый доступ перед автоподбором.");
+            if (!MemoryFits(candidate, status))
+            {
+                trials.Add(new AutoTuneTrial(candidate, 0, 0, "VRAM preflight"));
+                if (trials.Count == 1) break;
+                continue;
+            }
             progress?.Report($"Проверяю {candidate.Name} ({trials.Count + 1}/{candidates.Count})…");
             try
             {
@@ -77,6 +100,13 @@ public sealed class IsolatedAutoTuner
                 var status = await _runtime.GetStatusAsync(cancellationToken);
                 if (status.Running || status.Ready || status.Leased || status.Remote)
                     throw new InvalidOperationException("Автоподбор остановлен: рабочая модель или удалённый доступ активны.");
+                if (!MemoryFits(candidate, status))
+                {
+                    var rejected = new AutoTuneTrial(candidate, 0, 0, "VRAM preflight");
+                    trials.Add(rejected);
+                    search.Tell(rejected, trials[0], objective);
+                    continue;
+                }
                 progress?.Report($"Адаптивный поиск TPE {i + 1}/12…");
                 AutoTuneTrial trial;
                 try

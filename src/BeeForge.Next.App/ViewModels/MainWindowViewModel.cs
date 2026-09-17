@@ -76,6 +76,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _isRuntimeBusy;
     private bool _leaseKnown;
     private bool _isLeased;
+    private VramPlan? _latestVramPlan;
     private bool _hfBusy;
     private string _hfQuery = "Qwen GGUF";
     private HfRepo? _selectedHfRepo;
@@ -596,7 +597,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             RuntimeStatusText = status.Leased
                 ? "Модель передана ноутбуку. Выключите удалённый доступ в рабочей консоли, прежде чем управлять ею здесь."
                 : DescribeRuntime(status);
-            RuntimeDetailsText = DescribeResources(status);
+            RuntimeDetailsText = DescribeResources(status, _activeProfileId == SelectedProfile?.Id ? _latestVramPlan : null);
         }
         catch (Exception)
         {
@@ -615,22 +616,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public async Task StartSelectedAsync()
     {
         if (_runtimeController is null || !CanControlLocal || SelectedProfile is null) return;
+        var selected = SelectedProfile;
         IsRuntimeBusy = true;
         RuntimeStatusText = "Проверка профиля и запуск через рабочий BeeForge…";
         try
         {
-            var status = await _runtimeController.StartAsync(SelectedProfile.Id);
+            var status = await _runtimeController.StartAsync(selected.Id);
             _runtimeReady = status.Ready;
             _runtimeRunning = status.Running;
-            _activeProfileId = SelectedProfile.Id;
+            _activeProfileId = selected.Id;
             OnPropertyChanged(nameof(CanRunBenchmark));
             OnPropertyChanged(nameof(CanAutoTune));
             RuntimeStatusText = DescribeRuntime(status);
-            RuntimeDetailsText = DescribeResources(status);
+            RuntimeDetailsText = DescribeResources(status, _activeProfileId == selected.Id ? _latestVramPlan : null);
             if (status.Ready)
             {
-                ActiveProfile = SelectedProfile.Name;
-                Mode = SelectedProfile.Mode;
+                ActiveProfile = selected.Name;
+                Mode = selected.Mode;
             }
         }
         catch (Exception)
@@ -692,7 +694,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return $"{state} · {status.Profile} · PID {status.Pid?.ToString() ?? "—"}{speed}";
     }
 
-    private static string DescribeResources(LegacyRuntimeStatus status)
+    private static string DescribeResources(LegacyRuntimeStatus status, VramPlan? estimate = null)
     {
         if (status.Remote) return "Ресурсы удалённого ПК здесь не измеряются.";
         var vram = status.VramUsedMiB is null || status.VramTotalMiB is null
@@ -706,7 +708,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             $"слоты: {status.SlotsBusy}/{status.SlotsTotal} занято";
         var tokens = status.PromptTokens is null && status.DecodedTokens is null ? "" :
             $" · последний запрос: input {status.PromptTokens?.ToString("N0") ?? "—"}, output {status.DecodedTokens?.ToString("N0") ?? "—"}";
-        return $"{vram} · {gpu} · {temp} · {ram} · {context} · {slots} · время работы: {(string.IsNullOrWhiteSpace(status.Uptime) ? "—" : status.Uptime)}{tokens}";
+        var comparison = "";
+        if (estimate is { CanJudgeFit: true, Estimate: not null } && status.VramUsedMiB is int actual)
+        {
+            var predictedMiB = estimate.Estimate.TotalBytes / 1048576.0;
+            comparison = $" · VRAM факт/оценка {actual / 1024.0:0.0}/{predictedMiB / 1024.0:0.0} GiB ({actual - predictedMiB:+0;-0;0} MiB)";
+        }
+        return $"{vram} · {gpu} · {temp} · {ram} · {context} · {slots}{comparison} · время работы: {(string.IsNullOrWhiteSpace(status.Uptime) ? "—" : status.Uptime)}{tokens}";
     }
 
     public static MainWindowViewModel LoadFromLegacyStore()
@@ -800,6 +808,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 var profile = LegacyProfileCatalog.Load(_storePath).Profiles.Single(p => p.Id == selected.Id);
                 var plan = await Task.Run(() => VramPlanner.Read(selected.ModelPath, profile.RawJson), cancellationToken);
+                _latestVramPlan = plan;
                 display += Environment.NewLine + Environment.NewLine + plan.Describe();
             }
             Dispatcher.UIThread.Post(() => { if (!cancellationToken.IsCancellationRequested) ModelMetadataText = display; });
