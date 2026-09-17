@@ -727,10 +727,35 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         if (_runtimeController is null || !CanControlLocal || SelectedProfile is null) return;
         var selected = SelectedProfile;
         IsRuntimeBusy = true;
-        RuntimeStatusText = "Проверка профиля и запуск через рабочий BeeForge…";
+        RuntimeStatusText = "Запускаю модель… Это может занять до двух минут. Состояние обновляется автоматически.";
         try
         {
-            var status = await _runtimeController.StartAsync(selected.Id);
+            var startTask = _runtimeController.StartAsync(selected.Id);
+            while (!startTask.IsCompleted)
+            {
+                await Task.Delay(1000);
+                try
+                {
+                    using var pollTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    var live = await _runtimeController.GetStatusAsync(pollTimeout.Token);
+                    _runtimeReady = live.Ready;
+                    _runtimeRunning = live.Running;
+                    OnPropertyChanged(nameof(CanRunBenchmark));
+                    OnPropertyChanged(nameof(CanAutoTune));
+                    RuntimeStatusText = live.Ready
+                        ? DescribeRuntime(live)
+                        : live.Running
+                            ? $"Модель загружается… PID {live.Pid?.ToString() ?? "—"}. Дождитесь READY."
+                            : "Подготовка запуска… проверяю профиль и освобождаю порт.";
+                    RuntimeDetailsText = DescribeResources(live, _activeProfileId == selected.Id ? _latestVramPlan : null);
+                }
+                catch (Exception)
+                {
+                    // The start operation owns lifecycle. A failed progress poll must not cancel it.
+                }
+            }
+
+            var status = await startTask;
             _runtimeReady = status.Ready;
             _runtimeRunning = status.Running;
             _activeProfileId = selected.Id;
@@ -746,7 +771,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception)
         {
-            RuntimeStatusText = "Запуск не завершился. Проверьте журналы в старой консоли; не запускайте повторно до проверки состояния.";
+            // Start-BeeServer launches the process before synchronizing OpenCode. If the
+            // synchronization step fails, the model may already be healthy; never report
+            // a false launch failure in that case.
+            try
+            {
+                var live = await _runtimeController.GetStatusAsync();
+                _runtimeReady = live.Ready;
+                _runtimeRunning = live.Running;
+                RuntimeDetailsText = DescribeResources(live, _activeProfileId == selected.Id ? _latestVramPlan : null);
+                RuntimeStatusText = live.Ready
+                    ? $"{DescribeRuntime(live)} · Модель запущена; дополнительная синхронизация завершилась с ошибкой."
+                    : "Запуск не завершился. Откройте журнал модели в разделе «Система».";
+            }
+            catch
+            {
+                RuntimeStatusText = "Запуск не завершился. Откройте журнал модели в разделе «Система».";
+            }
         }
         finally { IsRuntimeBusy = false; }
     }
@@ -765,7 +806,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception)
         {
-            RuntimeStatusText = "Остановка не подтверждена. Проверьте состояние в старой консоли.";
+            RuntimeStatusText = "Остановка не подтверждена. Обновите состояние и проверьте журнал модели в разделе «Система».";
         }
         finally { IsRuntimeBusy = false; }
     }
@@ -775,7 +816,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         if (_runtimeController is null || !CanConnectRemote || SelectedProfile is null) return;
         var selected = SelectedProfile;
         IsRuntimeBusy = true;
-        RuntimeStatusText = "Проверяю удалённую модель через рабочий BeeForge…";
+        RuntimeStatusText = "Проверяю удалённую модель через BeeForge backend…";
         try
         {
             var message = await _runtimeController.ConnectRemoteAsync(selected.Id);
@@ -962,3 +1003,5 @@ public sealed record BenchmarkRunOption(StoredBenchmarkRun Run)
     public override string ToString() =>
         $"{Run.CompletedAt.LocalDateTime:g} · {Run.ProfileName} · {Run.PromptTokens}/{Run.OutputTokens} · PP {Run.PrefillTokensPerSecond:0.0} / TG {Run.DecodeTokensPerSecond:0.0}";
 }
+
+

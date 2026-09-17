@@ -12,7 +12,7 @@
           <TextBlock Text="Единая консоль модели и AI-команды · предварительная оболочка" FontSize="12" Foreground="#A6B9C6" />
         </StackPanel>
         <Border Grid.Column="1" Background="#203E48" CornerRadius="12" Padding="13,7" VerticalAlignment="Center">
-          <TextBlock Text="LEGACY BACKEND · SAFE ADAPTER" Foreground="#9EE0D0" FontSize="11" FontWeight="SemiBold" />
+          <TextBlock Text="BEEFORGE BACKEND · SAFE ADAPTER" Foreground="#9EE0D0" FontSize="11" FontWeight="SemiBold" />
         </Border>
       </Grid>
     </Border>
@@ -40,7 +40,7 @@
             </Border>
             <TextBlock Text="{Binding RuntimeStatusText}" TextWrapping="Wrap" Foreground="#A6B9C6" />
             <TextBlock Text="{Binding RuntimeDetailsText}" TextWrapping="Wrap" Foreground="#A6B9C6" />
-            <TextBlock Text="Team Guard, Telegram, Serena и расширенные настройки пока остаются в рабочей старой консоли." TextWrapping="Wrap" Foreground="#A6B9C6" />
+            <TextBlock Text="Team Guard, Telegram, Serena и системные действия используют совместимый BeeForge backend; отдельное старое окно для запуска модели не требуется." TextWrapping="Wrap" Foreground="#A6B9C6" />
           </StackPanel>
         </ScrollViewer>
       </TabItem>
@@ -83,7 +83,7 @@
       <TabItem Header="Inference">
         <StackPanel Margin="34,27" Spacing="14">
           <TextBlock Text="Inference" FontSize="28" FontWeight="SemiBold" />
-          <TextBlock Text="Моделью управляет прежний BeeForge: он проверяет профиль, владение процессом и готовность сервера. При запуске текущий управляемый сервер будет остановлен." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="BeeForge Next запускает модель через проверенный runtime-backend: он проверяет профиль, владение процессом и готовность сервера. Старое окно BeeForge запускать не требуется." TextWrapping="Wrap" Foreground="#A6B9C6" />
           <StackPanel Orientation="Horizontal" Spacing="9">
             <Button Content="Проверить состояние" Click="RefreshRuntime_Click" IsEnabled="{Binding CanRefreshRuntime}" Background="#294455" Foreground="#EAF2F7" Padding="14,9" />
             <Button Content="Запустить выбранный" Click="StartRuntime_Click" IsEnabled="{Binding CanControlLocal}" Background="#176E68" Foreground="White" Padding="14,9" />
@@ -214,3 +214,4 @@
     </TabControl>
   </Grid>
 </Window>
+
