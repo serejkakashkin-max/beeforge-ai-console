@@ -182,8 +182,17 @@
           <WrapPanel>
             <Button Content="Обновить список runtime" Click="RefreshRuntimeCatalog_Click" Margin="0,0,8,8" />
             <Button Content="Установить BeeLlama v0.4.6" Click="InstallRuntime_Click" Margin="0,0,8,8" />
+            <Button Content="llama.cpp CUDA" Tag="Cuda" Click="InstallUpstreamRuntime_Click" Margin="0,0,8,8" />
+            <Button Content="llama.cpp Vulkan" Tag="Vulkan" Click="InstallUpstreamRuntime_Click" Margin="0,0,8,8" />
+            <Button Content="llama.cpp HIP" Tag="Hip" Click="InstallUpstreamRuntime_Click" Margin="0,0,8,8" />
+            <Button Content="llama.cpp SYCL" Tag="Sycl" Click="InstallUpstreamRuntime_Click" Margin="0,0,8,8" />
+            <Button Content="llama.cpp CPU" Tag="Cpu" Click="InstallUpstreamRuntime_Click" Margin="0,0,8,8" />
           </WrapPanel>
           <TextBox Text="{Binding RuntimeCatalogText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="120" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
+          <TextBlock Text="ON-DEMAND OPENAI PROXY" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
+          <TextBlock Text="Локальный маршрутизатор профилей: model = alias/имя профиля. Слушает только 127.0.0.1:18080 и использует существующий BeeForge для запуска/остановки модели." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <Button Content="Включить / выключить proxy" Click="ToggleProxy_Click" HorizontalAlignment="Left" Margin="0,0,0,4" />
+          <TextBlock Text="{Binding ProxyText}" TextWrapping="Wrap" Foreground="#B9EBD9" />
           <TextBlock Text="ЛОКАЛЬНАЯ СПРАВКА" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
           <WrapPanel>
             <Button Content="Общее" Tag="main" Click="Help_Click" Margin="0,0,8,8" />

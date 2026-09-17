@@ -28,7 +28,9 @@ public sealed class RuntimeCatalog
                     var product = root.TryGetProperty("product", out var p) ? p.GetString() ?? "BeeLlama" : "BeeLlama";
                     var version = root.TryGetProperty("version", out var v) ? v.GetString() ?? "unknown" : "unknown";
                     var cuda = root.TryGetProperty("cudaVersion", out var c) ? c.GetString() : null;
+                    var backend = root.TryGetProperty("backend", out var b) ? b.GetString() : null;
                     result.Add(new RuntimeInstall(product, version, server,
+                        !string.IsNullOrWhiteSpace(backend) ? backend! :
                         string.IsNullOrWhiteSpace(cuda) ? "managed" : $"CUDA {cuda}"));
                     continue;
                 }
@@ -55,10 +57,7 @@ public sealed class RuntimeInstaller
         if (!System.Text.RegularExpressions.Regex.IsMatch(version, "^v\\d+\\.\\d+\\.\\d+$"))
             throw new ArgumentException("Invalid BeeLlama version.", nameof(version));
         if (cuda is not ("13.3" or "12.4")) throw new ArgumentException("Unsupported CUDA version.", nameof(cuda));
-        var start = new ProcessStartInfo("pwsh")
-        {
-            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true
-        };
+        var start = PowerShellHost.CreateRedirected();
         foreach (var arg in new[] { "-NoProfile", "-File", _scriptPath, "-Version", version, "-CudaVersion", cuda })
             start.ArgumentList.Add(arg);
         using var process = Process.Start(start) ?? throw new IOException("PowerShell could not be started.");
@@ -79,3 +78,4 @@ public sealed class RuntimeInstaller
         }
     }
 }
+

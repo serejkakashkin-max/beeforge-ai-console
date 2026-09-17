@@ -66,13 +66,7 @@ public sealed class LegacyRuntimeController
     private async Task<JsonDocument> InvokeAsync(string action, string? profileId, TimeSpan? timeout,
         CancellationToken cancellationToken)
     {
-        var start = new ProcessStartInfo("pwsh")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var start = PowerShellHost.CreateRedirected();
         foreach (var value in new[] { "-NoProfile", "-File", _scriptPath, "-Action", action,
             "-ProfileStore", _profileStore }) start.ArgumentList.Add(value);
         if (profileId is not null)
@@ -121,3 +115,4 @@ public sealed record LegacyRuntimeStatus(bool Running, bool Ready, bool Remote, 
     int? VramUsedMiB, int? VramTotalMiB, int? GpuUtilization, int? GpuTemperatureC, int? CpuUtilization,
     double? RamUsedGiB, double? RamTotalGiB, double? RamAvailableGiB, int? ContextTokens,
     int? PromptTokens, int? DecodedTokens, int? SlotsBusy, int? SlotsTotal, string Uptime);
+

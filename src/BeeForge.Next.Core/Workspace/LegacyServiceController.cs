@@ -15,9 +15,7 @@ public sealed class LegacyServiceController(string scriptPath, string profileSto
     public async Task<JsonElement> InvokeAsync(ServiceAction action, string? profileId = null)
     {
         if (!Enum.IsDefined(action)) throw new ArgumentOutOfRangeException(nameof(action));
-        var start = new ProcessStartInfo("pwsh") {
-            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true
-        };
+        var start = PowerShellHost.CreateRedirected();
         foreach (var arg in new[] { "-NoProfile", "-File", Path.GetFullPath(scriptPath), "-Action", action.ToString(),
             "-ProfileStore", Path.GetFullPath(profileStore) }) start.ArgumentList.Add(arg);
         if (profileId is not null) { start.ArgumentList.Add("-ProfileId"); start.ArgumentList.Add(profileId); }
@@ -33,3 +31,4 @@ public sealed class LegacyServiceController(string scriptPath, string profileSto
         return document.RootElement.Clone();
     }
 }
+

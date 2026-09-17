@@ -25,9 +25,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LegacyServiceController? _services;
     private readonly RuntimeCatalog? _runtimeCatalog;
     private readonly RuntimeInstaller? _runtimeInstaller;
+    private readonly UpstreamLlamaRuntimeManager? _upstreamRuntimeManager;
     private readonly OfflineHelpService? _help;
     private readonly HuggingFaceService _hf = new();
     private readonly ScenarioStore? _scenarioStore;
+    private LocalOnDemandProxy? _proxy;
+    private IReadOnlyList<UpstreamRelease> _upstreamReleases = Array.Empty<UpstreamRelease>();
+    private UpstreamRelease? _selectedUpstreamRelease;
+    private string _proxyText = "On-demand proxy выключен. Он доступен только на 127.0.0.1.";
+    public string ProxyText { get => _proxyText; private set { _proxyText = value; OnPropertyChanged(); } }
+    public bool ProxyRunning => _proxy?.IsRunning == true;
     private bool _servicesBusy;
     private string _serviceText = "Выберите действие. Состояние читается из существующего BeeForge.";
     private string _runtimeCatalogText = "Установленные runtime ещё не проверены.";
@@ -112,6 +119,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _benchmarkRunner = new StandardBenchmarkRunner(new HttpBenchmarkProbe(), _benchmarkStore);
             _runtimeCatalog = new RuntimeCatalog(root);
             _runtimeInstaller = new RuntimeInstaller(root);
+            _upstreamRuntimeManager = new UpstreamLlamaRuntimeManager(root);
             _help = new OfflineHelpService(root);
             _scenarioStore = new ScenarioStore(root);
         }
@@ -230,6 +238,68 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
         catch (Exception) { RuntimeCatalogText = "Установка не завершилась. Рабочие профили не переключались."; }
         finally { IsRuntimeBusy = false; }
+    }
+
+    public async Task InstallUpstreamRuntimeAsync(LlamaRuntimeBackend backend = LlamaRuntimeBackend.Cuda)
+    {
+        if (_upstreamRuntimeManager is null || IsRuntimeBusy) return;
+        IsRuntimeBusy = true;
+        RuntimeCatalogText = $"Ищу последнюю upstream llama.cpp сборку ({UpstreamLlamaRuntimeManager.BackendLabel(backend)})…";
+        try
+        {
+            _upstreamReleases = await _upstreamRuntimeManager.GetReleasesAsync();
+            _selectedUpstreamRelease = _upstreamReleases.FirstOrDefault(r =>
+                UpstreamLlamaRuntimeManager.SelectWindowsAsset(r.Assets, backend) is not null);
+            if (_selectedUpstreamRelease is null)
+                throw new InvalidOperationException("Подходящая Windows-сборка upstream llama.cpp не найдена.");
+            var progress = new Progress<double>(p => RuntimeCatalogText =
+                $"Скачиваю {_selectedUpstreamRelease.Tag} · {UpstreamLlamaRuntimeManager.BackendLabel(backend)} · {p:0}%");
+            await _upstreamRuntimeManager.InstallAsync(_selectedUpstreamRelease, backend, progress);
+            RefreshRuntimeCatalog();
+        }
+        catch (Exception)
+        {
+            RuntimeCatalogText = "Установка upstream llama.cpp не завершилась. Рабочие профили и текущая модель не изменены.";
+        }
+        finally { IsRuntimeBusy = false; }
+    }
+
+    public async Task ToggleProxyAsync()
+    {
+        if (_runtimeController is null || string.IsNullOrWhiteSpace(_storePath) || IsRuntimeBusy) return;
+        IsRuntimeBusy = true;
+        try
+        {
+            if (_proxy?.IsRunning == true)
+            {
+                await _proxy.StopAsync();
+                await _proxy.DisposeAsync();
+                _proxy = null;
+                ProxyText = "On-demand proxy выключен. Он доступен только на 127.0.0.1.";
+            }
+            else
+            {
+                _proxy = new LocalOnDemandProxy(_storePath, _runtimeController);
+                _proxy.Start(18080, 300);
+                ProxyText = $"On-demand proxy: {_proxy.Endpoint} · только localhost · model = alias/name профиля · idle stop 300 сек.";
+            }
+            OnPropertyChanged(nameof(ProxyRunning));
+        }
+        catch (Exception)
+        {
+            if (_proxy is not null) { try { await _proxy.DisposeAsync(); } catch { } _proxy = null; }
+            ProxyText = "Proxy не запущен. Проверьте занятость порта 18080 и состояние BeeForge.";
+            OnPropertyChanged(nameof(ProxyRunning));
+        }
+        finally { IsRuntimeBusy = false; }
+    }
+
+    public async Task ShutdownTransientServicesAsync()
+    {
+        if (_proxy is null) return;
+        try { await _proxy.DisposeAsync(); } catch { }
+        _proxy = null;
+        OnPropertyChanged(nameof(ProxyRunning));
     }
     public string Status { get; }
     public string ActiveProfile

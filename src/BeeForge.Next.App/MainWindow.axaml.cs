@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using BeeForge.Next.App.ViewModels;
 using BeeForge.Next.Core.Benchmarking;
 using Avalonia.Platform.Storage;
+using BeeForge.Next.Core.Inference;
 using BeeForge.Next.Core.Workspace;
 
 namespace BeeForge.Next.App;
@@ -12,6 +13,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Closed += async (_, _) =>
+        {
+            if (ViewModel is { } vm) await vm.ShutdownTransientServicesAsync();
+        };
         Opened += async (_, _) =>
         {
             if (ViewModel is { } vm)
@@ -205,6 +210,23 @@ public partial class MainWindow : Window
         var dialog = new ConfirmRuntimeWindow("Установить BeeLlama runtime?",
             "Будет скачана рекомендуемая BeeLlama v0.4.6 CUDA 13.3 с проверкой SHA-256. Текущие профили и запущенная модель автоматически переключаться не будут.");
         if (await dialog.ShowDialog<bool>(this)) await vm.InstallRecommendedRuntimeAsync();
+    }
+
+    private async void InstallUpstreamRuntime_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } vm || sender is not Button { Tag: string tag } ||
+            !Enum.TryParse<LlamaRuntimeBackend>(tag, out var backend)) return;
+        var dialog = new ConfirmRuntimeWindow("Установить upstream llama.cpp?",
+            $"Будет скачана последняя подходящая Windows {UpstreamLlamaRuntimeManager.BackendLabel(backend)}-сборка из официального ggml-org/llama.cpp. Она установится отдельно от BeeLlama; текущий профиль и запущенная модель не переключаются автоматически.");
+        if (await dialog.ShowDialog<bool>(this)) await vm.InstallUpstreamRuntimeAsync(backend);
+    }
+
+    private async void ToggleProxy_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        var dialog = new ConfirmRuntimeWindow("Изменить состояние on-demand proxy?",
+            "Proxy слушает только localhost. При первом запросе он может запустить выбранный по model профиль через существующий BeeForge, а после простоя остановить модель, которую сам загрузил.");
+        if (await dialog.ShowDialog<bool>(this)) await vm.ToggleProxyAsync();
     }
 
     private void Help_Click(object? sender, RoutedEventArgs e)

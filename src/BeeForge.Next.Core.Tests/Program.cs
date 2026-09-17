@@ -308,6 +308,33 @@ try
     var crashAdvice = CrashAdvisor.Analyze("CUDA error: out of memory\nunknown argument: --bad");
     Assert(crashAdvice.Count == 2 && crashAdvice.Any(x => x.Contains("памяти", StringComparison.OrdinalIgnoreCase)) &&
         crashAdvice.Any(x => x.Contains("--help", StringComparison.OrdinalIgnoreCase)), "crash advisor classifies bounded known failures");
+
+    var upstreamAssets = new[]
+    {
+        new UpstreamReleaseAsset("llama-b7000-bin-win-cpu-x64.zip", "https://example.invalid/cpu.zip", 1, null),
+        new UpstreamReleaseAsset("llama-b7000-bin-win-vulkan-x64.zip", "https://example.invalid/vulkan.zip", 1, null),
+        new UpstreamReleaseAsset("llama-b7000-bin-win-cuda-12.4-x64.zip", "https://example.invalid/cuda.zip", 1, null),
+        new UpstreamReleaseAsset("cudart-llama-bin-win-cuda-12.4-x64.zip", "https://example.invalid/cudart.zip", 1, null)
+    };
+    var cudaAsset = UpstreamLlamaRuntimeManager.SelectWindowsAsset(upstreamAssets, LlamaRuntimeBackend.Cuda);
+    Assert(cudaAsset is not null && cudaAsset.Name.Contains("cuda-12.4", StringComparison.Ordinal) &&
+        !cudaAsset.Name.StartsWith("cudart-", StringComparison.OrdinalIgnoreCase),
+        "upstream runtime selector picks main CUDA archive");
+    Assert(UpstreamLlamaRuntimeManager.SelectWindowsAsset(upstreamAssets, LlamaRuntimeBackend.Vulkan)?.Name.Contains("vulkan", StringComparison.OrdinalIgnoreCase) == true &&
+        UpstreamLlamaRuntimeManager.SelectWindowsAsset(upstreamAssets, LlamaRuntimeBackend.Cpu)?.Name.Contains("cpu", StringComparison.OrdinalIgnoreCase) == true,
+        "upstream runtime selector keeps backends isolated");
+
+    var proxyProfiles = new[] {
+        new ProxyProfile("id-one", "Coding Model", "Q2", 8080),
+        new ProxyProfile("id-two", "Review Model", "Q3", 8081)
+    };
+    Assert(OpenAiProxyProtocol.ExtractModel("{\"model\":\"Q3\",\"messages\":[]}") == "Q3" &&
+        OpenAiProxyProtocol.Match("q3", proxyProfiles)?.Id == "id-two",
+        "on-demand proxy routes OpenAI model alias case-insensitively");
+    Assert(OpenAiProxyProtocol.Match("missing", proxyProfiles, "id-one")?.Id == "id-one" &&
+        OpenAiProxyProtocol.IsProxiedPath("/v1/chat/completions") && !OpenAiProxyProtocol.IsProxiedPath("/admin"),
+        "on-demand proxy uses explicit fallback and API allowlist");
+    Assert(OpenAiProxyProtocol.ExtractModel("not-json") is null, "proxy ignores malformed model selector without throwing");
     var scenarioRoot = Path.Combine(temp, "scenario-root"); Directory.CreateDirectory(Path.Combine(scenarioRoot, "config"));
     var scenarioStore = new ScenarioStore(scenarioRoot);
     var scenario = scenarioStore.Add("Coding", new[] { "one", "two", "one" });

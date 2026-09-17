@@ -12,13 +12,7 @@ public sealed class LegacyLaunchPlanReader
     public static async Task<LegacyLaunchPlan> ReadAsync(string scriptPath, string profileStore,
         string profileId, CancellationToken cancellationToken = default)
     {
-        var start = new ProcessStartInfo("pwsh")
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var start = PowerShellHost.CreateRedirected();
         foreach (var value in new[] { "-NoProfile", "-File", Path.GetFullPath(scriptPath),
             "-ProfileStore", Path.GetFullPath(profileStore), "-ProfileId", profileId })
             start.ArgumentList.Add(value);
@@ -56,3 +50,4 @@ public sealed class LegacyLaunchPlanReader
 
 public sealed record LegacyLaunchPlan(string Mode, string ServerPath, string Alias,
     IReadOnlyList<string> Arguments);
+
