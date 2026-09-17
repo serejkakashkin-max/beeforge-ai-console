@@ -58,6 +58,7 @@
             <Button Content="Проверить состояние" Click="RefreshRuntime_Click" IsEnabled="{Binding CanRefreshRuntime}" Background="#294455" Foreground="#EAF2F7" Padding="14,9" />
             <Button Content="Запустить выбранный" Click="StartRuntime_Click" IsEnabled="{Binding CanControlLocal}" Background="#176E68" Foreground="White" Padding="14,9" />
             <Button Content="Остановить модель" Click="StopRuntime_Click" IsEnabled="{Binding CanControlLocal}" Background="#6E3939" Foreground="White" Padding="14,9" />
+            <Button Content="Подключить удалённый профиль" Click="ConnectRemote_Click" IsEnabled="{Binding CanConnectRemote}" Background="#315B84" Foreground="White" Padding="14,9" />
           </StackPanel>
           <Border Background="#1B2B3C" BorderBrush="#365162" BorderThickness="1" CornerRadius="8" Padding="13">
             <TextBlock Text="{Binding RuntimeStatusText}" TextWrapping="Wrap" Foreground="#B9EBD9" />

@@ -64,6 +64,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _selectedProfile = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanControlLocal));
+            OnPropertyChanged(nameof(CanConnectRemote));
             _selectionCancellation?.Cancel();
             _selectionCancellation?.Dispose();
             _selectionCancellation = new CancellationTokenSource();
@@ -91,12 +92,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _isRuntimeBusy = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanControlLocal));
+            OnPropertyChanged(nameof(CanConnectRemote));
             OnPropertyChanged(nameof(CanRefreshRuntime));
         }
     }
 
     public bool CanControlLocal => !IsRuntimeBusy && _leaseKnown && !_isLeased &&
         SelectedProfile?.Mode == "LocalHost" &&
+        _runtimeController is not null;
+    public bool CanConnectRemote => !IsRuntimeBusy && SelectedProfile?.Mode == "RemoteClient" &&
         _runtimeController is not null;
     public bool CanRefreshRuntime => !IsRuntimeBusy && _runtimeController is not null;
 
@@ -157,6 +161,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         catch (Exception)
         {
             RuntimeStatusText = "Остановка не подтверждена. Проверьте состояние в старой консоли.";
+        }
+        finally { IsRuntimeBusy = false; }
+    }
+
+    public async Task ConnectSelectedRemoteAsync()
+    {
+        if (_runtimeController is null || !CanConnectRemote || SelectedProfile is null) return;
+        var selected = SelectedProfile;
+        IsRuntimeBusy = true;
+        RuntimeStatusText = "Проверяю удалённую модель через рабочий BeeForge…";
+        try
+        {
+            var message = await _runtimeController.ConnectRemoteAsync(selected.Id);
+            ActiveProfile = selected.Name;
+            Mode = selected.Mode;
+            RuntimeStatusText = $"Удалённый профиль подключён: {message}";
+        }
+        catch (Exception)
+        {
+            RuntimeStatusText = "Удалённый профиль не подключён. Проверьте Tailscale и модель на основном ПК. OpenCode не переключён.";
         }
         finally { IsRuntimeBusy = false; }
     }

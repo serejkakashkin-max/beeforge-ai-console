@@ -81,8 +81,12 @@ try
     catch (InvalidDataException) { }
     try { await runtime.StopAsync("remote"); throw new Exception("remote profile stopped inference host"); }
     catch (InvalidDataException) { }
+    try { await runtime.ConnectRemoteAsync("local"); throw new Exception("local profile connected as remote"); }
+    catch (InvalidDataException) { }
+    try { await runtime.ConnectRemoteAsync("remote"); throw new Exception("offline remote connected"); }
+    catch (InvalidDataException) { }
     Assert(SHA256.HashData(File.ReadAllBytes(templateCopy)).SequenceEqual(remoteBefore),
-        "rejected remote actions did not change the fixture profile");
+        "rejected remote and offline actions did not change the fixture profile");
 
     var leaseConfig = Path.Combine(temp, "remote-lease.json");
     File.WriteAllText(leaseConfig, "{\"Enabled\":true,\"Managed\":true}");

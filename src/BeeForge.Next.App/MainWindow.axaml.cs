@@ -37,4 +37,12 @@ public partial class MainWindow : Window
             "Будет остановлен только сервер, которым управляет BeeForge на этом ПК. Telegram и OpenCode не закрываются.");
         if (await dialog.ShowDialog<bool>(this)) await vm.StopSelectedAsync();
     }
+
+    private async void ConnectRemote_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { CanConnectRemote: true, SelectedProfile: { } selected } vm) return;
+        var dialog = new ConfirmRuntimeWindow("Подключить удалённую модель?",
+            $"BeeForge проверит доступность профиля «{selected.Name}». Только после успешной проверки OpenCode будет переключён на него. Локальная модель не запускается и не останавливается.");
+        if (await dialog.ShowDialog<bool>(this)) await vm.ConnectSelectedRemoteAsync();
+    }
 }
