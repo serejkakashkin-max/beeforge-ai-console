@@ -69,6 +69,38 @@ try
     var remote = await LegacyLaunchPlanReader.ReadAsync(script, templateCopy, "remote");
     Assert(remote.Mode == "RemoteClient" && remote.Arguments.Count == 0, "remote profile cannot launch local server");
 
+    var runtimeScript = Path.Combine(repo.FullName, "scripts", "Invoke-BeeForgeNextRuntime.ps1");
+    File.Copy(templatePath, templateCopy, overwrite: true);
+    var runtime = new LegacyRuntimeController(runtimeScript, templateCopy);
+    var fixtureStatus = await runtime.GetStatusAsync();
+    Assert(!fixtureStatus.Ready && !fixtureStatus.Remote, "local fixture status uses legacy backend");
+    File.WriteAllText(templateCopy, original, new UTF8Encoding(false));
+    runtime = new LegacyRuntimeController(runtimeScript, templateCopy);
+    var remoteBefore = SHA256.HashData(File.ReadAllBytes(templateCopy));
+    try { await runtime.StartAsync("remote"); throw new Exception("remote profile started local runtime"); }
+    catch (InvalidDataException) { }
+    try { await runtime.StopAsync("remote"); throw new Exception("remote profile stopped inference host"); }
+    catch (InvalidDataException) { }
+    Assert(SHA256.HashData(File.ReadAllBytes(templateCopy)).SequenceEqual(remoteBefore),
+        "rejected remote actions did not change the fixture profile");
+
+    var leaseConfig = Path.Combine(temp, "remote-lease.json");
+    File.WriteAllText(leaseConfig, "{\"Enabled\":true,\"Managed\":true}");
+    var oldRemoteConfig = Environment.GetEnvironmentVariable("BEEFORGE_REMOTE_CONFIG");
+    try
+    {
+        Environment.SetEnvironmentVariable("BEEFORGE_REMOTE_CONFIG", leaseConfig);
+        File.Copy(templatePath, templateCopy, overwrite: true);
+        runtime = new LegacyRuntimeController(runtimeScript, templateCopy);
+        var leasedStatus = await runtime.GetStatusAsync();
+        Assert(leasedStatus.Leased, "remote lease surfaced to new UI");
+        try { await runtime.StartAsync("profile-b453573d18"); throw new Exception("leased model started locally"); }
+        catch (InvalidDataException) { }
+        try { await runtime.StopAsync("profile-b453573d18"); throw new Exception("leased model stopped locally"); }
+        catch (InvalidDataException) { }
+    }
+    finally { Environment.SetEnvironmentVariable("BEEFORGE_REMOTE_CONFIG", oldRemoteConfig); }
+
     File.WriteAllText(path, "{\"profiles\":[{\"name\":\"missing id\"}]}");
     try { LegacyProfileCatalog.Load(path); throw new Exception("missing ID was accepted"); }
     catch (InvalidDataException) { }

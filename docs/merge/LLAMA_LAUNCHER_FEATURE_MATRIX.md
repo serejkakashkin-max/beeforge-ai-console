@@ -11,7 +11,7 @@ Reference: `pytraveler/LlamaServerLauncherAvalonia` commit `f52404637d51ec00e15e
 | Model/MMProj pickers | `ModelPickerViewModel`, picker windows | Local pickers | Planned; preserve current paths |
 | HuggingFace search/resumable download | `HuggingFaceClient`, `HfDownloadService` | Not present | Planned; token must never be CLI/logged |
 | Runtime build download/rollback | `LlamaCppDownloadService`, `BackendAssetSelector` | BeeLlama installer | Planned separate providers: BeeLlama, upstream llama.cpp, custom |
-| Runtime flag detection | `LlamaHelpParserService`, `NativeRuntimeProbe` | BeeLlama `--help` validation | Planned capability union; never strip BeeLlama-specific flags |
+| Runtime flag detection | `LlamaHelpParserService`, `NativeRuntimeProbe` | BeeLlama `--help` validation | BeeLlama still uses legacy validation/argv; multi-runtime capability union pending |
 | Hardware CPU/GPU/RAM/VRAM/temperature | `HardwareMonitorService` | Runtime stats subset | Planned; avoid polling during model load |
 | Multi-instance | `LlamaServerService`, `ServerInstance` | Single model, exclusive remote lease | Infrastructure only at first; default remains one heavy model |
 | Live PP/TG/slots | `InferenceStatsParser`, server service | Benchmark/status stats | Planned integrated dashboard |

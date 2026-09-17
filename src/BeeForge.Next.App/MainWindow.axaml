@@ -12,7 +12,7 @@
           <TextBlock Text="Единая консоль модели и AI-команды · предварительная оболочка" FontSize="12" Foreground="#A6B9C6" />
         </StackPanel>
         <Border Grid.Column="1" Background="#203E48" CornerRadius="12" Padding="13,7" VerticalAlignment="Center">
-          <TextBlock Text="LEGACY BACKEND · READ ONLY" Foreground="#9EE0D0" FontSize="11" FontWeight="SemiBold" />
+          <TextBlock Text="LEGACY BACKEND · SAFE ADAPTER" Foreground="#9EE0D0" FontSize="11" FontWeight="SemiBold" />
         </Border>
       </Grid>
     </Border>
@@ -23,7 +23,7 @@
           <StackPanel Margin="34,27" Spacing="22">
             <StackPanel Spacing="6">
               <TextBlock Text="Рабочее пространство" FontSize="30" FontWeight="SemiBold" />
-              <TextBlock Text="Состояние из существующего BeeForge; новые сервисы пока ничего не меняют." Foreground="#A6B9C6" />
+              <TextBlock Text="Профили и состояние берутся из существующего BeeForge. Управление моделью использует его проверенный backend." Foreground="#A6B9C6" />
             </StackPanel>
             <Border Background="#1B2B3C" BorderBrush="#365162" BorderThickness="1" CornerRadius="12" Padding="22">
               <StackPanel Spacing="14">
@@ -38,7 +38,8 @@
             <Border Background="#163B39" BorderBrush="#29736A" BorderThickness="1" CornerRadius="8" Padding="14">
               <TextBlock Text="{Binding Status}" Foreground="#B9EBD9" />
             </Border>
-            <TextBlock Text="Запуск модели, Team Guard, Telegram, Serena и RemoteClient пока остаются в проверенной старой консоли." TextWrapping="Wrap" Foreground="#A6B9C6" />
+            <TextBlock Text="{Binding RuntimeStatusText}" TextWrapping="Wrap" Foreground="#A6B9C6" />
+            <TextBlock Text="Team Guard, Telegram, Serena и расширенные настройки пока остаются в рабочей старой консоли." TextWrapping="Wrap" Foreground="#A6B9C6" />
           </StackPanel>
         </ScrollViewer>
       </TabItem>
@@ -52,10 +53,18 @@
       <TabItem Header="Inference">
         <StackPanel Margin="34,27" Spacing="14">
           <TextBlock Text="Inference" FontSize="28" FontWeight="SemiBold" />
-          <TextBlock Text="План запуска выбранного профиля формирует старый BeeForge. Номера показывают точный порядок аргументов. Ничего не запускается." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="Моделью управляет прежний BeeForge: он проверяет профиль, владение процессом и готовность сервера. При запуске текущий управляемый сервер будет остановлен." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <StackPanel Orientation="Horizontal" Spacing="9">
+            <Button Content="Проверить состояние" Click="RefreshRuntime_Click" IsEnabled="{Binding CanRefreshRuntime}" Background="#294455" Foreground="#EAF2F7" Padding="14,9" />
+            <Button Content="Запустить выбранный" Click="StartRuntime_Click" IsEnabled="{Binding CanControlLocal}" Background="#176E68" Foreground="White" Padding="14,9" />
+            <Button Content="Остановить модель" Click="StopRuntime_Click" IsEnabled="{Binding CanControlLocal}" Background="#6E3939" Foreground="White" Padding="14,9" />
+          </StackPanel>
+          <Border Background="#1B2B3C" BorderBrush="#365162" BorderThickness="1" CornerRadius="8" Padding="13">
+            <TextBlock Text="{Binding RuntimeStatusText}" TextWrapping="Wrap" Foreground="#B9EBD9" />
+          </Border>
           <TextBlock Text="ПЛАН ЗАПУСКА · ТОЛЬКО ЧТЕНИЕ" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
           <TextBox Text="{Binding CommandPreview, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Consolas" FontSize="12" MinHeight="420" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
-          <TextBlock Text="Запуск, остановка и редактирование профиля остаются в рабочей консоли до прохождения тестов паритета." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="Редактирование профиля остаётся в рабочей старой консоли до проверки паритета сохранения." TextWrapping="Wrap" Foreground="#A6B9C6" />
         </StackPanel>
       </TabItem>
       <TabItem Header="Оптимизация">
