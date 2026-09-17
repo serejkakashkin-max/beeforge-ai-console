@@ -61,8 +61,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void NotifyActionAvailability()
     {
-        foreach (var name in new[] { nameof(CanUseServices), nameof(CanControlLocal), nameof(CanConnectRemote),
-            nameof(CanRunBenchmark), nameof(CanAutoTune) }) OnPropertyChanged(name);
+        foreach (var name in new[] { nameof(CanUseServices), nameof(CanControlLocal), nameof(CanStartLocal), nameof(CanStopLocal),
+            nameof(CanConnectRemote), nameof(CanRunBenchmark), nameof(CanAutoTune) }) OnPropertyChanged(name);
     }
     private CancellationTokenSource? _selectionCancellation;
     private ProfileOption? _selectedProfile;
@@ -369,6 +369,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _selectedProfile = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanControlLocal));
+            OnPropertyChanged(nameof(CanStartLocal));
+            OnPropertyChanged(nameof(CanStopLocal));
             OnPropertyChanged(nameof(CanConnectRemote));
             OnPropertyChanged(nameof(CanRunBenchmark));
             OnPropertyChanged(nameof(CanAutoTune));
@@ -673,6 +675,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             NotifyActionAvailability();
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanControlLocal));
+            OnPropertyChanged(nameof(CanStartLocal));
+            OnPropertyChanged(nameof(CanStopLocal));
             OnPropertyChanged(nameof(CanConnectRemote));
             OnPropertyChanged(nameof(CanRefreshRuntime));
             OnPropertyChanged(nameof(CanRunBenchmark));
@@ -681,8 +685,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public bool CanControlLocal => !IsRuntimeBusy && !IsBenchmarkBusy && !_servicesBusy && _leaseKnown && !_isLeased &&
-        SelectedProfile?.Mode == "LocalHost" &&
-        _runtimeController is not null;
+        SelectedProfile?.Mode == "LocalHost" && _runtimeController is not null;
+    public bool CanStartLocal => CanControlLocal && !_runtimeRunning;
+    // Stop stays available while a long-running Start action is still finishing its bookkeeping.
+    // Once the llama-server process is known to be running, the user must always have an emergency stop.
+    public bool CanStopLocal => !IsBenchmarkBusy && !_servicesBusy && _leaseKnown && !_isLeased && _runtimeRunning &&
+        SelectedProfile?.Mode == "LocalHost" && _runtimeController is not null;
     public bool CanConnectRemote => !IsRuntimeBusy && !IsBenchmarkBusy && !_servicesBusy && SelectedProfile?.Mode == "RemoteClient" &&
         _runtimeController is not null;
     public bool CanRefreshRuntime => !IsRuntimeBusy && _runtimeController is not null;
@@ -701,6 +709,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _leaseKnown = true;
             _isLeased = status.Leased;
             OnPropertyChanged(nameof(CanControlLocal));
+            OnPropertyChanged(nameof(CanStartLocal));
+            OnPropertyChanged(nameof(CanStopLocal));
             OnPropertyChanged(nameof(CanRunBenchmark));
             OnPropertyChanged(nameof(CanAutoTune));
             RuntimeStatusText = status.Leased
@@ -714,6 +724,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _runtimeReady = false;
             _runtimeRunning = false;
             OnPropertyChanged(nameof(CanControlLocal));
+            OnPropertyChanged(nameof(CanStartLocal));
+            OnPropertyChanged(nameof(CanStopLocal));
             OnPropertyChanged(nameof(CanRunBenchmark));
             OnPropertyChanged(nameof(CanAutoTune));
             RuntimeStatusText = "Не удалось прочитать состояние. Проверьте старую консоль и её журналы.";
@@ -724,7 +736,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task StartSelectedAsync()
     {
-        if (_runtimeController is null || !CanControlLocal || SelectedProfile is null) return;
+        if (_runtimeController is null || !CanStartLocal || SelectedProfile is null) return;
         var selected = SelectedProfile;
         IsRuntimeBusy = true;
         RuntimeStatusText = "Запускаю модель… Это может занять до двух минут. Состояние обновляется автоматически.";
@@ -740,6 +752,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     var live = await _runtimeController.GetStatusAsync(pollTimeout.Token);
                     _runtimeReady = live.Ready;
                     _runtimeRunning = live.Running;
+                    OnPropertyChanged(nameof(CanStartLocal));
+                    OnPropertyChanged(nameof(CanStopLocal));
                     OnPropertyChanged(nameof(CanRunBenchmark));
                     OnPropertyChanged(nameof(CanAutoTune));
                     RuntimeStatusText = live.Ready
@@ -759,6 +773,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _runtimeReady = status.Ready;
             _runtimeRunning = status.Running;
             _activeProfileId = selected.Id;
+            OnPropertyChanged(nameof(CanStartLocal));
+            OnPropertyChanged(nameof(CanStopLocal));
             OnPropertyChanged(nameof(CanRunBenchmark));
             OnPropertyChanged(nameof(CanAutoTune));
             RuntimeStatusText = DescribeRuntime(status);
@@ -779,6 +795,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 var live = await _runtimeController.GetStatusAsync();
                 _runtimeReady = live.Ready;
                 _runtimeRunning = live.Running;
+                OnPropertyChanged(nameof(CanStartLocal));
+                OnPropertyChanged(nameof(CanStopLocal));
                 RuntimeDetailsText = DescribeResources(live, _activeProfileId == selected.Id ? _latestVramPlan : null);
                 RuntimeStatusText = live.Ready
                     ? $"{DescribeRuntime(live)} · Модель запущена; дополнительная синхронизация завершилась с ошибкой."
@@ -794,7 +812,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public async Task StopSelectedAsync()
     {
-        if (_runtimeController is null || !CanControlLocal || SelectedProfile is null) return;
+        if (_runtimeController is null || !CanStopLocal || SelectedProfile is null) return;
         IsRuntimeBusy = true;
         try
         {
@@ -802,6 +820,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             RuntimeStatusText = message;
             _runtimeReady = false;
             _runtimeRunning = false;
+            OnPropertyChanged(nameof(CanStartLocal));
+            OnPropertyChanged(nameof(CanStopLocal));
             OnPropertyChanged(nameof(CanRunBenchmark));
         }
         catch (Exception)

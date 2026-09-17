@@ -165,7 +165,7 @@ public partial class MainWindow : Window
 
     private async void StartRuntime_Click(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is not { CanControlLocal: true, SelectedProfile: { } selected } vm) return;
+        if (ViewModel is not { CanStartLocal: true, SelectedProfile: { } selected } vm) return;
         var dialog = new ConfirmRuntimeWindow("Запустить модель?",
             $"BeeForge остановит текущий управляемый сервер и запустит профиль «{selected.Name}». Изменится активный профиль и конфигурация OpenCode после успешного запуска.");
         if (await dialog.ShowDialog<bool>(this)) await vm.StartSelectedAsync();
@@ -173,7 +173,7 @@ public partial class MainWindow : Window
 
     private async void StopRuntime_Click(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is not { CanControlLocal: true } vm) return;
+        if (ViewModel is not { CanStopLocal: true } vm) return;
         var dialog = new ConfirmRuntimeWindow("Остановить модель?",
             "Будет остановлен только сервер, которым управляет BeeForge на этом ПК. Telegram и OpenCode не закрываются.");
         if (await dialog.ShowDialog<bool>(this)) await vm.StopSelectedAsync();
