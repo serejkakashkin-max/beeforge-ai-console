@@ -30,25 +30,33 @@ try
         {
             writer.Write(Encoding.ASCII.GetBytes("GGUF"));
             writer.Write(3u);
-            writer.Write(42UL);
+            writer.Write(2UL);
             writer.Write(4UL);
             WriteGgufString(writer, "general.architecture"); writer.Write(8u); WriteGgufString(writer, "qwen3");
             WriteGgufString(writer, "qwen3.context_length"); writer.Write(4u); writer.Write(190000u);
             WriteGgufString(writer, "qwen3.expert_count"); writer.Write(10u); writer.Write(128UL);
             WriteGgufString(writer, "tokenizer.ggml.tokens"); writer.Write(9u); writer.Write(8u);
             writer.Write(2UL); WriteGgufString(writer, "hello"); WriteGgufString(writer, "world");
+            WriteGgufString(writer, "blk.0.attn_q.weight"); writer.Write(2u);
+            writer.Write(128UL); writer.Write(128UL); writer.Write(10u); writer.Write(0UL);
+            WriteGgufString(writer, "blk.0.attn_k.weight"); writer.Write(2u);
+            writer.Write(128UL); writer.Write(128UL); writer.Write(1u); writer.Write(4096UL);
         }
         gguf.Position = 0;
         var info = GgufMetadataReader.Read(gguf);
-        Assert(info.Version == 3 && info.TensorCount == 42 && info.MetadataCount == 4, "GGUF header parsed");
+        Assert(info.Version == 3 && info.TensorCount == 2 && info.MetadataCount == 4, "GGUF header parsed");
         Assert(info.Values["general.architecture"] == "qwen3" &&
             info.Values["qwen3.context_length"] == "190000" &&
             info.Values["qwen3.expert_count"] == "128", "GGUF architecture metadata parsed");
         Assert(!info.Values.ContainsKey("tokenizer.ggml.tokens"), "large tokenizer arrays skipped");
+        gguf.Position = 0;
+        var tensors = GgufMetadataReader.ReadTensorTable(gguf);
+        Assert(tensors.TypeCounts[10] == 1 && tensors.TypeCounts[1] == 1 &&
+            GgmlTensorTypes.Name(10) == "Q2_K", "GGUF tensor table and type names parsed");
         gguf.SetLength(gguf.Length - 2);
         gguf.Position = 0;
-        try { GgufMetadataReader.Read(gguf); throw new Exception("truncated GGUF was accepted"); }
-        catch (InvalidDataException) { }
+        try { GgufMetadataReader.ReadTensorTable(gguf); throw new Exception("truncated GGUF was accepted"); }
+        catch (EndOfStreamException) { }
     }
 
     var migrationPath = Path.Combine(temp, "prepared-migration");

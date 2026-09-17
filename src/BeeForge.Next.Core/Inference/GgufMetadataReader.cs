@@ -49,6 +49,33 @@ public static class GgufMetadataReader
             stream.Length, values);
     }
 
+    public static GgufTensorSummary ReadTensorTable(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
+            4096, FileOptions.SequentialScan);
+        return ReadTensorTable(stream, Path.GetFullPath(path));
+    }
+
+    public static GgufTensorSummary ReadTensorTable(Stream stream, string source = "")
+    {
+        var metadata = Read(stream, source);
+        var typeCounts = new Dictionary<uint, int>();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        for (ulong i = 0; i < metadata.TensorCount; i++)
+        {
+            var name = ReadString(stream, 64);
+            if (!names.Add(name)) throw new InvalidDataException("Duplicate GGUF tensor name.");
+            var dimensions = ReadUInt32(stream);
+            if (dimensions is < 1 or > 8) throw new InvalidDataException("GGUF tensor rank is invalid.");
+            for (var axis = 0; axis < dimensions; axis++)
+                if (ReadUInt64(stream) == 0) throw new InvalidDataException("GGUF tensor dimension is zero.");
+            var type = ReadUInt32(stream);
+            _ = ReadUInt64(stream); // Tensor data offset; payload is never read.
+            typeCounts[type] = typeCounts.GetValueOrDefault(type) + 1;
+        }
+        return new GgufTensorSummary(metadata, typeCounts);
+    }
+
     private static bool IsUseful(string key) =>
         key is "general.architecture" or "general.name" or "general.file_type" or "general.size_label" or
             "general.quantization_version" ||
@@ -146,3 +173,19 @@ public static class GgufMetadataReader
 
 public sealed record GgufMetadataSummary(string Source, uint Version, ulong TensorCount,
     ulong MetadataCount, long FileSizeBytes, IReadOnlyDictionary<string, string> Values);
+
+public sealed record GgufTensorSummary(GgufMetadataSummary Metadata, IReadOnlyDictionary<uint, int> TypeCounts);
+
+public static class GgmlTensorTypes
+{
+    private static readonly string[] Known =
+    [
+        "F32", "F16", "Q4_0", "Q4_1", "reserved-4", "reserved-5", "Q5_0", "Q5_1", "Q8_0", "Q8_1",
+        "Q2_K", "Q3_K", "Q4_K", "Q5_K", "Q6_K", "Q8_K", "IQ2_XXS", "IQ2_XS", "IQ3_XXS", "IQ1_S",
+        "IQ4_NL", "IQ3_S", "IQ2_S", "IQ4_XS", "I8", "I16", "I32", "I64", "F64", "IQ1_M", "BF16",
+        "reserved-31", "reserved-32", "reserved-33", "TQ1_0", "TQ2_0", "reserved-36", "reserved-37",
+        "reserved-38", "MXFP4", "NVFP4", "Q1_0", "Q2_0"
+    ];
+
+    public static string Name(uint type) => type < Known.Length ? Known[type] : $"type-{type}";
+}

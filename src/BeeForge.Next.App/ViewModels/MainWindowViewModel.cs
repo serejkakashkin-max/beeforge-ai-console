@@ -277,11 +277,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ModelMetadataText = "Читаю заголовок GGUF без загрузки весов…";
         try
         {
-            var metadata = await Task.Run(() => GgufMetadataReader.Read(selected.ModelPath), cancellationToken);
+            var tensorSummary = await Task.Run(() => GgufMetadataReader.ReadTensorTable(selected.ModelPath), cancellationToken);
             if (cancellationToken.IsCancellationRequested) return;
+            var metadata = tensorSummary.Metadata;
             var fields = metadata.Values.Select(pair => $"{pair.Key}: {pair.Value}");
+            var tensorTypes = string.Join(", ", tensorSummary.TypeCounts.OrderByDescending(pair => pair.Value)
+                .Select(pair => $"{GgmlTensorTypes.Name(pair.Key)} {pair.Value}"));
             var display = $"Файл: {Path.GetFileName(selected.ModelPath)} · GGUF v{metadata.Version} · " +
                 $"тензоров: {metadata.TensorCount} · размер: {metadata.FileSizeBytes / 1073741824.0:0.00} GiB" +
+                Environment.NewLine + $"Типы тензоров: {tensorTypes}" +
                 Environment.NewLine + string.Join(Environment.NewLine, fields);
             Dispatcher.UIThread.Post(() => { if (!cancellationToken.IsCancellationRequested) ModelMetadataText = display; });
         }
