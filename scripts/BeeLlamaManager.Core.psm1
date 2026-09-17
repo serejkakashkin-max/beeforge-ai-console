@@ -760,7 +760,7 @@ function Connect-BeeRemoteProfile([string]$ProfileId) {
 
 function Get-BeeServerStatus {
     Initialize-BeeFolders
-    $status = [ordered]@{ Running=$false; Ready=$false; Remote=$false; BaseUrl=''; Pid=$null; Profile=''; Model=''; Context=$null; Uptime=''; VramUsedMiB=$null; VramTotalMiB=$null; GpuUtil=$null; GpuTempC=$null; RamUsedGiB=$null; RamTotalGiB=$null; RamAvailableGiB=$null; SharedVram='n/a'; PromptTPS=$null; DecodeTPS=$null; PromptTokens=$null; DecodedTokens=$null; Message='Stopped' }
+    $status = [ordered]@{ Running=$false; Ready=$false; Remote=$false; BaseUrl=''; Pid=$null; Profile=''; Model=''; Context=$null; Uptime=''; VramUsedMiB=$null; VramTotalMiB=$null; GpuUtil=$null; GpuTempC=$null; RamUsedGiB=$null; RamTotalGiB=$null; RamAvailableGiB=$null; SharedVram='n/a'; PromptTPS=$null; DecodeTPS=$null; PromptTokens=$null; DecodedTokens=$null; SlotsBusy=$null; SlotsTotal=$null; Message='Stopped' }
     try {
         $activeProfile = Get-BeeProfile
         if ((Get-BeeProfileConnectionMode $activeProfile) -eq 'RemoteClient') {
@@ -794,6 +794,19 @@ function Get-BeeServerStatus {
     if ($status.Running) {
         $timing=Get-BeeLatestTiming
         $status.PromptTPS=$timing.PromptTPS; $status.DecodeTPS=$timing.DecodeTPS; $status.PromptTokens=$timing.PromptTokens; $status.DecodedTokens=$timing.DecodedTokens
+        if ($status.Ready -and $run) {
+            try {
+                $slotRows = @(Invoke-RestMethod "http://$($run.host):$($run.port)/slots" -TimeoutSec 1)
+                if ($slotRows.Count -gt 0) {
+                    $busy = 0
+                    foreach ($slot in $slotRows) {
+                        if (($slot.PSObject.Properties.Name -contains 'is_processing' -and [bool]$slot.is_processing) -or
+                            ($slot.PSObject.Properties.Name -contains 'state' -and [string]$slot.state -match 'processing|generating|busy')) { $busy++ }
+                    }
+                    $status.SlotsBusy=$busy; $status.SlotsTotal=$slotRows.Count
+                }
+            } catch {}
+        }
     }
     return [pscustomobject]$status
 }

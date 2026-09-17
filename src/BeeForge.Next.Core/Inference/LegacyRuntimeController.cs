@@ -31,6 +31,7 @@ public sealed class LegacyRuntimeController
             GetNullableInt(root, "GpuUtil"), GetNullableInt(root, "GpuTempC"),
             GetNullableDouble(root, "RamUsedGiB"), GetNullableDouble(root, "RamTotalGiB"), GetNullableDouble(root, "RamAvailableGiB"),
             GetNullableInt(root, "Context"), GetNullableInt(root, "PromptTokens"), GetNullableInt(root, "DecodedTokens"),
+            GetNullableInt(root, "SlotsBusy"), GetNullableInt(root, "SlotsTotal"),
             GetString(root, "Uptime"));
     }
 
@@ -46,6 +47,7 @@ public sealed class LegacyRuntimeController
             GetNullableInt(root, "GpuUtil"), GetNullableInt(root, "GpuTempC"),
             GetNullableDouble(root, "RamUsedGiB"), GetNullableDouble(root, "RamTotalGiB"), GetNullableDouble(root, "RamAvailableGiB"),
             GetNullableInt(root, "Context"), GetNullableInt(root, "PromptTokens"), GetNullableInt(root, "DecodedTokens"),
+            GetNullableInt(root, "SlotsBusy"), GetNullableInt(root, "SlotsTotal"),
             GetString(root, "Uptime"));
     }
 
@@ -118,4 +120,4 @@ public sealed record LegacyRuntimeStatus(bool Running, bool Ready, bool Remote, 
     string Model, string Message, int? Pid, double? PromptTokensPerSecond, double? DecodeTokensPerSecond,
     int? VramUsedMiB, int? VramTotalMiB, int? GpuUtilization, int? GpuTemperatureC,
     double? RamUsedGiB, double? RamTotalGiB, double? RamAvailableGiB, int? ContextTokens,
-    int? PromptTokens, int? DecodedTokens, string Uptime);
+    int? PromptTokens, int? DecodedTokens, int? SlotsBusy, int? SlotsTotal, string Uptime);

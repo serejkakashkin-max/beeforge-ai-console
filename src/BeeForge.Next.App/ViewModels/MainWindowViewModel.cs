@@ -606,9 +606,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var gpu = status.GpuUtilization is null ? "GPU: —" : $"GPU: {status.GpuUtilization}%";
         var temp = status.GpuTemperatureC is null ? "температура: —" : $"температура: {status.GpuTemperatureC} °C";
         var context = status.ContextTokens is null ? "контекст: —" : $"контекст: {status.ContextTokens:N0}";
+        var slots = status.SlotsBusy is null || status.SlotsTotal is null ? "слоты: —" :
+            $"слоты: {status.SlotsBusy}/{status.SlotsTotal} занято";
         var tokens = status.PromptTokens is null && status.DecodedTokens is null ? "" :
             $" · последний запрос: input {status.PromptTokens?.ToString("N0") ?? "—"}, output {status.DecodedTokens?.ToString("N0") ?? "—"}";
-        return $"{vram} · {gpu} · {temp} · {ram} · {context} · время работы: {(string.IsNullOrWhiteSpace(status.Uptime) ? "—" : status.Uptime)}{tokens}";
+        return $"{vram} · {gpu} · {temp} · {ram} · {context} · {slots} · время работы: {(string.IsNullOrWhiteSpace(status.Uptime) ? "—" : status.Uptime)}{tokens}";
     }
 
     public static MainWindowViewModel LoadFromLegacyStore()
