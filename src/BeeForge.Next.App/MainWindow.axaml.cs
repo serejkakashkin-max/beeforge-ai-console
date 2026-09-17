@@ -45,4 +45,19 @@ public partial class MainWindow : Window
             $"BeeForge проверит доступность профиля «{selected.Name}». Только после успешной проверки OpenCode будет переключён на него. Локальная модель не запускается и не останавливается.");
         if (await dialog.ShowDialog<bool>(this)) await vm.ConnectSelectedRemoteAsync();
     }
+
+    private async void ServerLog_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } vm) await vm.RefreshLogAsync("server");
+    }
+
+    private async void ServerOutputLog_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } vm) await vm.RefreshLogAsync("server-output");
+    }
+
+    private async void TelegramLog_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } vm) await vm.RefreshLogAsync("telegram");
+    }
 }

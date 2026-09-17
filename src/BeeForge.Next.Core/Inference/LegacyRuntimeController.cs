@@ -26,7 +26,10 @@ public sealed class LegacyRuntimeController
         return new LegacyRuntimeStatus(
             GetBoolean(root, "Running"), GetBoolean(root, "Ready"), GetBoolean(root, "Remote"), GetBoolean(root, "Leased"),
             GetString(root, "Profile"), GetString(root, "Model"), GetString(root, "Message"),
-            GetNullableInt(root, "Pid"), GetNullableDouble(root, "PromptTPS"), GetNullableDouble(root, "DecodeTPS"));
+            GetNullableInt(root, "Pid"), GetNullableDouble(root, "PromptTPS"), GetNullableDouble(root, "DecodeTPS"),
+            GetNullableInt(root, "VramUsedMiB"), GetNullableInt(root, "VramTotalMiB"),
+            GetNullableDouble(root, "RamUsedGiB"), GetNullableDouble(root, "RamTotalGiB"),
+            GetString(root, "Uptime"));
     }
 
     public async Task<LegacyRuntimeStatus> StartAsync(string profileId, CancellationToken cancellationToken = default)
@@ -36,7 +39,10 @@ public sealed class LegacyRuntimeController
         return new LegacyRuntimeStatus(
             GetBoolean(root, "Running"), GetBoolean(root, "Ready"), GetBoolean(root, "Remote"), GetBoolean(root, "Leased"),
             GetString(root, "Profile"), GetString(root, "Model"), GetString(root, "Message"),
-            GetNullableInt(root, "Pid"), GetNullableDouble(root, "PromptTPS"), GetNullableDouble(root, "DecodeTPS"));
+            GetNullableInt(root, "Pid"), GetNullableDouble(root, "PromptTPS"), GetNullableDouble(root, "DecodeTPS"),
+            GetNullableInt(root, "VramUsedMiB"), GetNullableInt(root, "VramTotalMiB"),
+            GetNullableDouble(root, "RamUsedGiB"), GetNullableDouble(root, "RamTotalGiB"),
+            GetString(root, "Uptime"));
     }
 
     public async Task<string> StopAsync(string profileId, CancellationToken cancellationToken = default)
@@ -105,4 +111,5 @@ public sealed class LegacyRuntimeController
 }
 
 public sealed record LegacyRuntimeStatus(bool Running, bool Ready, bool Remote, bool Leased, string Profile,
-    string Model, string Message, int? Pid, double? PromptTokensPerSecond, double? DecodeTokensPerSecond);
+    string Model, string Message, int? Pid, double? PromptTokensPerSecond, double? DecodeTokensPerSecond,
+    int? VramUsedMiB, int? VramTotalMiB, double? RamUsedGiB, double? RamTotalGiB, string Uptime);

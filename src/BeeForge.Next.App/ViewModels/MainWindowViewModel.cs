@@ -11,11 +11,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly string? _storePath;
     private readonly string? _launchPlanScript;
     private readonly LegacyRuntimeController? _runtimeController;
+    private readonly LegacyLogTailReader? _logReader;
     private CancellationTokenSource? _selectionCancellation;
     private ProfileOption? _selectedProfile;
     private string _commandPreview = "Выберите профиль для просмотра аргументов запуска.";
     private string _runtimeStatusText = "Нажмите «Проверить состояние», чтобы получить данные из рабочего BeeForge.";
     private string _modelMetadataText = "Выберите локальный профиль для просмотра GGUF.";
+    private string _runtimeDetailsText = "Подробные показатели появятся после проверки состояния.";
+    private string _logText = "Выберите журнал для просмотра последних записей.";
     private string _activeProfile = "Не выбран";
     private string _mode = "—";
     private bool _isRuntimeBusy;
@@ -23,7 +26,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _isLeased;
 
     private MainWindowViewModel(string status, LegacyProfileCatalog? catalog,
-        string? storePath, string? launchPlanScript)
+        string? storePath, string? launchPlanScript, string? root)
     {
         Status = status;
         _storePath = storePath;
@@ -32,6 +35,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Invoke-BeeForgeNextRuntime.ps1");
         if (storePath is not null && runtimeScript is not null && File.Exists(runtimeScript))
             _runtimeController = new LegacyRuntimeController(runtimeScript, storePath);
+        if (root is not null) _logReader = new LegacyLogTailReader(root);
         ProfileNames = catalog?.Profiles.Select(p => new ProfileOption(p.Id, p.Name, p.ConnectionMode, p.ModelPath)).ToArray()
             ?? Array.Empty<ProfileOption>();
         ActiveProfile = catalog?.ActiveProfile?.Name ?? "Не выбран";
@@ -86,6 +90,25 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set { _modelMetadataText = value; OnPropertyChanged(); }
     }
 
+    public string RuntimeDetailsText
+    {
+        get => _runtimeDetailsText;
+        private set { _runtimeDetailsText = value; OnPropertyChanged(); }
+    }
+
+    public string LogText
+    {
+        get => _logText;
+        private set { _logText = value; OnPropertyChanged(); }
+    }
+
+    public async Task RefreshLogAsync(string kind)
+    {
+        if (_logReader is null) { LogText = "Каталог журналов BeeForge не найден."; return; }
+        try { LogText = await Task.Run(() => _logReader.Read(kind)); }
+        catch (Exception) { LogText = "Не удалось прочитать журнал. Работа модели не затронута."; }
+    }
+
     public string RuntimeStatusText
     {
         get => _runtimeStatusText;
@@ -125,12 +148,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             RuntimeStatusText = status.Leased
                 ? "Модель передана ноутбуку. Выключите удалённый доступ в рабочей консоли, прежде чем управлять ею здесь."
                 : DescribeRuntime(status);
+            RuntimeDetailsText = DescribeResources(status);
         }
         catch (Exception)
         {
             _leaseKnown = false;
             OnPropertyChanged(nameof(CanControlLocal));
             RuntimeStatusText = "Не удалось прочитать состояние. Проверьте старую консоль и её журналы.";
+            RuntimeDetailsText = "Показатели недоступны.";
         }
         finally { IsRuntimeBusy = false; }
     }
@@ -144,6 +169,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             var status = await _runtimeController.StartAsync(SelectedProfile.Id);
             RuntimeStatusText = DescribeRuntime(status);
+            RuntimeDetailsText = DescribeResources(status);
             if (status.Ready)
             {
                 ActiveProfile = SelectedProfile.Name;
@@ -203,6 +229,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return $"{state} · {status.Profile} · PID {status.Pid?.ToString() ?? "—"}{speed}";
     }
 
+    private static string DescribeResources(LegacyRuntimeStatus status)
+    {
+        if (status.Remote) return "Ресурсы удалённого ПК здесь не измеряются.";
+        var vram = status.VramUsedMiB is null || status.VramTotalMiB is null
+            ? "VRAM: —" : $"VRAM: {status.VramUsedMiB / 1024.0:0.0} / {status.VramTotalMiB / 1024.0:0.0} GiB";
+        var ram = status.RamUsedGiB is null || status.RamTotalGiB is null
+            ? "RAM: —" : $"RAM: {status.RamUsedGiB:0.0} / {status.RamTotalGiB:0.0} GiB";
+        return $"{vram} · {ram} · время работы: {(string.IsNullOrWhiteSpace(status.Uptime) ? "—" : status.Uptime)}";
+    }
+
     public static MainWindowViewModel LoadFromLegacyStore()
     {
         var root = FindBeeForgeRoot();
@@ -210,18 +246,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             ?? (root is null ? null : Path.Combine(root, "config", "profiles.json"));
         if (storePath is null || !File.Exists(storePath))
             return new MainWindowViewModel("Профили не найдены. Старая консоль не изменена.",
-                null, null, null);
+                null, null, null, root);
         try
         {
             var catalog = LegacyProfileCatalog.Load(storePath);
             var script = root is null ? null : Path.Combine(root, "scripts", "Get-BeeForgeNextLaunchPlan.ps1");
-            return new MainWindowViewModel("Профили считаны без изменений", catalog, storePath, script);
+            return new MainWindowViewModel("Профили считаны без изменений", catalog, storePath, script, root);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or
             System.Text.Json.JsonException or InvalidDataException)
         {
             return new MainWindowViewModel("Не удалось прочитать профили. Старая консоль доступна.",
-                null, null, null);
+                null, null, null, root);
         }
     }
 

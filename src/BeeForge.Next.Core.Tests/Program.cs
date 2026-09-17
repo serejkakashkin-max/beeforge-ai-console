@@ -24,6 +24,19 @@ try
     Assert(catalog.OriginalJson == original, "full store retained verbatim in memory");
     Assert(SHA256.HashData(File.ReadAllBytes(path)).SequenceEqual(before), "profile store not modified");
 
+    var logs = Path.Combine(temp, "logs");
+    Directory.CreateDirectory(logs);
+    var logPath = Path.Combine(logs, "current.stderr.log");
+    File.WriteAllText(logPath, new string('x', 70000) + "\nlast known line\n");
+    var logHash = SHA256.HashData(File.ReadAllBytes(logPath));
+    var logReader = new LegacyLogTailReader(temp);
+    var tail = logReader.Read("server");
+    Assert(tail.Contains("last known line", StringComparison.Ordinal) && tail.Length < 66000,
+        "log tail is bounded and includes the latest line");
+    Assert(SHA256.HashData(File.ReadAllBytes(logPath)).SequenceEqual(logHash), "log read does not modify file");
+    try { logReader.Read("../config/profiles.json"); throw new Exception("arbitrary log path accepted"); }
+    catch (ArgumentOutOfRangeException) { }
+
     using (var gguf = new MemoryStream())
     {
         using (var writer = new BinaryWriter(gguf, Encoding.UTF8, leaveOpen: true))

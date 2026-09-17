@@ -14,7 +14,7 @@ Baseline commit: `2446f85` on `main`. Machine-readable status is in `baseline.js
 | Remote client | No second Telegram, private Tailscale endpoint, lease | Remote tests; two-PC smoke pending |
 | Benchmark | Same run lifecycle and result accounting | Benchmark limits test; actual model run pending |
 | Build/installer | Windows x64 packaging and upgrade with state preserved | Distribution passes; RemoteInstall baseline harness fixed and passes in this branch |
-| New shell | Starts beside legacy; no profile write on view/open; explicit action parity | Self-contained win-x64 preview; status/start/stop through legacy module with confirmation and lease guard; live launch and visual QA pending |
+| New shell | Starts beside legacy; no profile write on view/open; explicit action parity | Self-contained win-x64 preview; status/start/stop and RemoteClient connect through legacy module with confirmation and lease guard; bounded GGUF header/tensor inspection and whitelisted log tail pass fixture tests; live launch and visual QA pending |
 | Final cutover | Every old feature PASS or explicit BLOCKED in `FINAL_PARITY_REPORT.md` | Not eligible |
 
 Run isolated tests on a copy/fixture, not against live user configuration. `test-mcp.ps1` is a diagnostic command requiring `-McpId`, not a test-suite case. The initial `Test-BeeRemoteInstall.ps1` failure was in its fixture copy: it included restored `node_modules`/`.venv` under a long temporary path. It now copies distributable files only and invokes the installer through `pwsh` as the README does; all original installer assertions remain. Do not trigger live Telegram, a model launch, Tailscale changes, or user profile migration during ordinary unit testing.
