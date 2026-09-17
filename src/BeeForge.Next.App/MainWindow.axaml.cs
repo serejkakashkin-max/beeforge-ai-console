@@ -60,4 +60,9 @@ public partial class MainWindow : Window
     {
         if (ViewModel is { } vm) await vm.RefreshLogAsync("telegram");
     }
+
+    private async void RefreshTeam_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } vm) await vm.RefreshTeamAsync();
+    }
 }

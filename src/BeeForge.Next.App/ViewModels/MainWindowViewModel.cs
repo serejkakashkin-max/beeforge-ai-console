@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Avalonia.Threading;
 using BeeForge.Next.Core.Inference;
 using BeeForge.Next.Core.Profiles;
+using BeeForge.Next.Core.Workspace;
 
 namespace BeeForge.Next.App.ViewModels;
 
@@ -12,6 +13,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly string? _launchPlanScript;
     private readonly LegacyRuntimeController? _runtimeController;
     private readonly LegacyLogTailReader? _logReader;
+    private readonly string? _openCodeConfigPath;
     private CancellationTokenSource? _selectionCancellation;
     private ProfileOption? _selectedProfile;
     private string _commandPreview = "Выберите профиль для просмотра аргументов запуска.";
@@ -19,6 +21,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _modelMetadataText = "Выберите локальный профиль для просмотра GGUF.";
     private string _runtimeDetailsText = "Подробные показатели появятся после проверки состояния.";
     private string _logText = "Выберите журнал для просмотра последних записей.";
+    private string _teamText = "Нажмите «Обновить команду» для просмотра действующих агентов OpenCode.";
     private string _activeProfile = "Не выбран";
     private string _mode = "—";
     private bool _isRuntimeBusy;
@@ -30,6 +33,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         Status = status;
         _storePath = storePath;
+        _openCodeConfigPath = catalog?.OpenCodeConfigPath;
         _launchPlanScript = launchPlanScript;
         var runtimeScript = launchPlanScript is null ? null : Path.Combine(Path.GetDirectoryName(launchPlanScript)!,
             "Invoke-BeeForgeNextRuntime.ps1");
@@ -100,6 +104,36 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _logText;
         private set { _logText = value; OnPropertyChanged(); }
+    }
+
+    public string TeamText
+    {
+        get => _teamText;
+        private set { _teamText = value; OnPropertyChanged(); }
+    }
+
+    public async Task RefreshTeamAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_openCodeConfigPath) || !File.Exists(_openCodeConfigPath))
+        {
+            TeamText = "Конфигурация OpenCode не найдена. Проверьте путь в рабочей консоли.";
+            return;
+        }
+        try
+        {
+            var snapshot = await Task.Run(() => OpenCodeTeamSnapshotReader.Read(_openCodeConfigPath));
+            var agentLines = snapshot.Agents.Select(agent =>
+                $"{(agent.Disabled ? "○" : "●")} {agent.Id} · {agent.Mode} · {agent.Model}");
+            var mcpLines = snapshot.McpServers.Select(server =>
+                $"{(server.Enabled ? "●" : "○")} {server.Id}");
+            TeamText = $"Модель: {snapshot.PrimaryModel}" + Environment.NewLine +
+                $"Агенты ({snapshot.Agents.Count}):" + Environment.NewLine +
+                string.Join(Environment.NewLine, agentLines) + Environment.NewLine + Environment.NewLine +
+                $"OpenCode MCP ({snapshot.McpServers.Count}):" + Environment.NewLine +
+                string.Join(Environment.NewLine, mcpLines) + Environment.NewLine + Environment.NewLine +
+                "Промпты, команды MCP и ключи не отображаются.";
+        }
+        catch (Exception) { TeamText = "Не удалось прочитать конфигурацию OpenCode. Она не изменена."; }
     }
 
     public async Task RefreshLogAsync(string kind)

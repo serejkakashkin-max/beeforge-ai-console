@@ -20,6 +20,7 @@ public sealed class LegacyProfileCatalog
 
         var activeId = GetString(root, "activeProfileId");
         var lastGoodId = GetString(root, "lastGoodProfileId");
+        var openCodeConfigPath = GetString(root, "openCodeConfigPath");
         var profiles = new List<LegacyProfile>();
         if (root.TryGetProperty("profiles", out var entries))
         {
@@ -48,16 +49,17 @@ public sealed class LegacyProfileCatalog
             }
         }
 
-        return new LegacyProfileCatalog(fullPath, json, activeId, lastGoodId, profiles);
+        return new LegacyProfileCatalog(fullPath, json, activeId, lastGoodId, openCodeConfigPath, profiles);
     }
 
     private LegacyProfileCatalog(string path, string originalJson, string activeId,
-        string lastGoodId, IReadOnlyList<LegacyProfile> profiles)
+        string lastGoodId, string openCodeConfigPath, IReadOnlyList<LegacyProfile> profiles)
     {
         Path = path;
         OriginalJson = originalJson;
         ActiveProfileId = activeId;
         LastGoodProfileId = lastGoodId;
+        OpenCodeConfigPath = openCodeConfigPath;
         Profiles = profiles;
     }
 
@@ -65,6 +67,7 @@ public sealed class LegacyProfileCatalog
     public string OriginalJson { get; }
     public string ActiveProfileId { get; }
     public string LastGoodProfileId { get; }
+    public string OpenCodeConfigPath { get; }
     public IReadOnlyList<LegacyProfile> Profiles { get; }
     public LegacyProfile? ActiveProfile => Profiles.FirstOrDefault(p => p.Id == ActiveProfileId);
 

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using BeeForge.Next.Core.Inference;
 using BeeForge.Next.Core.Profiles;
+using BeeForge.Next.Core.Workspace;
 
 var temp = Path.Combine(Path.GetTempPath(), "beeforge-next-profile-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(temp);
@@ -23,6 +24,22 @@ try
         "unknown profile fields retained in raw view");
     Assert(catalog.OriginalJson == original, "full store retained verbatim in memory");
     Assert(SHA256.HashData(File.ReadAllBytes(path)).SequenceEqual(before), "profile store not modified");
+
+    var openCodeFixture = Path.Combine(temp, "opencode.json");
+    File.WriteAllText(openCodeFixture, """
+        {"model":"beellama/Q2","agent":{"team-lead":{"mode":"primary","model":"beellama/Q2","prompt":"SECRET_PROMPT_VALUE","disable":false},"qa-engineer":{"mode":"subagent","disable":true}},"mcp":{"serena":{"enabled":true,"command":["SECRET_MCP_VALUE"]},"docker":{"enabled":false}}}
+        """);
+    var openCodeHash = SHA256.HashData(File.ReadAllBytes(openCodeFixture));
+    var team = OpenCodeTeamSnapshotReader.Read(openCodeFixture);
+    Assert(team.PrimaryModel == "beellama/Q2" && team.Agents.Count == 2 && team.McpServers.Count == 2,
+        "OpenCode team inventory");
+    Assert(team.Agents.Single(a => a.Id == "qa-engineer").Disabled &&
+        !team.McpServers.Single(m => m.Id == "docker").Enabled, "disabled agent and MCP preserved");
+    Assert(!team.ToString()!.Contains("SECRET_", StringComparison.Ordinal) &&
+        !string.Join(' ', team.Agents).Contains("SECRET_", StringComparison.Ordinal),
+        "OpenCode inventory excludes prompts and MCP commands");
+    Assert(SHA256.HashData(File.ReadAllBytes(openCodeFixture)).SequenceEqual(openCodeHash),
+        "OpenCode inventory is read-only");
 
     var logs = Path.Combine(temp, "logs");
     Directory.CreateDirectory(logs);

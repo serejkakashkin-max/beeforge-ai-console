@@ -80,7 +80,9 @@
       <TabItem Header="AI Workspace">
         <StackPanel Margin="34,27" Spacing="14">
           <TextBlock Text="AI Workspace" FontSize="28" FontWeight="SemiBold" />
-          <TextBlock Text="OpenCode, Team Lead, специалисты, skills, MCP, Team Guard и Serena работают через существующий BeeForge. Их prompts и разрешения не меняются." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="Team Lead, специалисты, skills, MCP, Team Guard и Serena работают через существующий BeeForge. Этот экран показывает только безопасный обзор OpenCode; prompts и разрешения не меняются." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <Button Content="Обновить команду" Click="RefreshTeam_Click" HorizontalAlignment="Left" Background="#294455" Foreground="#EAF2F7" Padding="14,9" />
+          <TextBox Text="{Binding TeamText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="420" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
         </StackPanel>
       </TabItem>
       <TabItem Header="Удалённый доступ">
