@@ -269,6 +269,20 @@ try
     Assert(local.Mode == "LocalHost" && local.Arguments.Count > 50, "local argv from legacy module");
     Assert(local.Arguments.Contains("kvarn4") && local.Arguments.Contains("--spec-draft-n-max") &&
         local.Arguments.Contains("-mm"), "BeeLlama KVarN, MTP and vision retained");
+    Assert(!local.Arguments.Contains("--mcp-servers-config"), "llama-server MCP is disabled by default");
+    var mcpConfig = Path.Combine(temp, "llama-mcp.json");
+    File.WriteAllText(mcpConfig, "{\"mcpServers\":{}}", new UTF8Encoding(false));
+    var mcpStoreNode = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(templateCopy))!.AsObject();
+    var mcpProfile = mcpStoreNode["profiles"]!.AsArray()
+        .Select(x => x!.AsObject()).Single(x => x["id"]!.GetValue<string>() == "profile-b453573d18");
+    mcpProfile["llamaMcpEnabled"] = true;
+    mcpProfile["llamaMcpConfigPath"] = mcpConfig;
+    var mcpStore = Path.Combine(temp, "llama-mcp-store.json");
+    File.WriteAllText(mcpStore, mcpStoreNode.ToJsonString(), new UTF8Encoding(false));
+    var mcpPlan = await LegacyLaunchPlanReader.ReadAsync(script, mcpStore, "profile-b453573d18");
+    var mcpFlagIndex = Array.IndexOf(mcpPlan.Arguments.ToArray(), "--mcp-servers-config");
+    Assert(mcpFlagIndex >= 0 && mcpFlagIndex + 1 < mcpPlan.Arguments.Count &&
+        mcpPlan.Arguments[mcpFlagIndex + 1] == mcpConfig, "llama-server MCP config is emitted only when enabled");
     var autoTuneSource = LegacyProfileCatalog.Load(templateCopy).Profiles.Single(p => p.Id == "profile-b453573d18");
     var autoTuneCandidate = AutoTunePlanner.Candidates(autoTuneSource.RawJson)[1];
     var autoTuneTrial = AutoTunePlanner.CreateTrialProfileJson(autoTuneSource.RawJson, autoTuneCandidate, 29876);

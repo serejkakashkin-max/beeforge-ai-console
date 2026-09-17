@@ -51,7 +51,9 @@
       "moeExpertWeightFraction": 0.0,
       "modelLayerCount": 0,
       "tensorOverride": "",
-      "noMmap": false
+      "noMmap": false,
+      "llamaMcpEnabled": false,
+      "llamaMcpConfigPath": ""
     },
     {
       "id": "profile-b453573d18",
@@ -99,7 +101,9 @@
       "moeExpertWeightFraction": 0.0,
       "modelLayerCount": 0,
       "tensorOverride": "",
-      "noMmap": false
+      "noMmap": false,
+      "llamaMcpEnabled": false,
+      "llamaMcpConfigPath": ""
     }
   ]
 }

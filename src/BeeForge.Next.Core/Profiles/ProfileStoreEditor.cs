@@ -71,6 +71,14 @@ public sealed class ProfileStoreEditor
                 throw new InvalidDataException($"{field}: требуется положительное целое число.");
         if (profile["advancedArgs"] is not null && profile["advancedArgs"] is not JsonArray)
             throw new InvalidDataException("advancedArgs должен быть массивом.");
+        if (profile["llamaMcpEnabled"] is JsonValue mcpEnabledValue &&
+            mcpEnabledValue.TryGetValue<bool>(out var mcpEnabled) && mcpEnabled)
+        {
+            var mcpPath = profile["llamaMcpConfigPath"]?.GetValue<string>() ?? "";
+            if (string.IsNullOrWhiteSpace(mcpPath) || mcpPath.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0 ||
+                !string.Equals(Path.GetExtension(mcpPath), ".json", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Для llama-server MCP укажите JSON-файл конфигурации.");
+        }
         if (mode == "RemoteClient")
         {
             var endpoint = profile["remoteBaseUrl"]?.GetValue<string>()?.Trim().TrimEnd('/') ?? "";

@@ -21,7 +21,7 @@ $script:ManagedFlags = @(
     '-ctv','--cache-type-v','--kv-tail-tokens','--kv-tail-type','-fa','--flash-attn',
     '--fit','-np','--parallel','--cache-reuse','--reasoning','--reasoning-budget',
     '--reasoning-loop-guard','--reasoning-preserve','--cpu-moe','-cmoe','--n-cpu-moe','-ncmoe','-ot','--override-tensor','--no-mmap','--mmap','--spec-type','--spec-draft-n-max',
-    '--temp','--top-p','--top-k','--min-p','--repeat-penalty','--host','--port',
+    '--temp','--top-p','--top-k','--min-p','--repeat-penalty','--host','--port','--mcp-servers-config',
     '--log-colors'
 )
 
@@ -97,6 +97,8 @@ function Initialize-BeeProfileSchema($Profile) {
         modelLayerCount = 0
         tensorOverride = ''
         noMmap = $false
+        llamaMcpEnabled = $false
+        llamaMcpConfigPath = ''
         advancedArgs = @()
     }
     foreach ($entry in $defaults.GetEnumerator()) {
@@ -319,6 +321,8 @@ function Test-BeeProfile([Parameter(Mandatory=$true)]$Profile, [switch]$SkipHelp
     $modelLayerCount = if ($Profile.PSObject.Properties['modelLayerCount']) { [int]$Profile.modelLayerCount } else { 0 }
     $tensorOverride = if ($Profile.PSObject.Properties['tensorOverride']) { [string]$Profile.tensorOverride } else { '' }
     $noMmap = ($Profile.PSObject.Properties['noMmap'] -and [bool]$Profile.noMmap)
+    $llamaMcpEnabled = ($Profile.PSObject.Properties['llamaMcpEnabled'] -and [bool]$Profile.llamaMcpEnabled)
+    $llamaMcpConfigPath = if ($Profile.PSObject.Properties['llamaMcpConfigPath']) { [string]$Profile.llamaMcpConfigPath } else { '' }
     if ($cpuMoeLayers -lt 0) { $errors.Add('CPU MoE layers must be 0 or greater') }
     if ($cpuMoeAll -and $cpuMoeLayers -gt 0) { $errors.Add('Use either all CPU MoE or a numeric CPU MoE layer count, not both') }
     if ($moeLayerCount -lt 0) { $errors.Add('MoE layer count must be 0 or greater') }
@@ -328,6 +332,11 @@ function Test-BeeProfile([Parameter(Mandatory=$true)]$Profile, [switch]$SkipHelp
     if ($tensorOverride -match "[`r`n`0]") { $errors.Add('Tensor override must be a single command-line value without newline or NUL') }
     if ($tensorOverride -and $tensorOverride -notmatch '=') { $errors.Add('Tensor override must use llama.cpp pattern=backend syntax, for example blk.(24-39).ffn_.*_exps.weight=CPU') }
     if ($tensorOverride -and ($cpuMoeAll -or $cpuMoeLayers -gt 0)) { $warnings.Add('Both CPU MoE and tensor override are enabled. Prefer one offload strategy unless the combination was intentionally benchmarked.') }
+    if ($llamaMcpEnabled) {
+        if ([string]::IsNullOrWhiteSpace($llamaMcpConfigPath)) { $errors.Add('llama-server MCP is enabled but no MCP config JSON was selected') }
+        elseif (-not (Test-Path -LiteralPath $llamaMcpConfigPath -PathType Leaf)) { $errors.Add("llama-server MCP config not found: $llamaMcpConfigPath") }
+        elseif ([IO.Path]::GetExtension($llamaMcpConfigPath) -ne '.json') { $errors.Add('llama-server MCP config must be a .json file') }
+    }
     $modelNameForWarnings = if ($Profile.modelPath) { [IO.Path]::GetFileName([string]$Profile.modelPath) } else { '' }
     if ([int]$Profile.cacheReuse -gt 0 -and $modelNameForWarnings -match '(?i)(Ornith|Tiel-Coder)') { $warnings.Add('Cache reuse is not supported by the Ornith/Tiel hybrid-attention context in current BeeLlama builds; set Cache reuse = 0 to avoid a runtime disable warning') }
 
@@ -348,6 +357,7 @@ function Test-BeeProfile([Parameter(Mandatory=$true)]$Profile, [switch]$SkipHelp
         elseif ($cpuMoeLayers -gt 0) { $requiredFlags += '--n-cpu-moe' }
         if ($tensorOverride) { $requiredFlags += '-ot' }
         if ($noMmap) { $requiredFlags += '--no-mmap' }
+        if ($llamaMcpEnabled) { $requiredFlags += '--mcp-servers-config' }
         foreach ($requiredFlag in $requiredFlags) {
             if ($helpText -notmatch [regex]::Escape($requiredFlag)) { $errors.Add("Runtime does not support required flag: $requiredFlag") }
         }
@@ -404,6 +414,13 @@ function Get-BeeArguments([Parameter(Mandatory=$true)]$Profile) {
     $tensorOverride = if ($Profile.PSObject.Properties['tensorOverride']) { [string]$Profile.tensorOverride } else { '' }
     if (-not [string]::IsNullOrWhiteSpace($tensorOverride)) { foreach ($value in @('-ot',$tensorOverride.Trim())) { $args.Add([string]$value) } }
     if ($Profile.PSObject.Properties['noMmap'] -and [bool]$Profile.noMmap) { $args.Add('--no-mmap') }
+    if ($Profile.PSObject.Properties['llamaMcpEnabled'] -and [bool]$Profile.llamaMcpEnabled) {
+        $mcpConfigPath = if ($Profile.PSObject.Properties['llamaMcpConfigPath']) { [string]$Profile.llamaMcpConfigPath } else { '' }
+        if (-not [string]::IsNullOrWhiteSpace($mcpConfigPath)) {
+            $args.Add('--mcp-servers-config')
+            $args.Add($mcpConfigPath)
+        }
+    }
     foreach ($entry in @($Profile.advancedArgs)) {
         $args.Add([string]$entry.flag)
         if (-not [string]::IsNullOrEmpty([string]$entry.value)) { $args.Add([string]$entry.value) }

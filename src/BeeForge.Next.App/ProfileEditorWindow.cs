@@ -43,6 +43,9 @@ internal sealed class ProfileEditorWindow : Window
         AddSection(sections, "Vision и дополнительные", new[] {
             ("visionEnabled", "Vision"), ("mmprojPath", "Проектор MMProj"),
             ("visionOffload", "Проектор на GPU"), ("advancedArgs", "Дополнительные аргументы (JSON)") });
+        AddSection(sections, "llama-server MCP", new[] {
+            ("llamaMcpEnabled", "Включить MCP в llama-server"),
+            ("llamaMcpConfigPath", "MCP config JSON") });
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Salmon };
         var save = new Button { Content = "Сохранить", Padding = new Thickness(20, 9) };
         save.Click += (_, _) =>
@@ -97,15 +100,15 @@ internal sealed class ProfileEditorWindow : Window
                 _readers[key] = () => key == "advancedArgs" ? JsonNode.Parse(text.Text ?? "[]") :
                     numeric ? JsonNode.Parse(text.Text ?? "0") : JsonValue.Create(text.Text ?? "");
                 control = text;
-                if (key is "modelPath" or "serverPath" or "mmprojPath")
+                if (key is "modelPath" or "serverPath" or "mmprojPath" or "llamaMcpConfigPath")
                 {
                     var browse = new Button { Content = "…", Margin = new Thickness(6, 0, 0, 0) };
                     browse.Click += async (_, _) =>
                     {
                         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions {
                             Title = label, AllowMultiple = false,
-                            FileTypeFilter = new[] { new FilePickerFileType(key == "serverPath" ? "Runtime" : "GGUF") {
-                                Patterns = new[] { key == "serverPath" ? "*.exe" : "*.gguf" } } } });
+                            FileTypeFilter = new[] { new FilePickerFileType(key == "serverPath" ? "Runtime" : key == "llamaMcpConfigPath" ? "JSON" : "GGUF") {
+                                Patterns = new[] { key == "serverPath" ? "*.exe" : key == "llamaMcpConfigPath" ? "*.json" : "*.gguf" } } } });
                         if (files.Count > 0 && files[0].TryGetLocalPath() is { } path) text.Text = path;
                     };
                     var picker = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
