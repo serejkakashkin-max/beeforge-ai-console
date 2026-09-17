@@ -14,18 +14,35 @@ public static class AutoTunePlanner
         var threads = Read(root, "threads", Environment.ProcessorCount);
         var threadsBatch = Read(root, "threadsBatch", threads);
         var flash = root["flashAttention"]?.GetValue<bool>() ?? true;
-        var candidates = new[]
+        var gpuLayers = root["gpuLayers"]?.ToString() ?? "all";
+        var modelLayerCount = Read(root, "modelLayerCount", 0);
+        var cpuMoeLayers = Read(root, "cpuMoeLayers", 0);
+        var baseline = new AutoTuneCandidate("Исходные", batch, ubatch, threads, threadsBatch, flash);
+        var candidates = new List<AutoTuneCandidate>
         {
-            new AutoTuneCandidate("Исходные", batch, ubatch, threads, threadsBatch, flash),
+            baseline,
             new AutoTuneCandidate("Крупнее batch", Math.Min(8192, batch * 2), ubatch, threads, threadsBatch, flash),
             new AutoTuneCandidate("Крупнее ubatch", batch, Math.Min(batch, Math.Min(2048, ubatch * 2)), threads, threadsBatch, flash),
             new AutoTuneCandidate("Меньше потоков", batch, ubatch, Math.Max(1, threads / 2), threadsBatch, flash),
             new AutoTuneCandidate("Меньше batch-потоков", batch, ubatch, threads, Math.Max(1, threadsBatch / 2), flash),
             new AutoTuneCandidate("Flash attention", batch, ubatch, threads, threadsBatch, !flash),
         };
+        if (int.TryParse(gpuLayers, out var numericLayers) && numericLayers > 1)
+        {
+            candidates.Add(baseline with { Name = "Меньше GPU-слоёв", GpuLayers = (numericLayers - 1).ToString() });
+            if (modelLayerCount > numericLayers)
+                candidates.Add(baseline with { Name = "Больше GPU-слоёв", GpuLayers = (numericLayers + 1).ToString() });
+        }
+        else if (gpuLayers == "all" && modelLayerCount > 1)
+            candidates.Add(baseline with { Name = "Один слой на CPU", GpuLayers = (modelLayerCount - 1).ToString() });
+        if (cpuMoeLayers > 0)
+            candidates.Add(baseline with { Name = "Меньше CPU MoE", CpuMoeLayers = cpuMoeLayers - 1 });
+        else if (Read(root, "moeLayerCount", 0) > 0)
+            candidates.Add(baseline with { Name = "Один CPU MoE", CpuMoeLayers = 1 });
         return candidates.Where(c => c.Batch is >= 128 and <= 8192 && c.UBatch is >= 64 and <= 8192 &&
             c.UBatch <= c.Batch && c.Threads is >= 1 and <= 128 && c.ThreadsBatch is >= 1 and <= 128)
-            .DistinctBy(c => (c.Batch, c.UBatch, c.Threads, c.ThreadsBatch, c.FlashAttention)).ToArray();
+            .DistinctBy(c => (c.Batch, c.UBatch, c.Threads, c.ThreadsBatch, c.FlashAttention,
+                c.GpuLayers, c.CpuMoeLayers)).ToArray();
     }
 
     public static string CreateTrialProfileJson(string original, AutoTuneCandidate candidate, int port)
@@ -37,6 +54,8 @@ public static class AutoTunePlanner
         root["threads"] = candidate.Threads;
         root["threadsBatch"] = candidate.ThreadsBatch;
         root["flashAttention"] = candidate.FlashAttention;
+        if (candidate.GpuLayers is not null) root["gpuLayers"] = candidate.GpuLayers;
+        if (candidate.CpuMoeLayers is not null) root["cpuMoeLayers"] = candidate.CpuMoeLayers.Value;
         root["host"] = "127.0.0.1";
         root["port"] = port;
         return root.ToJsonString();
@@ -47,7 +66,7 @@ public static class AutoTunePlanner
 }
 
 public sealed record AutoTuneCandidate(string Name, int Batch, int UBatch, int Threads,
-    int ThreadsBatch, bool FlashAttention);
+    int ThreadsBatch, bool FlashAttention, string? GpuLayers = null, int? CpuMoeLayers = null);
 public sealed record AutoTuneTrial(AutoTuneCandidate Candidate, double Prefill, double Decode,
     string? Error)
 {

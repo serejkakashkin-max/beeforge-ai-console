@@ -27,6 +27,8 @@ public static class AutoTuneProfileCreator
         clone["threads"] = candidate.Threads;
         clone["threadsBatch"] = candidate.ThreadsBatch;
         clone["flashAttention"] = candidate.FlashAttention;
+        if (candidate.GpuLayers is not null) clone["gpuLayers"] = candidate.GpuLayers;
+        if (candidate.CpuMoeLayers is not null) clone["cpuMoeLayers"] = candidate.CpuMoeLayers.Value;
         profiles.Add(clone);
         var fullPath = Path.GetFullPath(storePath);
         var temp = fullPath + ".tune-" + Guid.NewGuid().ToString("N") + ".tmp";

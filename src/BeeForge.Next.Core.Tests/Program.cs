@@ -77,8 +77,14 @@ try
     try { _ = HttpBenchmarkProbe.CompletionUrl(new Uri("http://example.com/v1")); throw new Exception("public HTTP benchmark accepted"); }
     catch (ArgumentException) { }
     var tuningCandidates = AutoTunePlanner.Candidates(catalog.Profiles[0].RawJson);
-    Assert(tuningCandidates.Count is >= 3 and <= 6 && tuningCandidates[0].Name == "Исходные",
+    Assert(tuningCandidates.Count is >= 3 and <= 9 && tuningCandidates[0].Name == "Исходные",
         "bounded auto-tune trial plan includes baseline");
+    Assert(tuningCandidates.Any(c => c.CpuMoeLayers == 11),
+        "MoE placement candidate preserves BeeLlama-specific tuning");
+    var numericGpuProfile = "{\"batch\":2048,\"ubatch\":512,\"threads\":8,\"threadsBatch\":8," +
+        "\"flashAttention\":true,\"gpuLayers\":20,\"modelLayerCount\":30}";
+    Assert(AutoTunePlanner.Candidates(numericGpuProfile).Any(c => c.GpuLayers == "21"),
+        "known numeric GPU layers receive a bounded candidate");
     var trialJson = AutoTunePlanner.CreateTrialProfileJson(catalog.Profiles[0].RawJson, tuningCandidates[1], 29876);
     Assert(trialJson.Contains("\"port\":29876", StringComparison.Ordinal) &&
         catalog.Profiles[0].RawJson.Contains("\"unknownField\":\"preserve\"", StringComparison.Ordinal),
