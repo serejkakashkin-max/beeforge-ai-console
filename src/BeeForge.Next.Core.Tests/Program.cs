@@ -64,6 +64,13 @@ try
         "benchmark discards warmup and computes repeated metrics");
     Assert(benchmarkStore.Load("local").Single().Id == benchmarkRun.Id,
         "benchmark history survives reload");
+    var comparisonRun = benchmarkRun with { Id = "comparison2", ProfileName = "Test|Profile",
+        PrefillTokensPerSecond = 30, DecodeTokensPerSecond = 60 };
+    var comparison = BenchmarkComparisonReport.Render(new[] { comparisonRun, benchmarkRun });
+    Assert(comparison.Contains("+100.0%", StringComparison.Ordinal) &&
+        comparison.Contains("Test\\|Profile", StringComparison.Ordinal) &&
+        !comparison.Contains("SECRET_", StringComparison.Ordinal),
+        "comparison report uses matching workload and escapes profile name");
     try { _ = HttpBenchmarkProbe.CompletionUrl(new Uri("http://example.com/v1")); throw new Exception("public HTTP benchmark accepted"); }
     catch (ArgumentException) { }
     var tuningCandidates = AutoTunePlanner.Candidates(catalog.Profiles[0].RawJson);

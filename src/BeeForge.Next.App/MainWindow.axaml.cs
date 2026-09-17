@@ -1,6 +1,8 @@
 using Avalonia.Interactivity;
 using Avalonia.Controls;
 using BeeForge.Next.App.ViewModels;
+using BeeForge.Next.Core.Benchmarking;
+using Avalonia.Platform.Storage;
 
 namespace BeeForge.Next.App;
 
@@ -103,5 +105,31 @@ public partial class MainWindow : Window
         var dialog = new ConfirmRuntimeWindow("Создать новый профиль?",
             "Будет создана копия исходного профиля с подобранными параметрами. Исходный и активный профили сохранятся; перед записью будет создана резервная копия файла профилей.");
         if (await dialog.ShowDialog<bool>(this)) vm.SaveAutoTuneProfile();
+    }
+
+    private async void ExportBenchmark_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        var selected = BenchmarkRunsList.SelectedItems?.OfType<BenchmarkRunOption>()
+            .Select(option => option.Run).ToArray() ?? Array.Empty<StoredBenchmarkRun>();
+        if (selected.Length == 0) { vm.SetBenchmarkMessage("Выберите хотя бы один прогон."); return; }
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Сохранить сравнение BeeForge",
+            SuggestedFileName = "beeforge-benchmark-comparison.md",
+            FileTypeChoices = new[] { new FilePickerFileType("Markdown") { Patterns = new[] { "*.md" } } }
+        });
+        if (file is null) return;
+        try
+        {
+            await using var stream = await file.OpenWriteAsync();
+            using var writer = new StreamWriter(stream);
+            await writer.WriteAsync(BenchmarkComparisonReport.Render(selected));
+            vm.SetBenchmarkMessage("Отчёт сравнения сохранён.");
+        }
+        catch (Exception)
+        {
+            vm.SetBenchmarkMessage("Не удалось сохранить отчёт. История замеров не изменена.");
+        }
     }
 }

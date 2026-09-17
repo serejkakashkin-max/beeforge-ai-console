@@ -31,6 +31,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _teamText = "Нажмите «Обновить команду» для просмотра действующих агентов OpenCode.";
     private string _benchmarkStatusText = "Проверьте состояние теста скорости.";
     private string _benchmarkHistoryText = "Истории замеров пока нет.";
+    private IReadOnlyList<BenchmarkRunOption> _benchmarkRunOptions = Array.Empty<BenchmarkRunOption>();
     private string _activeProfileId = "";
     private bool _runtimeReady;
     private bool _runtimeRunning;
@@ -151,6 +152,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _benchmarkHistoryText;
         private set { _benchmarkHistoryText = value; OnPropertyChanged(); }
     }
+    public IReadOnlyList<BenchmarkRunOption> BenchmarkRunOptions
+    {
+        get => _benchmarkRunOptions;
+        private set { _benchmarkRunOptions = value; OnPropertyChanged(); }
+    }
     public string BenchmarkStatusText
     {
         get => _benchmarkStatusText;
@@ -175,6 +181,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         SelectedProfile?.Mode == "LocalHost" && _benchmarkRunner is not null;
     public bool CanStopBenchmark => IsBenchmarkBusy && _benchmarkCancellation is not null;
     public bool CanRefreshBenchmark => !IsBenchmarkBusy && _benchmarkStore is not null;
+    public void SetBenchmarkMessage(string message) => BenchmarkStatusText = message;
     public bool CanAutoTune => !IsBenchmarkBusy && !IsRuntimeBusy && _leaseKnown && !_isLeased &&
         !_runtimeRunning && SelectedProfile?.Mode == "LocalHost" && _autoTuner is not null;
     public bool CanSaveTune => !IsBenchmarkBusy && _tuneResult?.Suggested is not null &&
@@ -234,6 +241,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var runs = _benchmarkStore.Load(SelectedProfile.Id, 20);
+            BenchmarkRunOptions = runs.Select(run => new BenchmarkRunOption(run)).ToArray();
             var newest = runs.FirstOrDefault();
             var previous = newest is null ? null : runs.Skip(1).FirstOrDefault(run =>
                 run.ModelAlias == newest.ModelAlias && run.PromptTokens == newest.PromptTokens &&
@@ -251,7 +259,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     $"TG {run.DecodeTokensPerSecond:0.0} ±{run.DecodeStdDev:0.0} tok/s · " +
                     $"{run.Repeats} повторов · конфигурация {run.ProfileSha256[..8]}"));
         }
-        catch (Exception) { BenchmarkHistoryText = "Не удалось прочитать историю замеров."; }
+        catch (Exception)
+        {
+            BenchmarkRunOptions = Array.Empty<BenchmarkRunOption>();
+            BenchmarkHistoryText = "Не удалось прочитать историю замеров.";
+        }
         return Task.CompletedTask;
     }
 
@@ -619,4 +631,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 public sealed record ProfileOption(string Id, string Name, string Mode, string ModelPath)
 {
     public override string ToString() => $"{Name} · {Mode}";
+}
+
+public sealed record BenchmarkRunOption(StoredBenchmarkRun Run)
+{
+    public override string ToString() =>
+        $"{Run.CompletedAt.LocalDateTime:g} · {Run.ProfileName} · {Run.PromptTokens}/{Run.OutputTokens} · PP {Run.PrefillTokensPerSecond:0.0} / TG {Run.DecodeTokensPerSecond:0.0}";
 }
