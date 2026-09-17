@@ -11,7 +11,11 @@ public partial class MainWindow : Window
         InitializeComponent();
         Opened += async (_, _) =>
         {
-            if (ViewModel is { } vm) await vm.RefreshRuntimeStatusAsync();
+            if (ViewModel is { } vm)
+            {
+                await vm.RefreshRuntimeStatusAsync();
+                await vm.RefreshBenchmarkStatusAsync();
+            }
         };
     }
 
@@ -64,5 +68,40 @@ public partial class MainWindow : Window
     private async void RefreshTeam_Click(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is { } vm) await vm.RefreshTeamAsync();
+    }
+
+    private async void RefreshBenchmark_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } vm) await vm.RefreshBenchmarkStatusAsync();
+    }
+
+    private async void StartBenchmark_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { CanRunBenchmark: true, SelectedProfile: { } selected } vm) return;
+        var dialog = new ConfirmRuntimeWindow("Запустить тест скорости?",
+            $"BeeForge выполнит разогрев и повторные синтетические замеры профиля «{selected.Name}» на работающей модели. Это займёт вычислительные ресурсы; OpenCode и модель не перезапускаются.");
+        if (await dialog.ShowDialog<bool>(this)) await vm.StartBenchmarkAsync();
+    }
+
+    private async void StopBenchmark_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { CanStopBenchmark: true } vm) return;
+        await vm.StopBenchmarkAsync();
+    }
+
+    private async void AutoTune_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { CanAutoTune: true, SelectedProfile: { } selected } vm) return;
+        var dialog = new ConfirmRuntimeWindow("Проверить варианты настроек?",
+            $"Для профиля «{selected.Name}» будут последовательно загружены временные серверы и выполнены замеры. Это ресурсоёмкая операция; рабочая модель должна быть остановлена. Исходный профиль не меняется.");
+        if (await dialog.ShowDialog<bool>(this)) await vm.RunAutoTuneAsync();
+    }
+
+    private async void SaveAutoTune_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { CanSaveTune: true } vm) return;
+        var dialog = new ConfirmRuntimeWindow("Создать новый профиль?",
+            "Будет создана копия исходного профиля с подобранными параметрами. Исходный и активный профили сохранятся; перед записью будет создана резервная копия файла профилей.");
+        if (await dialog.ShowDialog<bool>(this)) vm.SaveAutoTuneProfile();
     }
 }

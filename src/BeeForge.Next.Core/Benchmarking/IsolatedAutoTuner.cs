@@ -1,0 +1,151 @@
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
+using System.Text.Json;
+using BeeForge.Next.Core.Inference;
+
+namespace BeeForge.Next.Core.Benchmarking;
+
+/// <summary>Runs a bounded set of disposable server trials. It never stops the managed server
+/// or writes the live profile store; the caller must explicitly confirm the heavy operation.</summary>
+public sealed class IsolatedAutoTuner
+{
+    private readonly string _launchScript;
+    private readonly LegacyRuntimeController _runtime;
+    private readonly HttpBenchmarkProbe _probe;
+
+    public IsolatedAutoTuner(string launchScript, LegacyRuntimeController runtime,
+        HttpBenchmarkProbe? probe = null)
+    {
+        _launchScript = Path.GetFullPath(launchScript);
+        _runtime = runtime;
+        _probe = probe ?? new HttpBenchmarkProbe();
+    }
+
+    public async Task<AutoTuneResult> RunAsync(string profileId, string profileJson,
+        IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        var candidates = AutoTunePlanner.Candidates(profileJson);
+        var trials = new List<AutoTuneTrial>();
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var status = await _runtime.GetStatusAsync(cancellationToken);
+            if (status.Running || status.Ready || status.Leased || status.Remote)
+                throw new InvalidOperationException("Остановите рабочую модель и выключите удалённый доступ перед автоподбором.");
+            progress?.Report($"Проверяю {candidate.Name} ({trials.Count + 1}/{candidates.Count})…");
+            try
+            {
+                var sample = await TrialAsync(profileId, profileJson, candidate, cancellationToken);
+                trials.Add(new AutoTuneTrial(candidate, sample.PrefillTokensPerSecond,
+                    sample.DecodeTokensPerSecond, null));
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                trials.Add(new AutoTuneTrial(candidate, 0, 0, ex.GetType().Name));
+                if (trials.Count == 1) break; // No trustworthy baseline.
+            }
+        }
+        var provisional = AutoTuneResult.FromTrials(trials);
+        if (provisional.Suggested is null) return provisional;
+        // Re-run both candidates after the search. A one-off spike must not
+        // generate a production profile recommendation.
+        var confirmation = new List<AutoTuneTrial>();
+        foreach (var candidate in new[] { candidates[0], provisional.Suggested })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var status = await _runtime.GetStatusAsync(cancellationToken);
+            if (status.Running || status.Ready || status.Leased || status.Remote)
+                throw new InvalidOperationException("Рабочая модель запущена во время проверки; автоподбор остановлен.");
+            progress?.Report($"Подтверждаю результат: {candidate.Name}…");
+            try
+            {
+                var sample = await TrialAsync(profileId, profileJson, candidate, cancellationToken);
+                confirmation.Add(new AutoTuneTrial(candidate, sample.PrefillTokensPerSecond,
+                    sample.DecodeTokensPerSecond, null));
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { confirmation.Add(new AutoTuneTrial(candidate, 0, 0, ex.GetType().Name)); }
+        }
+        var confirmed = AutoTuneResult.FromTrials(confirmation);
+        return confirmed.Suggested is null ? new AutoTuneResult(trials.Concat(confirmation).ToArray(), null, 0)
+            : new AutoTuneResult(trials.Concat(confirmation).ToArray(), confirmed.Suggested,
+                confirmed.ImprovementPercent);
+    }
+
+    private async Task<BenchmarkSample> TrialAsync(string profileId, string original,
+        AutoTuneCandidate candidate, CancellationToken cancellationToken)
+    {
+        var temporaryDirectory = Path.Combine(Path.GetTempPath(), "beeforge-tune-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporaryDirectory);
+        Process? process = null;
+        Task? outputDrain = null;
+        Task? errorDrain = null;
+        try
+        {
+            var port = FreeLoopbackPort();
+            var candidateJson = AutoTunePlanner.CreateTrialProfileJson(original, candidate, port);
+            using var candidateDocument = JsonDocument.Parse(candidateJson);
+            var storePath = Path.Combine(temporaryDirectory, "profiles.json");
+            await File.WriteAllTextAsync(storePath,
+                JsonSerializer.Serialize(new { profiles = new[] { candidateDocument.RootElement } }), cancellationToken);
+            var plan = await LegacyLaunchPlanReader.ReadAsync(_launchScript, storePath, profileId, cancellationToken);
+            if (plan.Mode != "LocalHost" || !File.Exists(plan.ServerPath))
+                throw new InvalidDataException("Локальный сервер профиля недоступен.");
+            var start = new ProcessStartInfo(plan.ServerPath)
+            {
+                UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true, RedirectStandardError = true,
+                WorkingDirectory = Path.GetDirectoryName(plan.ServerPath)!
+            };
+            foreach (var arg in plan.Arguments) start.ArgumentList.Add(arg);
+            process = Process.Start(start) ?? throw new IOException("Не удалось запустить пробный сервер.");
+            outputDrain = process.StandardOutput.BaseStream.CopyToAsync(Stream.Null);
+            errorDrain = process.StandardError.BaseStream.CopyToAsync(Stream.Null);
+            var endpoint = new Uri($"http://127.0.0.1:{port}/v1");
+            using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            wait.CancelAfter(TimeSpan.FromMinutes(3));
+            while (true)
+            {
+                wait.Token.ThrowIfCancellationRequested();
+                if (process.HasExited) throw new IOException("Пробный сервер завершился до готовности.");
+                try { await _probe.VerifyModelAsync(endpoint, plan.Alias, wait.Token); break; }
+                catch (HttpRequestException) { }
+                catch (InvalidDataException) { }
+                await Task.Delay(1000, wait.Token);
+            }
+            // Identical work for every candidate; warmup is deliberately discarded.
+            await _probe.MeasureAsync(endpoint, plan.Alias, 1024, 64, TimeSpan.FromMinutes(2), cancellationToken);
+            var first = await _probe.MeasureAsync(endpoint, plan.Alias, 1024, 64,
+                TimeSpan.FromMinutes(2), cancellationToken);
+            var second = await _probe.MeasureAsync(endpoint, plan.Alias, 1024, 64,
+                TimeSpan.FromMinutes(2), cancellationToken);
+            return new BenchmarkSample((first.PrefillTokensPerSecond + second.PrefillTokensPerSecond) / 2,
+                (first.DecodeTokensPerSecond + second.DecodeTokensPerSecond) / 2,
+                (first.PromptTokens + second.PromptTokens) / 2,
+                (first.OutputTokens + second.OutputTokens) / 2,
+                (first.PromptMilliseconds + second.PromptMilliseconds) / 2);
+        }
+        finally
+        {
+            if (process is not null)
+            {
+                try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) { /* Exited concurrently. */ }
+                await process.WaitForExitAsync(CancellationToken.None);
+                try { if (outputDrain is not null) await outputDrain; } catch (IOException) { }
+                try { if (errorDrain is not null) await errorDrain; } catch (IOException) { }
+                process.Dispose();
+            }
+            Directory.Delete(temporaryDirectory, recursive: true);
+        }
+    }
+
+    private static int FreeLoopbackPort()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        return ((IPEndPoint)listener.LocalEndpoint).Port;
+    }
+}

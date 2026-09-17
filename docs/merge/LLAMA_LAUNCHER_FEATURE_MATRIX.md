@@ -15,8 +15,8 @@ Reference: `pytraveler/LlamaServerLauncherAvalonia` commit `f52404637d51ec00e15e
 | Hardware CPU/GPU/RAM/VRAM/temperature | `HardwareMonitorService` | Runtime stats subset | Planned; avoid polling during model load |
 | Multi-instance | `LlamaServerService`, `ServerInstance` | Single model, exclusive remote lease | Infrastructure only at first; default remains one heavy model |
 | Live PP/TG/slots | `InferenceStatsParser`, server service | Benchmark/status stats | Planned integrated dashboard |
-| Benchmark history/comparison | `BenchmarkStorageService`, comparison VM | Run/status and retained files | Planned with profile and runtime provenance |
-| Auto optimizer | `OptimizationService`, samplers/pruners | Not present | Planned with baseline, trial, confirmation and backup; never auto-apply a slower candidate |
+| Benchmark history/comparison | `BenchmarkStorageService`, comparison VM | Run/status and retained files | Next preview: `/completion` workload, discarded warmup, repeated PP/TG mean and spread, per-profile private JSON history with profile fingerprint; richer reports/filtering pending |
+| Auto optimizer | `OptimizationService`, samplers/pruners | Not present | Next preview: isolated baseline and bounded batch/ubatch/threads/flash trial set, confirmation, minimum 5% improvement, optional backed-up copy of profile; upstream TPE/pruners and VRAM-aware search pending |
 | On-demand OpenAI proxy | `OnDemandProxyService` | Direct OpenCode provider | Planned opt-in, localhost default; no provider disruption |
 | Scenarios/presets | Scenario model/dialog | Profiles | Planned opt-in, no automatic heavy-model fanout |
 | Crash advisor/process job | `ServerCrashAdvisor`, `WindowsProcessJob` | PID/ownership checks | Planned only after parity on process ownership |

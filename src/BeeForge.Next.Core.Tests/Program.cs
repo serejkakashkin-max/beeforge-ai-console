@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using BeeForge.Next.Core.Inference;
+using BeeForge.Next.Core.Benchmarking;
 using BeeForge.Next.Core.Profiles;
 using BeeForge.Next.Core.Workspace;
 
@@ -40,6 +41,61 @@ try
         "OpenCode inventory excludes prompts and MCP commands");
     Assert(SHA256.HashData(File.ReadAllBytes(openCodeFixture)).SequenceEqual(openCodeHash),
         "OpenCode inventory is read-only");
+
+    var benchmarkRoot = Path.Combine(temp, "benchmark-fixture");
+    var benchmarkCalls = 0;
+    using var benchmarkClient = new HttpClient(new FakeBenchmarkHandler(request =>
+    {
+        if (request.RequestUri!.AbsolutePath == "/v1/models")
+            return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                { Content = new StringContent("{\"data\":[{\"id\":\"Q2\"}]}") };
+        benchmarkCalls++;
+        var speed = benchmarkCalls == 1 ? 1 : benchmarkCalls == 2 ? 10 : 20;
+        return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            { Content = new StringContent($"{{\"timings\":{{\"prompt_per_second\":{speed},\"predicted_per_second\":{speed * 2},\"prompt_n\":256,\"predicted_n\":16,\"prompt_ms\":123}}}}") };
+    }));
+    var benchmarkStore = new BenchmarkRunStore(benchmarkRoot);
+    var benchmarkRunner = new StandardBenchmarkRunner(new HttpBenchmarkProbe(benchmarkClient), benchmarkStore);
+    var benchmarkRequest = new BenchmarkRunRequest("local", "Локальная", "Q2", "http://127.0.0.1:8080/v1",
+        BenchmarkRunRequest.Fingerprint("{\"batch\":2048}"), 256, 16, 2, 30);
+    var benchmarkRun = await benchmarkRunner.RunAsync(benchmarkRequest, null, CancellationToken.None);
+    Assert(benchmarkCalls == 3 && benchmarkRun.PrefillTokensPerSecond == 15 &&
+        benchmarkRun.DecodeTokensPerSecond == 30 && benchmarkRun.PrefillStdDev == 5,
+        "benchmark discards warmup and computes repeated metrics");
+    Assert(benchmarkStore.Load("local").Single().Id == benchmarkRun.Id,
+        "benchmark history survives reload");
+    try { _ = HttpBenchmarkProbe.CompletionUrl(new Uri("http://example.com/v1")); throw new Exception("public HTTP benchmark accepted"); }
+    catch (ArgumentException) { }
+    var tuningCandidates = AutoTunePlanner.Candidates(catalog.Profiles[0].RawJson);
+    Assert(tuningCandidates.Count is >= 3 and <= 5 && tuningCandidates[0].Name == "Исходные",
+        "bounded auto-tune trial plan includes baseline");
+    var trialJson = AutoTunePlanner.CreateTrialProfileJson(catalog.Profiles[0].RawJson, tuningCandidates[1], 29876);
+    Assert(trialJson.Contains("\"port\":29876", StringComparison.Ordinal) &&
+        catalog.Profiles[0].RawJson.Contains("\"unknownField\":\"preserve\"", StringComparison.Ordinal),
+        "trial profile has isolated port and source remains unchanged");
+    var noGain = AutoTuneResult.FromTrials(new[] {
+        new AutoTuneTrial(tuningCandidates[0], 100, 100, null),
+        new AutoTuneTrial(tuningCandidates[1], 102, 102, null) });
+    Assert(noGain.Suggested is null, "optimizer rejects noise-level gain");
+    var gain = AutoTuneResult.FromTrials(new[] {
+        new AutoTuneTrial(tuningCandidates[0], 100, 100, null),
+        new AutoTuneTrial(tuningCandidates[1], 130, 130, null) });
+    Assert(gain.Suggested == tuningCandidates[1], "optimizer selects verified improvement");
+    var tuneStorePath = Path.Combine(temp, "tune-profiles.json");
+    File.WriteAllText(tuneStorePath, original, new UTF8Encoding(false));
+    var tunedId = AutoTuneProfileCreator.CreateCopy(tuneStorePath, "local",
+        BenchmarkRunRequest.Fingerprint(catalog.Profiles[0].RawJson), tuningCandidates[1]);
+    var tunedCatalog = LegacyProfileCatalog.Load(tuneStorePath);
+    Assert(tunedCatalog.ActiveProfileId == "local" && tunedCatalog.Profiles.Count == 3 &&
+        System.Text.Json.Nodes.JsonNode.DeepEquals(
+            System.Text.Json.Nodes.JsonNode.Parse(tunedCatalog.Profiles.Single(p => p.Id == "local").RawJson),
+            System.Text.Json.Nodes.JsonNode.Parse(catalog.Profiles[0].RawJson)) &&
+        tunedCatalog.Profiles.Any(p => p.Id == tunedId), "autotune creates separate inactive profile");
+    var tuneBackups = Directory.EnumerateFiles(temp, "tune-profiles.json.before-tune-*.bak").ToArray();
+    Assert(tuneBackups.Length == 1 && File.ReadAllText(tuneBackups[0]) == original,
+        "autotune creates byte-exact backup");
+    try { _ = HttpBenchmarkProbe.CompletionUrl(new Uri("https://example.ts.net/v2")); throw new Exception("wrong API path accepted"); }
+    catch (ArgumentException) { }
 
     var logs = Path.Combine(temp, "logs");
     Directory.CreateDirectory(logs);
@@ -130,6 +186,15 @@ try
     Assert(local.Mode == "LocalHost" && local.Arguments.Count > 50, "local argv from legacy module");
     Assert(local.Arguments.Contains("kvarn4") && local.Arguments.Contains("--spec-draft-n-max") &&
         local.Arguments.Contains("-mm"), "BeeLlama KVarN, MTP and vision retained");
+    var autoTuneSource = LegacyProfileCatalog.Load(templateCopy).Profiles.Single(p => p.Id == "profile-b453573d18");
+    var autoTuneCandidate = AutoTunePlanner.Candidates(autoTuneSource.RawJson)[1];
+    var autoTuneTrial = AutoTunePlanner.CreateTrialProfileJson(autoTuneSource.RawJson, autoTuneCandidate, 29876);
+    var autoTuneStore = Path.Combine(temp, "auto-tune-launch.json");
+    File.WriteAllText(autoTuneStore, "{\"profiles\":[" + autoTuneTrial + "]}");
+    var autoTunePlan = await LegacyLaunchPlanReader.ReadAsync(script, autoTuneStore, autoTuneSource.Id);
+    Assert(autoTunePlan.Arguments.Contains("29876") && autoTunePlan.Arguments.Contains(autoTuneCandidate.Batch.ToString()) &&
+        autoTunePlan.Arguments.Contains("kvarn4") && autoTunePlan.Arguments.Contains("--spec-draft-n-max"),
+        "autotune trial uses actual BeeLlama argv and retains special flags");
     File.WriteAllText(templateCopy, original, new UTF8Encoding(false));
     var remote = await LegacyLaunchPlanReader.ReadAsync(script, templateCopy, "remote");
     Assert(remote.Mode == "RemoteClient" && remote.Arguments.Count == 0, "remote profile cannot launch local server");
@@ -191,4 +256,10 @@ static void WriteGgufString(BinaryWriter writer, string value)
     var bytes = Encoding.UTF8.GetBytes(value);
     writer.Write((ulong)bytes.Length);
     writer.Write(bytes);
+}
+
+sealed class FakeBenchmarkHandler(Func<HttpRequestMessage, HttpResponseMessage> response) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+        Task.FromResult(response(request));
 }

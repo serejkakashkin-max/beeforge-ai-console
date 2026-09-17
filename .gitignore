@@ -20,6 +20,8 @@ backups/
 benchmarks/*.json
 !benchmarks/team-routing-cases.json
 benchmarks/*.log
+benchmarks/next/
+*.before-tune-*.bak
 *.gguf
 *.safetensors
 *.onnx

@@ -12,7 +12,7 @@ Baseline commit: `2446f85` on `main`. Machine-readable status is in `baseline.js
 | Telegram | Config/DPAPI/allowlist/commands/file/media/clear pin | Node self-tests + ClearPin smoke; live API pending |
 | Serena | Existing project registration and memories remain discoverable | Serena tests; live memory smoke pending |
 | Remote client | No second Telegram, private Tailscale endpoint, lease | Remote tests; two-PC smoke pending |
-| Benchmark | Same run lifecycle and result accounting | Benchmark limits test; actual model run pending |
+| Benchmark | Legacy remains available; Next repeatable workload, history and isolated tuning | Fake HTTP warmup/average/history and optimizer/profile-backup fixtures pass; actual-model run and live profile comparison pending |
 | Build/installer | Windows x64 packaging and upgrade with state preserved | Distribution passes; RemoteInstall baseline harness fixed and passes in this branch |
 | New shell | Starts beside legacy; no profile write on view/open; explicit action parity | Self-contained win-x64 preview; status/start/stop and RemoteClient connect through legacy module with confirmation and lease guard; bounded GGUF header/tensor inspection and whitelisted log tail pass fixture tests; live launch and visual QA pending |
 | Final cutover | Every old feature PASS or explicit BLOCKED in `FINAL_PARITY_REPORT.md` | Not eligible |

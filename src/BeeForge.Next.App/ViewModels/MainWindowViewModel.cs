@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Avalonia.Threading;
+using BeeForge.Next.Core.Benchmarking;
 using BeeForge.Next.Core.Inference;
 using BeeForge.Next.Core.Profiles;
 using BeeForge.Next.Core.Workspace;
@@ -12,6 +13,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly string? _storePath;
     private readonly string? _launchPlanScript;
     private readonly LegacyRuntimeController? _runtimeController;
+    private readonly StandardBenchmarkRunner? _benchmarkRunner;
+    private readonly BenchmarkRunStore? _benchmarkStore;
+    private readonly IsolatedAutoTuner? _autoTuner;
+    private AutoTuneResult? _tuneResult;
+    private string? _tuneFingerprint;
+    private CancellationTokenSource? _benchmarkCancellation;
     private readonly LegacyLogTailReader? _logReader;
     private readonly string? _openCodeConfigPath;
     private CancellationTokenSource? _selectionCancellation;
@@ -22,6 +29,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _runtimeDetailsText = "Подробные показатели появятся после проверки состояния.";
     private string _logText = "Выберите журнал для просмотра последних записей.";
     private string _teamText = "Нажмите «Обновить команду» для просмотра действующих агентов OpenCode.";
+    private string _benchmarkStatusText = "Проверьте состояние теста скорости.";
+    private string _benchmarkHistoryText = "Истории замеров пока нет.";
+    private string _activeProfileId = "";
+    private bool _runtimeReady;
+    private bool _runtimeRunning;
+    private bool _isBenchmarkBusy;
     private string _activeProfile = "Не выбран";
     private string _mode = "—";
     private bool _isRuntimeBusy;
@@ -39,10 +52,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Invoke-BeeForgeNextRuntime.ps1");
         if (storePath is not null && runtimeScript is not null && File.Exists(runtimeScript))
             _runtimeController = new LegacyRuntimeController(runtimeScript, storePath);
+        if (root is not null)
+        {
+            _benchmarkStore = new BenchmarkRunStore(root);
+            _benchmarkRunner = new StandardBenchmarkRunner(new HttpBenchmarkProbe(), _benchmarkStore);
+        }
+        if (_runtimeController is not null && launchPlanScript is not null)
+            _autoTuner = new IsolatedAutoTuner(launchPlanScript, _runtimeController);
         if (root is not null) _logReader = new LegacyLogTailReader(root);
         ProfileNames = catalog?.Profiles.Select(p => new ProfileOption(p.Id, p.Name, p.ConnectionMode, p.ModelPath)).ToArray()
             ?? Array.Empty<ProfileOption>();
         ActiveProfile = catalog?.ActiveProfile?.Name ?? "Не выбран";
+        _activeProfileId = catalog?.ActiveProfileId ?? "";
         Mode = catalog?.ActiveProfile?.ConnectionMode ?? "—";
         ProfileCount = ProfileNames.Count;
         SelectedProfile = ProfileNames.FirstOrDefault(p => p.Id == catalog?.ActiveProfileId)
@@ -74,11 +95,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanControlLocal));
             OnPropertyChanged(nameof(CanConnectRemote));
+            OnPropertyChanged(nameof(CanRunBenchmark));
+            OnPropertyChanged(nameof(CanAutoTune));
+            OnPropertyChanged(nameof(CanSaveTune));
+            _tuneResult = null;
+            _tuneFingerprint = null;
             _selectionCancellation?.Cancel();
             _selectionCancellation?.Dispose();
             _selectionCancellation = new CancellationTokenSource();
             _ = UpdateCommandPreviewAsync(value, _selectionCancellation.Token);
             _ = UpdateModelMetadataAsync(value, _selectionCancellation.Token);
+            _ = RefreshBenchmarkStatusAsync();
         }
     }
 
@@ -110,6 +137,175 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => _teamText;
         private set { _teamText = value; OnPropertyChanged(); }
+    }
+
+    public string BenchmarkInputText { get; set; } = "4096";
+    public string BenchmarkOutputText { get; set; } = "256";
+    public string BenchmarkTimeoutText { get; set; } = "900";
+    public string BenchmarkRepeatsText { get; set; } = "3";
+    public string BenchmarkHistoryText
+    {
+        get => _benchmarkHistoryText;
+        private set { _benchmarkHistoryText = value; OnPropertyChanged(); }
+    }
+    public string BenchmarkStatusText
+    {
+        get => _benchmarkStatusText;
+        private set { _benchmarkStatusText = value; OnPropertyChanged(); }
+    }
+    public bool IsBenchmarkBusy
+    {
+        get => _isBenchmarkBusy;
+        private set
+        {
+            _isBenchmarkBusy = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanRunBenchmark));
+            OnPropertyChanged(nameof(CanStopBenchmark));
+            OnPropertyChanged(nameof(CanRefreshBenchmark));
+            OnPropertyChanged(nameof(CanAutoTune));
+            OnPropertyChanged(nameof(CanSaveTune));
+        }
+    }
+    public bool CanRunBenchmark => !IsBenchmarkBusy && !IsRuntimeBusy && _runtimeReady &&
+        !_isLeased && SelectedProfile?.Id == _activeProfileId &&
+        SelectedProfile?.Mode == "LocalHost" && _benchmarkRunner is not null;
+    public bool CanStopBenchmark => IsBenchmarkBusy && _benchmarkCancellation is not null;
+    public bool CanRefreshBenchmark => !IsBenchmarkBusy && _benchmarkStore is not null;
+    public bool CanAutoTune => !IsBenchmarkBusy && !IsRuntimeBusy && _leaseKnown && !_isLeased &&
+        !_runtimeRunning && SelectedProfile?.Mode == "LocalHost" && _autoTuner is not null;
+    public bool CanSaveTune => !IsBenchmarkBusy && _tuneResult?.Suggested is not null &&
+        SelectedProfile?.Mode == "LocalHost";
+
+    public async Task RunAutoTuneAsync()
+    {
+        if (!CanAutoTune || _autoTuner is null || _storePath is null || SelectedProfile is null) return;
+        LegacyProfile profile;
+        try { profile = LegacyProfileCatalog.Load(_storePath).Profiles.Single(p => p.Id == SelectedProfile.Id); }
+        catch (Exception) { BenchmarkStatusText = "Не удалось прочитать профиль для подбора."; return; }
+        _tuneFingerprint = BenchmarkRunRequest.Fingerprint(profile.RawJson);
+        _tuneResult = null;
+        _benchmarkCancellation = new CancellationTokenSource();
+        IsBenchmarkBusy = true;
+        try
+        {
+            var progress = new Progress<string>(message => BenchmarkStatusText = message);
+            _tuneResult = await _autoTuner.RunAsync(profile.Id, profile.RawJson,
+                progress, _benchmarkCancellation.Token);
+            var lines = _tuneResult.Trials.Select(t => t.Error is null
+                ? $"{t.Candidate.Name}: PP {t.Prefill:0.0}, TG {t.Decode:0.0} tok/s"
+                : $"{t.Candidate.Name}: ошибка {t.Error}");
+            BenchmarkStatusText = string.Join(Environment.NewLine, lines) + Environment.NewLine +
+                (_tuneResult.Suggested is null ? "Надёжного ускорения от 5% не найдено; профиль не изменён."
+                : $"Предложение: {_tuneResult.Suggested.Name}, +{_tuneResult.ImprovementPercent:0.0}%. Можно создать отдельный профиль.");
+        }
+        catch (OperationCanceledException) { BenchmarkStatusText = "Автоподбор остановлен. Профиль не изменён."; }
+        catch (Exception ex) { BenchmarkStatusText = $"Автоподбор не завершён: {ex.GetType().Name}. Профиль не изменён."; }
+        finally { _benchmarkCancellation.Dispose(); _benchmarkCancellation = null; IsBenchmarkBusy = false; }
+    }
+
+    public void SaveAutoTuneProfile()
+    {
+        if (!CanSaveTune || _storePath is null || SelectedProfile is null ||
+            _tuneResult?.Suggested is null || _tuneFingerprint is null) return;
+        try
+        {
+            var id = AutoTuneProfileCreator.CreateCopy(_storePath, SelectedProfile.Id,
+                _tuneFingerprint, _tuneResult.Suggested);
+            BenchmarkStatusText = $"Создан отдельный профиль {id}. Исходный и активный профиль не изменены; перед использованием проверьте его в рабочей консоли.";
+            _tuneResult = null;
+            OnPropertyChanged(nameof(CanSaveTune));
+        }
+        catch (Exception ex) { BenchmarkStatusText = $"Не удалось создать профиль: {ex.GetType().Name}. Исходный профиль сохранён."; }
+    }
+
+    public Task RefreshBenchmarkStatusAsync()
+    {
+        if (_benchmarkStore is null || IsBenchmarkBusy || SelectedProfile is null) return Task.CompletedTask;
+        try
+        {
+            var runs = _benchmarkStore.Load(SelectedProfile.Id, 20);
+            var newest = runs.FirstOrDefault();
+            var previous = newest is null ? null : runs.Skip(1).FirstOrDefault(run =>
+                run.ModelAlias == newest.ModelAlias && run.PromptTokens == newest.PromptTokens &&
+                run.OutputTokens == newest.OutputTokens);
+            var comparison = newest is null || previous is null || previous.PrefillTokensPerSecond <= 0 ||
+                previous.DecodeTokensPerSecond <= 0 ? "" :
+                $"Последний замер относительно предыдущего с той же нагрузкой: PP {(newest.PrefillTokensPerSecond / previous.PrefillTokensPerSecond - 1) * 100:+0.0;-0.0;0.0}%, " +
+                $"TG {(newest.DecodeTokensPerSecond / previous.DecodeTokensPerSecond - 1) * 100:+0.0;-0.0;0.0}%" +
+                (newest.ProfileSha256 == previous.ProfileSha256 ? " (одинаковая конфигурация)" : " (профиль менялся)") +
+                Environment.NewLine + Environment.NewLine;
+            BenchmarkHistoryText = runs.Count == 0 ? "Истории замеров пока нет." :
+                comparison + string.Join(Environment.NewLine, runs.Select(run =>
+                    $"{run.CompletedAt.LocalDateTime:g} · {run.PromptTokens}/{run.OutputTokens} · " +
+                    $"PP {run.PrefillTokensPerSecond:0.0} ±{run.PrefillStdDev:0.0} · " +
+                    $"TG {run.DecodeTokensPerSecond:0.0} ±{run.DecodeStdDev:0.0} tok/s · " +
+                    $"{run.Repeats} повторов · конфигурация {run.ProfileSha256[..8]}"));
+        }
+        catch (Exception) { BenchmarkHistoryText = "Не удалось прочитать историю замеров."; }
+        return Task.CompletedTask;
+    }
+
+    public async Task StartBenchmarkAsync()
+    {
+        if (_benchmarkRunner is null || !CanRunBenchmark || SelectedProfile is null || _storePath is null) return;
+        if (!int.TryParse(BenchmarkInputText, out var input) || input < 256 || input > 200000 ||
+            !int.TryParse(BenchmarkOutputText, out var output) || output < 16 || output > 4096 ||
+            !int.TryParse(BenchmarkTimeoutText, out var timeout) || timeout < 30 || timeout > 3600 ||
+            !int.TryParse(BenchmarkRepeatsText, out var repeats) || repeats < 2 || repeats > 10)
+        {
+            BenchmarkStatusText = "Проверьте значения: input 256–200000, output 16–4096, повторы 2–10, timeout 30–3600 с.";
+            return;
+        }
+        LegacyProfileCatalog catalog;
+        try { catalog = LegacyProfileCatalog.Load(_storePath); }
+        catch (Exception) { BenchmarkStatusText = "Не удалось проверить активный профиль; тест не запущен."; return; }
+        var profile = catalog.Profiles.FirstOrDefault(p => p.Id == SelectedProfile.Id);
+        if (profile is null || catalog.ActiveProfileId != profile.Id || profile.ConnectionMode != "LocalHost")
+        { BenchmarkStatusText = "Активный профиль изменился. Обновите состояние перед тестом."; return; }
+        if (profile.Context > 0 && (long)input + output + 256 > profile.Context)
+        { BenchmarkStatusText = $"Нагрузка превышает контекст профиля ({profile.Context} токенов)."; return; }
+        int port;
+        string? host;
+        try
+        {
+            using var parsed = System.Text.Json.JsonDocument.Parse(profile.RawJson);
+            port = parsed.RootElement.TryGetProperty("port", out var portValue) && portValue.TryGetInt32(out var p) ? p : 8080;
+            host = parsed.RootElement.TryGetProperty("host", out var hostValue) ? hostValue.GetString() : "127.0.0.1";
+        }
+        catch (Exception) { BenchmarkStatusText = "Параметры адреса модели повреждены; тест не запущен."; return; }
+        if (port is < 1 or > 65535 || host is not ("127.0.0.1" or "localhost" or "::1"))
+        { BenchmarkStatusText = "Тест разрешён только для локального адреса модели."; return; }
+        var endpoint = $"http://127.0.0.1:{port}/v1";
+        var request = new BenchmarkRunRequest(profile.Id, profile.Name, profile.Alias, endpoint,
+            BenchmarkRunRequest.Fingerprint(profile.RawJson), input, output, repeats, timeout);
+        _benchmarkCancellation = new CancellationTokenSource();
+        IsBenchmarkBusy = true;
+        try
+        {
+            if (_runtimeController is null) throw new InvalidOperationException("Runtime unavailable.");
+            var status = await _runtimeController.GetStatusAsync(_benchmarkCancellation.Token);
+            if (!status.Ready || status.Leased || status.Remote)
+                throw new InvalidOperationException("Runtime no longer available for local benchmark.");
+            var progress = new Progress<BenchmarkProgress>(p =>
+                BenchmarkStatusText = $"{p.Phase}: {p.Completed}/{p.Total}");
+            var run = await _benchmarkRunner.RunAsync(request, progress, _benchmarkCancellation.Token);
+            BenchmarkStatusText = $"Готово · PP {run.PrefillTokensPerSecond:0.0} ±{run.PrefillStdDev:0.0} · " +
+                $"TG {run.DecodeTokensPerSecond:0.0} ±{run.DecodeStdDev:0.0} tok/s";
+        }
+        catch (OperationCanceledException) { BenchmarkStatusText = "Тест остановлен. Работа модели не затронута."; }
+        catch (Exception ex) { BenchmarkStatusText = $"Тест не завершён: {ex.GetType().Name}. Проверьте активную модель и её совместимость с /completion."; }
+        finally
+        {
+            _benchmarkCancellation.Dispose(); _benchmarkCancellation = null; IsBenchmarkBusy = false;
+            await RefreshBenchmarkStatusAsync();
+        }
+    }
+
+    public Task StopBenchmarkAsync()
+    {
+        _benchmarkCancellation?.Cancel();
+        return Task.CompletedTask;
     }
 
     public async Task RefreshTeamAsync()
@@ -159,6 +355,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(CanControlLocal));
             OnPropertyChanged(nameof(CanConnectRemote));
             OnPropertyChanged(nameof(CanRefreshRuntime));
+            OnPropertyChanged(nameof(CanRunBenchmark));
+            OnPropertyChanged(nameof(CanAutoTune));
         }
     }
 
@@ -176,9 +374,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var status = await _runtimeController.GetStatusAsync();
+            _runtimeReady = status.Ready;
+            _runtimeRunning = status.Running;
+            OnPropertyChanged(nameof(CanRunBenchmark));
+            OnPropertyChanged(nameof(CanAutoTune));
             _leaseKnown = true;
             _isLeased = status.Leased;
             OnPropertyChanged(nameof(CanControlLocal));
+            OnPropertyChanged(nameof(CanRunBenchmark));
+            OnPropertyChanged(nameof(CanAutoTune));
             RuntimeStatusText = status.Leased
                 ? "Модель передана ноутбуку. Выключите удалённый доступ в рабочей консоли, прежде чем управлять ею здесь."
                 : DescribeRuntime(status);
@@ -187,7 +391,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         catch (Exception)
         {
             _leaseKnown = false;
+            _runtimeReady = false;
+            _runtimeRunning = false;
             OnPropertyChanged(nameof(CanControlLocal));
+            OnPropertyChanged(nameof(CanRunBenchmark));
+            OnPropertyChanged(nameof(CanAutoTune));
             RuntimeStatusText = "Не удалось прочитать состояние. Проверьте старую консоль и её журналы.";
             RuntimeDetailsText = "Показатели недоступны.";
         }
@@ -202,6 +410,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         try
         {
             var status = await _runtimeController.StartAsync(SelectedProfile.Id);
+            _runtimeReady = status.Ready;
+            _runtimeRunning = status.Running;
+            _activeProfileId = SelectedProfile.Id;
+            OnPropertyChanged(nameof(CanRunBenchmark));
+            OnPropertyChanged(nameof(CanAutoTune));
             RuntimeStatusText = DescribeRuntime(status);
             RuntimeDetailsText = DescribeResources(status);
             if (status.Ready)
@@ -225,6 +438,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             var message = await _runtimeController.StopAsync(SelectedProfile.Id);
             RuntimeStatusText = message;
+            _runtimeReady = false;
+            _runtimeRunning = false;
+            OnPropertyChanged(nameof(CanRunBenchmark));
         }
         catch (Exception)
         {
@@ -243,6 +459,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             var message = await _runtimeController.ConnectRemoteAsync(selected.Id);
             ActiveProfile = selected.Name;
+            _activeProfileId = selected.Id;
+            _runtimeReady = true;
+            OnPropertyChanged(nameof(CanRunBenchmark));
             Mode = selected.Mode;
             RuntimeStatusText = $"Удалённый профиль подключён: {message}";
         }
