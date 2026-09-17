@@ -9,3 +9,5 @@ The remaining BeeForge Next architecture and UI are original implementations. Th
 BeeForge's existing code, prompts, plugins and private user state retain their own provenance. Neither project’s live configuration, secrets nor model weights are part of source attribution or a distributable source tree.
 
 `src/BeeForge.Next.Core/Inference/WindowsProcessJob.cs` adapts upstream `Services/WindowsProcessJob.cs` at the same commit: SafeHandle ownership and fail-closed errors replace optional logging. Only temporary optimization servers are attached; persistent BeeForge runtime lifecycle is unchanged.
+
+`third_party/LlamaServerLauncher/Services/GgufMetadataService.cs` and `VramEstimator.cs` are copied from the same upstream commit. The BeeForge `VramPlanner` wrapper performs bounded GGUF preflight, maps existing profiles, and marks unsupported BeeLlama cache/tail/MTP/override layouts as requiring actual runtime measurement. It does not use an approximate result to automatically alter profiles.

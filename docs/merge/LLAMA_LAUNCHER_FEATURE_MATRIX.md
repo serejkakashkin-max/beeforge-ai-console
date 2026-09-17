@@ -6,9 +6,9 @@ Reference: `pytraveler/LlamaServerLauncherAvalonia` commit `f52404637d51ec00e15e
 | --- | --- | --- | --- |
 | Avalonia shell, themes, MVVM | `App.axaml`, `MainWindow.axaml`, `ViewModels/` | WPF/PowerShell | Read-only preview installed alongside legacy; full parity pending |
 | Profiles and import/export | `ConfigurationService`, `ProfileInfo`, `MainViewModel` | BeeForge `profiles.json`, import/export UI | Next create/edit/clone/delete/import/export; unknown fields retained, exact-byte backup, stale-write rejection; GUI acceptance pending |
-| GGUF metadata/tensors/splits | `GgufMetadataService`, `ModelScanService` | Basic model-file picker | Planned after isolated parser tests |
-| VRAM prediction and actual comparison | `VramEstimator`, `VramPlan`, `VramComparison` | Live VRAM monitoring | Planned; extend to KVarN, MoE, hybrid attention and BeeLlama logs |
-| Model/MMProj pickers | `ModelPickerViewModel`, picker windows | Local pickers | Planned; preserve current paths |
+| GGUF metadata/tensors/splits | `GgufMetadataService`, `ModelScanService` | Basic model-file picker | Bounded header/tensor inspector plus upstream detailed reader and split discovery integrated |
+| VRAM prediction and actual comparison | `VramEstimator`, `VramPlan`, `VramComparison` | Live VRAM monitoring | Upstream dense/MoE/hybrid estimates integrated; KVarN/tail/MTP/override caveats prevent fit claims; precise BeeLlama calibration and actual-vs-estimated comparison pending |
+| Model/MMProj pickers | `ModelPickerViewModel`, picker windows | Local pickers | Next profile editor uses native file pickers for GGUF, MMProj and runtime executable; existing paths are preserved until save |
 | HuggingFace search/resumable download | `HuggingFaceClient`, `HfDownloadService` | Not present | Planned; token must never be CLI/logged |
 | Runtime build download/rollback | `LlamaCppDownloadService`, `BackendAssetSelector` | BeeLlama installer | Planned separate providers: BeeLlama, upstream llama.cpp, custom |
 | Runtime flag detection | `LlamaHelpParserService`, `NativeRuntimeProbe` | BeeLlama `--help` validation | BeeLlama still uses legacy validation/argv; multi-runtime capability union pending |

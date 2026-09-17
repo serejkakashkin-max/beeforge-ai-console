@@ -690,6 +690,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 $"тензоров: {metadata.TensorCount} · размер: {metadata.FileSizeBytes / 1073741824.0:0.00} GiB" +
                 Environment.NewLine + $"Типы тензоров: {tensorTypes}" +
                 Environment.NewLine + string.Join(Environment.NewLine, fields);
+            if (_storePath is not null)
+            {
+                var profile = LegacyProfileCatalog.Load(_storePath).Profiles.Single(p => p.Id == selected.Id);
+                var plan = await Task.Run(() => VramPlanner.Read(selected.ModelPath, profile.RawJson), cancellationToken);
+                display += Environment.NewLine + Environment.NewLine + plan.Describe();
+            }
             Dispatcher.UIThread.Post(() => { if (!cancellationToken.IsCancellationRequested) ModelMetadataText = display; });
         }
         catch (OperationCanceledException) { }

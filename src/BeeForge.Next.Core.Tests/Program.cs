@@ -160,6 +160,27 @@ try
     catch (ArgumentException) { }
 
     var logs = Path.Combine(temp, "logs");
+    var plannerModel = new LlamaServerLauncher.Services.GgufModelInfo {
+        Architecture = "llama", BlockCount = 2, HeadCount = 4, HeadCountKv = 2, EmbeddingLength = 512,
+        Tensors = new LlamaServerLauncher.Services.GgufTensorSummary {
+            TotalBytes = 24000, RepeatingBytes = 20000, BlockBytes = new long[] { 10000, 10000 },
+            BlockExpertBytes = new long[] { 6000, 6000 }, BlockKvBytes = new long[] { 2000, 2000 }, ExpertBytes = 12000 }
+    };
+    var densePlan = VramPlanner.Estimate(plannerModel, "{\"context\":4096,\"gpuLayers\":\"all\",\"kvK\":\"f16\",\"kvV\":\"f16\"}");
+    Assert(densePlan.CanJudgeFit && densePlan.Estimate!.WeightBytes == 24000 && densePlan.Estimate.KvBytes > 0,
+        "upstream VRAM planner separates dense weights and KV");
+    var moePlan = VramPlanner.Estimate(plannerModel with { ExpertCount = 8, ExpertUsedCount = 2 },
+        "{\"context\":4096,\"cpuMoeAll\":true}");
+    Assert(moePlan.Estimate!.HostWeightBytes == 12000 && moePlan.Estimate.WeightBytes == 12000,
+        "VRAM planner moves MoE expert weights to RAM");
+    var customPlan = VramPlanner.Estimate(plannerModel, "{\"kvK\":\"kvarn4\",\"kvV\":\"kvarn2\",\"kvTailTokens\":1024,\"mtpEnabled\":true}");
+    Assert(!customPlan.CanJudgeFit && customPlan.Warnings.Count >= 4 && customPlan.Estimate is not null,
+        "KVarN and MTP remain explicit estimates, never false fit claims");
+    var hybridPlan = VramPlanner.Estimate(plannerModel with { Architecture = "qwen3next", FullAttentionInterval = 2,
+        SsmInnerSize = 512, SsmStateSize = 16, SsmConvKernel = 4, SsmGroupCount = 2 }, "{}");
+    Assert(hybridPlan.Estimate is { KvBytes: > 0, KvBlocksOnGpu: 1 }, "hybrid recurrent blocks do not allocate dense KV");
+    Assert(!VramPlanner.Estimate(plannerModel with { SplitCount = 3, ShardsRead = 2 }, "{}").CanJudgeFit,
+        "incomplete split GGUF cannot claim fit");
     Directory.CreateDirectory(logs);
     var logPath = Path.Combine(logs, "current.stderr.log");
     File.WriteAllText(logPath, new string('x', 70000) + "\nlast known line\n");
