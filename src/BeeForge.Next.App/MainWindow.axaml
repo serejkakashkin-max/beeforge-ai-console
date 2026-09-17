@@ -159,6 +159,12 @@
       <TabItem Header="Система">
         <StackPanel Margin="34,27" Spacing="14">
           <TextBlock Text="Система" FontSize="28" FontWeight="SemiBold" />
+          <TextBlock Text="RUNTIME" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
+          <WrapPanel>
+            <Button Content="Обновить список runtime" Click="RefreshRuntimeCatalog_Click" Margin="0,0,8,8" />
+            <Button Content="Установить BeeLlama v0.4.6" Click="InstallRuntime_Click" Margin="0,0,8,8" />
+          </WrapPanel>
+          <TextBox Text="{Binding RuntimeCatalogText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="120" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
           <TextBlock Text="Основной запуск по-прежнему BEEFORGE-AI.cmd. Журналы читаются ограниченным фрагментом и не изменяются." TextWrapping="Wrap" Foreground="#A6B9C6" />
           <StackPanel Orientation="Horizontal" Spacing="9">
             <Button Content="Ошибки модели" Click="ServerLog_Click" Background="#294455" Foreground="#EAF2F7" Padding="14,9" />

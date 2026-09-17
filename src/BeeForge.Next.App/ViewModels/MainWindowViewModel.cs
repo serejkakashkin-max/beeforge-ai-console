@@ -22,8 +22,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LegacyLogTailReader? _logReader;
     private readonly string? _openCodeConfigPath;
     private readonly LegacyServiceController? _services;
+    private readonly RuntimeCatalog? _runtimeCatalog;
+    private readonly RuntimeInstaller? _runtimeInstaller;
     private bool _servicesBusy;
     private string _serviceText = "Выберите действие. Состояние читается из существующего BeeForge.";
+    private string _runtimeCatalogText = "Установленные runtime ещё не проверены.";
+    public string RuntimeCatalogText { get => _runtimeCatalogText; private set { _runtimeCatalogText = value; OnPropertyChanged(); } }
     public bool CanUseServices => !_servicesBusy && !IsBenchmarkBusy && !IsRuntimeBusy && _services is not null;
     public string ServiceText { get => _serviceText; private set { _serviceText = value; OnPropertyChanged(); } }
 
@@ -84,6 +88,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             if (storePath is not null) _services = new LegacyServiceController(Path.Combine(root, "scripts", "Invoke-BeeForgeNextServices.ps1"), storePath);
             _benchmarkStore = new BenchmarkRunStore(root);
             _benchmarkRunner = new StandardBenchmarkRunner(new HttpBenchmarkProbe(), _benchmarkStore);
+            _runtimeCatalog = new RuntimeCatalog(root);
+            _runtimeInstaller = new RuntimeInstaller(root);
         }
         if (_runtimeController is not null && launchPlanScript is not null)
             _autoTuner = new IsolatedAutoTuner(launchPlanScript, _runtimeController);
@@ -99,6 +105,28 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public void RefreshRuntimeCatalog()
+    {
+        if (_runtimeCatalog is null) { RuntimeCatalogText = "Каталог runtime недоступен."; return; }
+        var items = _runtimeCatalog.ListInstalled();
+        RuntimeCatalogText = items.Count == 0 ? "Управляемые runtime не найдены." : string.Join(Environment.NewLine,
+            items.Select(x => $"{x.Provider} · {x.Version} · {x.Detail}{Environment.NewLine}{x.ServerPath}"));
+    }
+
+    public async Task InstallRecommendedRuntimeAsync()
+    {
+        if (_runtimeInstaller is null || IsRuntimeBusy) return;
+        IsRuntimeBusy = true;
+        RuntimeCatalogText = "Устанавливаю BeeLlama v0.4.6 CUDA 13.3 с проверкой SHA-256…";
+        try
+        {
+            await _runtimeInstaller.InstallBeeLlamaAsync();
+            RefreshRuntimeCatalog();
+        }
+        catch (Exception) { RuntimeCatalogText = "Установка не завершилась. Рабочие профили не переключались."; }
+        finally { IsRuntimeBusy = false; }
+    }
     public string Status { get; }
     public string ActiveProfile
     {

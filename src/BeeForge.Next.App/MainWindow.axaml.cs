@@ -177,6 +177,16 @@ public partial class MainWindow : Window
         if (ViewModel is { } vm) await vm.RefreshLogAsync("telegram");
     }
 
+    private void RefreshRuntimeCatalog_Click(object? sender, RoutedEventArgs e) => ViewModel?.RefreshRuntimeCatalog();
+
+    private async void InstallRuntime_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } vm) return;
+        var dialog = new ConfirmRuntimeWindow("Установить BeeLlama runtime?",
+            "Будет скачана рекомендуемая BeeLlama v0.4.6 CUDA 13.3 с проверкой SHA-256. Текущие профили и запущенная модель автоматически переключаться не будут.");
+        if (await dialog.ShowDialog<bool>(this)) await vm.InstallRecommendedRuntimeAsync();
+    }
+
     private async void RefreshTeam_Click(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is { } vm) await vm.RefreshTeamAsync();
