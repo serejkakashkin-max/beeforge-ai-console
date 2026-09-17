@@ -20,7 +20,7 @@ Reference: `pytraveler/LlamaServerLauncherAvalonia` commit `f52404637d51ec00e15e
 | On-demand OpenAI proxy | `OnDemandProxyService` | Direct OpenCode provider | Planned opt-in, localhost default; no provider disruption |
 | Scenarios/presets | Scenario model/dialog | Profiles | Planned opt-in, no automatic heavy-model fanout |
 | Crash advisor/process job | `ServerCrashAdvisor`, `WindowsProcessJob` | PID/ownership checks | Temporary optimizer servers assigned to fail-closed Windows job; disposal tested on harmless child. Atomic launch/assignment gap, UI-kill integration and crash advisor pending; persistent runtime unchanged |
-| Contextual offline help | `HelpService`, bundled docs | Tutorial/README | Planned in new shell |
+| Contextual offline help | `HelpService`, bundled docs | Tutorial/README | Integrated in Next: allowlisted bundled BeeForge docs are readable offline from the System tab; arbitrary paths are rejected |
 | llama-server MCP | `McpConfigService` | OpenCode MCP only | Planned as **separate** inference integration, disabled by default |
 | Telegram, Team Guard, Serena, Tailscale | Not provided by reference | Core BeeForge features | Existing services unchanged; Next allowlisted controls for Telegram start/stop/status, Tailscale access/installer command, Full Access and read-only Serena summaries. Settings editors and live end-to-end acceptance pending |
 

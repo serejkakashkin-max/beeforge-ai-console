@@ -24,10 +24,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly LegacyServiceController? _services;
     private readonly RuntimeCatalog? _runtimeCatalog;
     private readonly RuntimeInstaller? _runtimeInstaller;
+    private readonly OfflineHelpService? _help;
     private bool _servicesBusy;
     private string _serviceText = "Выберите действие. Состояние читается из существующего BeeForge.";
     private string _runtimeCatalogText = "Установленные runtime ещё не проверены.";
     public string RuntimeCatalogText { get => _runtimeCatalogText; private set { _runtimeCatalogText = value; OnPropertyChanged(); } }
+    private string _helpText = "Выберите раздел локальной справки.";
+    public string HelpText { get => _helpText; private set { _helpText = value; OnPropertyChanged(); } }
     public bool CanUseServices => !_servicesBusy && !IsBenchmarkBusy && !IsRuntimeBusy && _services is not null;
     public string ServiceText { get => _serviceText; private set { _serviceText = value; OnPropertyChanged(); } }
 
@@ -90,6 +93,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             _benchmarkRunner = new StandardBenchmarkRunner(new HttpBenchmarkProbe(), _benchmarkStore);
             _runtimeCatalog = new RuntimeCatalog(root);
             _runtimeInstaller = new RuntimeInstaller(root);
+            _help = new OfflineHelpService(root);
         }
         if (_runtimeController is not null && launchPlanScript is not null)
             _autoTuner = new IsolatedAutoTuner(launchPlanScript, _runtimeController);
@@ -105,6 +109,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public void ShowHelp(string topic)
+    {
+        try { HelpText = _help?.Read(topic) ?? "Локальная справка недоступна."; }
+        catch (Exception) { HelpText = "Не удалось открыть локальную справку."; }
+    }
 
     public void RefreshRuntimeCatalog()
     {

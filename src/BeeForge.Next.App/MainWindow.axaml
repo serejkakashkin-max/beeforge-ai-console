@@ -165,6 +165,15 @@
             <Button Content="Установить BeeLlama v0.4.6" Click="InstallRuntime_Click" Margin="0,0,8,8" />
           </WrapPanel>
           <TextBox Text="{Binding RuntimeCatalogText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="120" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
+          <TextBlock Text="ЛОКАЛЬНАЯ СПРАВКА" Foreground="#82BFC3" FontSize="11" FontWeight="Bold" />
+          <WrapPanel>
+            <Button Content="Общее" Tag="main" Click="Help_Click" Margin="0,0,8,8" />
+            <Button Content="Модель и runtime" Tag="runtime" Click="Help_Click" Margin="0,0,8,8" />
+            <Button Content="AI-команда" Tag="team" Click="Help_Click" Margin="0,0,8,8" />
+            <Button Content="MCP" Tag="mcp" Click="Help_Click" Margin="0,0,8,8" />
+            <Button Content="Архитектура Next" Tag="migration" Click="Help_Click" Margin="0,0,8,8" />
+          </WrapPanel>
+          <TextBox Text="{Binding HelpText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="220" MaxHeight="360" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
           <TextBlock Text="Основной запуск по-прежнему BEEFORGE-AI.cmd. Журналы читаются ограниченным фрагментом и не изменяются." TextWrapping="Wrap" Foreground="#A6B9C6" />
           <StackPanel Orientation="Horizontal" Spacing="9">
             <Button Content="Ошибки модели" Click="ServerLog_Click" Background="#294455" Foreground="#EAF2F7" Padding="14,9" />

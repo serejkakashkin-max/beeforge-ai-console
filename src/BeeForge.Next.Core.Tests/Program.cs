@@ -281,6 +281,11 @@ try
     File.WriteAllText(templateCopy, original, new UTF8Encoding(false));
     var remote = await LegacyLaunchPlanReader.ReadAsync(script, templateCopy, "remote");
     Assert(remote.Mode == "RemoteClient" && remote.Arguments.Count == 0, "remote profile cannot launch local server");
+    var help = new BeeForge.Next.Core.Workspace.OfflineHelpService(repo.FullName);
+    Assert(help.TopicNames.Contains("runtime") && help.Read("runtime").Contains("Runtime", StringComparison.OrdinalIgnoreCase),
+        "offline help loads bundled runtime documentation");
+    try { help.Read("../secret"); throw new Exception("unknown help topic accepted"); }
+    catch (ArgumentException) { }
     var capability = RuntimeCapabilityProbe.Compare(
         new[] { "--ctx-size", "32768", "--flash-attn", "on", "-mm", "model.gguf", "--custom-flag=value", "-1" },
         "Usage: llama-server [--ctx-size N] [--flash-attn MODE] [-mm FILE] --port N\n");

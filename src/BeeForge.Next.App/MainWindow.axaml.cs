@@ -187,6 +187,11 @@ public partial class MainWindow : Window
         if (await dialog.ShowDialog<bool>(this)) await vm.InstallRecommendedRuntimeAsync();
     }
 
+    private void Help_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } vm && sender is Button { Tag: string topic }) vm.ShowHelp(topic);
+    }
+
     private async void RefreshTeam_Click(object? sender, RoutedEventArgs e)
     {
         if (ViewModel is { } vm) await vm.RefreshTeamAsync();
