@@ -23,6 +23,9 @@ try{
     foreach($expected in @('-Mode RemoteClient','https://desktop.example.ts.net/v1','-RemoteModelAlias "Q2"','-RemoteContext 190000','-RemoteVision')){if(-not$command.Contains($expected)){throw "Install command is missing: $expected"}}
     $source=Get-Content -LiteralPath (Join-Path $Root 'scripts\BeeForgeRemote.Core.psm1') -Raw
     if($source-match"Invoke-BeeTailscale @\('funnel'"){throw 'Remote module must never configure Tailscale Funnel'}
+    if(-not$source.Contains('[int]$TimeoutSec=15')-or-not$source.Contains('Wait-Process -Timeout $TimeoutSec')){
+        throw 'Tailscale CLI calls must be bounded so the UI cannot remain busy forever'
+    }
     $runtimeCheck=$source.IndexOf('$runtime=Get-BeeServerStatus')
     $runtimeStart=$source.IndexOf('$runtime=Start-BeeServer ([string]$Profile.id)')
     $serveStart=$source.IndexOf('[void](Start-BeeTailscaleServe -Port ([int]$Profile.port))')
