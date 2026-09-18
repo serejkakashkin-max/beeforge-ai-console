@@ -163,7 +163,7 @@
       <TabItem Header="Удалённый доступ">
         <StackPanel Margin="34,27" Spacing="14">
           <TextBlock Text="Удалённый доступ" FontSize="28" FontWeight="SemiBold" />
-          <TextBlock Text="Действия используют существующий backend BeeForge. Удалённый доступ передаёт модель ноутбуку и блокирует локальные запросы; файлы проектов остаются на каждом устройстве." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="Действия используют существующий backend BeeForge. «Включить доступ» при необходимости сначала запускает выбранную модель и ждёт READY, затем передаёт её ноутбуку и блокирует локальные запросы; файлы проектов остаются на каждом устройстве." TextWrapping="Wrap" Foreground="#A6B9C6" />
           <WrapPanel IsEnabled="{Binding CanUseServices}">
             <Button Content="Состояние Tailscale" Tag="RemoteStatus" Click="Service_Click" Margin="0,0,8,8" />
             <Button Content="Включить доступ" Tag="RemoteEnable" Click="Service_Click" Margin="0,0,8,8" />

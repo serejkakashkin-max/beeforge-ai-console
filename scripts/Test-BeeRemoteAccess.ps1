@@ -23,6 +23,12 @@ try{
     foreach($expected in @('-Mode RemoteClient','https://desktop.example.ts.net/v1','-RemoteModelAlias "Q2"','-RemoteContext 190000','-RemoteVision')){if(-not$command.Contains($expected)){throw "Install command is missing: $expected"}}
     $source=Get-Content -LiteralPath (Join-Path $Root 'scripts\BeeForgeRemote.Core.psm1') -Raw
     if($source-match"Invoke-BeeTailscale @\('funnel'"){throw 'Remote module must never configure Tailscale Funnel'}
+    $runtimeCheck=$source.IndexOf('$runtime=Get-BeeServerStatus')
+    $runtimeStart=$source.IndexOf('$runtime=Start-BeeServer ([string]$Profile.id)')
+    $serveStart=$source.IndexOf('[void](Start-BeeTailscaleServe -Port ([int]$Profile.port))')
+    if($runtimeCheck-lt0-or$runtimeStart-lt0-or$serveStart-lt0-or$runtimeCheck-gt$serveStart-or$runtimeStart-gt$serveStart){
+        throw 'Remote access must ensure the selected local model is READY before creating the Tailscale lease'
+    }
     Write-Host 'Remote access checks: PASS' -ForegroundColor Green
 }finally{
     Remove-Item Env:BEEFORGE_REMOTE_CONFIG -ErrorAction SilentlyContinue

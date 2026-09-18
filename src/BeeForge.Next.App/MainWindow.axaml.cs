@@ -36,7 +36,7 @@ public partial class MainWindow : Window
         if (ViewModel is not { } vm || sender is not Button { Tag: string tag } ||
             !Enum.TryParse<ServiceAction>(tag, out var action)) return;
         var explanation = action switch {
-            ServiceAction.RemoteEnable => "Модель будет предоставлена устройствам Tailscale. Локальная работа с моделью будет заблокирована до выключения удалённого доступа. Публичный доступ не включается.",
+            ServiceAction.RemoteEnable => "Если выбранная модель ещё не запущена, BeeForge сначала запустит её и дождётся READY. Затем модель будет предоставлена устройствам Tailscale, а локальная работа с ней будет заблокирована до выключения удалённого доступа. Публичный доступ не включается.",
             ServiceAction.RemoteDisable => "Удалённый доступ к модели будет выключен; локальная работа снова станет доступна. Подключённый ноутбук потеряет доступ.",
             ServiceAction.FullAccessEnable => "Агенты смогут выполнять действия без дополнительных подтверждений. Назначенные каждому агенту MCP и skills остаются ограниченными его ролью.",
             ServiceAction.FullAccessDisable => "Будет восстановлен режим разрешений до включения полного доступа.",

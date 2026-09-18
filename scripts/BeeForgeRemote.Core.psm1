@@ -101,6 +101,17 @@ function Enable-BeeRemoteAccess([Parameter(Mandatory=$true)]$Profile) {
     if(-not$tailscale.Connected-or-not$tailscale.DnsName){throw $tailscale.Message}
     $existing=Get-BeeRemoteAccessState
     if($existing.ServeConfigured-and-not$existing.Managed){throw 'На этом ПК уже есть чужая конфигурация Tailscale Serve. BeeForge не будет её перезаписывать.'}
+
+    # Remote access is an exclusive lease, so once it is enabled the normal
+    # local Start/Stop actions are intentionally blocked. Make the transition
+    # atomic from the user's point of view: ensure that the selected local
+    # model is READY first and only then create the Tailscale route / lease.
+    $runtime=Get-BeeServerStatus
+    if(-not$runtime.Ready-or-not(Test-BeeRunningProfileMatch $Profile)){
+        $runtime=Start-BeeServer ([string]$Profile.id)
+    }
+    if(-not$runtime.Ready){throw 'Не удалось подготовить модель для удалённого доступа: BeeLlama не перешёл в READY.'}
+
     [void](Start-BeeTailscaleServe -Port ([int]$Profile.port))
     try {
         $baseUrl="https://$($tailscale.DnsName)/v1"
