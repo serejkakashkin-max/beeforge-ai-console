@@ -5,24 +5,23 @@ $ErrorActionPreference = 'Stop'
 if([string]::IsNullOrWhiteSpace($Root)){$Root=Split-Path -Parent $PSScriptRoot}
 $failures = [Collections.Generic.List[string]]::new()
 
-$mainLauncher = Get-Content -LiteralPath (Join-Path $Root 'BEEFORGE-AI.cmd') -Raw
-$legacyLauncherPath = Join-Path $Root 'BEEFORGE-LEGACY.cmd'
-if ($mainLauncher -notmatch 'Start-BeeForgeConsole\.ps1' -or $mainLauncher -match 'BeeLlama-Manager\.ps1') {
-    $failures.Add('BEEFORGE-AI.cmd должен запускать объединённый BeeForge Next через Start-BeeForgeConsole.ps1')
+$desktopShortcutInstaller = Join-Path $Root 'scripts\Install-BeeForgeDesktopShortcut.ps1'
+if (-not (Test-Path -LiteralPath $desktopShortcutInstaller -PathType Leaf)) {
+    $failures.Add('Не найден Install-BeeForgeDesktopShortcut.ps1')
+} else {
+    $shortcutText = Get-Content -LiteralPath $desktopShortcutInstaller -Raw
+    if ($shortcutText -notmatch 'BeeForge\.Next\.App\.exe' -or $shortcutText -notmatch 'beeforge-ai\.ico') {
+        $failures.Add('Desktop shortcut должен напрямую указывать на BeeForge.Next.App.exe и фирменную иконку')
+    }
 }
-if (-not (Test-Path -LiteralPath $legacyLauncherPath -PathType Leaf)) {
-    $failures.Add('Не найден аварийный launcher BEEFORGE-LEGACY.cmd')
-} elseif ((Get-Content -LiteralPath $legacyLauncherPath -Raw) -notmatch 'BeeLlama-Manager\.ps1') {
-    $failures.Add('BEEFORGE-LEGACY.cmd не указывает на legacy-интерфейс')
-}
+if (Test-Path -LiteralPath (Join-Path $Root 'BEEFORGE-AI.cmd')) { $failures.Add('Устаревший BEEFORGE-AI.cmd не должен распространяться') }
+if (Test-Path -LiteralPath (Join-Path $Root 'BEEFORGE-LEGACY.cmd')) { $failures.Add('Устаревший BEEFORGE-LEGACY.cmd не должен распространяться') }
 if (-not (Test-Path -LiteralPath (Join-Path $Root 'scripts\Publish-BeeForgeNext.ps1') -PathType Leaf)) {
     $failures.Add('Не найден Publish-BeeForgeNext.ps1')
 }
 
-# BEEFORGE-AI.cmd starts the desktop UI with Windows PowerShell 5.1. Unlike
-# PowerShell 7, it does not reliably decode UTF-8 scripts without a BOM. The
-# remote-access module contains Russian UI messages and is imported before the
-# window is shown, so losing its BOM makes the application exit at parse time.
+# Some maintenance scripts still run under Windows PowerShell 5.1. Preserve
+# their UTF-8 BOM so Russian diagnostics remain parseable there.
 $windowsPowerShellUtf8Files = @(
     'scripts\BeeForgeRemote.Core.psm1',
     'scripts\Start-OpenCode.ps1',

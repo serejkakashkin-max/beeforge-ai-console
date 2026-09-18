@@ -427,11 +427,12 @@ async function showFullAccess() {
 
 function launchBeeForgeConsole() {
   if (process.env.BEEFORGE_BRIDGE_SELF_TEST === "1") return { Started: true, Running: true, Pid: 1, Message: "self-test" };
-  const powerShellExe = path.join(process.env.WINDIR || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  const launcher = "C:\\AI\\BeeForge AI Console\\scripts\\Start-BeeForgeConsole.ps1";
-  const result = spawnSync(powerShellExe, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", launcher], { encoding: "utf8", windowsHide: true, timeout: 15000 });
-  if (result.error || result.status !== 0) throw new Error(cleanText(result.error?.message || result.stderr || "Не удалось запустить BeeForge AI Console", 1200));
-  return JSON.parse(String(result.stdout || "{}"));
+  const root = "C:\\AI\\BeeForge AI Console";
+  const executable = path.join(root, "local", "BeeForge.Next", "BeeForge.Next.App.exe");
+  if (!fs.existsSync(executable)) throw new Error(`BeeForge AI Console не найден: ${executable}`);
+  const child = spawn(executable, [], { cwd: root, detached: true, windowsHide: false, stdio: "ignore" });
+  child.unref();
+  return { Started: true, Running: true, Pid: child.pid, Message: "BeeForge AI Console запущена" };
 }
 
 async function startConsole() {

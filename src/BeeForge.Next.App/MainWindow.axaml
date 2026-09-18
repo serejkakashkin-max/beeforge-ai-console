@@ -213,7 +213,7 @@
             <Button Content="Архитектура Next" Tag="migration" Click="Help_Click" Margin="0,0,8,8" />
           </WrapPanel>
           <TextBox Text="{Binding HelpText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Consolas" FontSize="12" MinHeight="220" MaxHeight="360" Background="#1B2B3C" Foreground="#EAF2F7" BorderBrush="#365162" />
-          <TextBlock Text="Основной запуск по-прежнему BEEFORGE-AI.cmd. Журналы читаются ограниченным фрагментом и не изменяются." TextWrapping="Wrap" Foreground="#A6B9C6" />
+          <TextBlock Text="Основной запуск выполняется напрямую через BeeForge.Next.App.exe. Журналы читаются ограниченным фрагментом и не изменяются." TextWrapping="Wrap" Foreground="#A6B9C6" />
           <StackPanel Orientation="Horizontal" Spacing="9">
             <Button Content="Ошибки модели" Click="ServerLog_Click" Background="#294455" Foreground="#EAF2F7" Padding="14,9" />
             <Button Content="Вывод модели" Click="ServerOutputLog_Click" Background="#294455" Foreground="#EAF2F7" Padding="14,9" />

@@ -11,8 +11,6 @@ try{
     & robocopy.exe (Join-Path $Root 'tools') (Join-Path $copy 'tools') /E /XD node_modules .venv __pycache__ /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
     if($LASTEXITCODE-ge8){throw "Unable to copy installer tools (robocopy exit $LASTEXITCODE)"}
     $global:LASTEXITCODE=0
-    Copy-Item -LiteralPath (Join-Path $Root 'BEEFORGE-AI.cmd') -Destination $copy
-    Copy-Item -LiteralPath (Join-Path $Root 'BEEFORGE-LEGACY.cmd') -Destination $copy
     & pwsh -NoProfile -File (Join-Path $copy 'scripts\Install-BeeForge.ps1') -Mode RemoteClient -RemoteBaseUrl 'https://desktop.example.ts.net' -RemoteModelAlias Q2 -RemoteContext 162000 -RemoteOutput 65528 -RemoteVision -ProjectRoot $projects -OpenCodeRoot $openCode -SkillRoot (Join-Path $temp 'skills') -ConfigureOpenCode -SkipDependencies -SkipNextApp -Force
     if($LASTEXITCODE-ne0){throw "Remote installer exited with $LASTEXITCODE"}
     $profiles=Get-Content -LiteralPath (Join-Path $copy 'config\profiles.json') -Raw|ConvertFrom-Json

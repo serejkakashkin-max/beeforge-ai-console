@@ -4,7 +4,7 @@ Baseline: `main` commit `2446f85` (16 September 2026). This is the behavior cont
 
 | Function | Implementation | State / files changed | Processes / external dependencies | Existing evidence |
 | --- | --- | --- | --- | --- |
-| Windows launcher and current UI | `BEEFORGE-AI.cmd`, `scripts/Start-BeeForgeConsole.ps1`, `ui/BeeLlama-Manager.ps1` | Reads profile store, writes through core modules | Windows PowerShell 5.1, WPF | `Test-Distribution.ps1`, `Test-BeeRemoteUi.ps1` |
+| Windows launcher and current UI | `local/BeeForge.Next/BeeForge.Next.App.exe`, desktop shortcut, `ui/BeeLlama-Manager.ps1` (legacy maintenance UI only) | Reads profile store, writes through core modules | .NET 8 self-contained Avalonia | `Test-Distribution.ps1`, `Test-BeeRemoteUi.ps1` |
 | Profile schema and defaults | `BeeLlamaManager.Core.psm1`: `Initialize-BeeProfileSchema`, `Get-BeeProfileStore`, `Get-BeeNewProfileTemplate` | `config/profiles.json`; active and last-good IDs; model roots | None | `RuntimeProfile.Smoke.ps1`, `Test-BeeRemoteProfiles.ps1` |
 | Profile save and migration | `Save-BeeProfileStore`, `Initialize-BeeProfileSchema` | Atomic-ish temp replacement of profile store; legacy defaults and CPU-MoE flags | File system | `RuntimeProfile.Smoke.ps1`, `MoEProfile.Smoke.ps1` |
 | Model/projector discovery and validation | `Get-BeeModelFiles`, `Get-BeeVisionProjectorFiles`, `Test-BeeProfile`, `Test-BeeVisionProfile` | Reads GGUF, MMProj and runtime paths | `llama-server.exe --help` | `BeeLlamaRuntime.Smoke.ps1`, `RuntimeProfile.Smoke.ps1` |

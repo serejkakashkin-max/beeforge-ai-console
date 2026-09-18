@@ -55,7 +55,7 @@ MTP is intentionally OFF because every tested native MTP setting was substantial
 
 ## Current launch method
 
-1. Run `C:\AI\BeeForge AI Console\BEEFORGE-AI.cmd` or the desktop shortcut.
+1. Run the **BeeForge AI Console** desktop shortcut or `C:\AI\BeeForge AI Console\local\BeeForge.Next\BeeForge.Next.App.exe` directly.
 2. Select a profile and click **Сохранить и запустить** or **Применить и перезапустить**.
 3. Open OpenCode; its config is `%USERPROFILE%\.config\opencode\opencode.json`.
 4. Stop the managed server with **Остановить** in BeeForge AI Console.

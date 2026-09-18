@@ -233,12 +233,12 @@ if ($ConfigureOpenCode) {
 if (-not $SkipNextApp) {
     Write-Step 'Публикация объединённого BeeForge AI Console'
     & (Join-Path $script:Root 'scripts\Publish-BeeForgeNext.ps1') -Root $script:Root | Out-Null
+    Write-Step 'Создание ярлыка BeeForge AI Console'
+    & (Join-Path $script:Root 'scripts\Install-BeeForgeDesktopShortcut.ps1') -Root $script:Root | Out-Null
 }
 
 Write-Step 'Проверка установки'
 $required = @(
-    (Join-Path $script:Root 'BEEFORGE-AI.cmd'),
-    (Join-Path $script:Root 'BEEFORGE-LEGACY.cmd'),
     (Join-Path $script:Root 'tools\telegram-bridge\v1.0.0\bridge.mjs'),
     $profilesPath,
     $telegramPath
@@ -249,6 +249,6 @@ Get-Content -LiteralPath $profilesPath -Raw | ConvertFrom-Json | Out-Null
 Get-Content -LiteralPath $telegramPath -Raw | ConvertFrom-Json | Out-Null
 
 Write-Host "`nBeeForge подготовлен: $script:Root | режим: $Mode" -ForegroundColor Green
-if($Mode-eq'RemoteClient'){Write-Host "Запустите BEEFORGE-AI.cmd, проверьте удалённое подключение и откройте локальный проект в OpenCode."}
-else{Write-Host 'Откройте BEEFORGE-AI.cmd — это основной объединённый интерфейс BeeForge. BEEFORGE-LEGACY.cmd оставлен только как аварийный fallback.'}
+if($Mode-eq'RemoteClient'){Write-Host "Запустите ярлык BeeForge AI Console на рабочем столе, проверьте удалённое подключение и откройте локальный проект в OpenCode."}
+else{Write-Host 'Запускайте BeeForge AI Console ярлыком на рабочем столе: он напрямую открывает self-contained BeeForge.Next.App.exe.'}
 if (-not $ConfigureOpenCode) { Write-Host 'Для установки командной конфигурации OpenCode повторите скрипт с -ConfigureOpenCode.' }

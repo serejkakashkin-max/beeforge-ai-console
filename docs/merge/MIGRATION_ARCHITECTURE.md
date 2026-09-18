@@ -2,7 +2,7 @@
 
 ## Boundary
 
-Old BeeForge is the running behavior authority. The Avalonia process is initially an optional reader/controller through typed compatibility services, not a second independent config writer or replacement daemon. The old WPF launcher and `BEEFORGE-AI.cmd` stay intact until full parity.
+Old BeeForge was the running behavior authority during migration. The Avalonia process began as an optional reader/controller through typed compatibility services. After full parity, startup was cut over to the self-contained `BeeForge.Next.App.exe`, and the transitional CMD launchers were removed.
 
 ```text
 Avalonia Views / ViewModels

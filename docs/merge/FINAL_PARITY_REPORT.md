@@ -63,7 +63,7 @@ This report compares the behavior contract captured from BeeForge `main` at base
 | RemoteClient no Telegram bridge | Required | Preserved by installer | PASS | `Test-BeeRemoteInstall.ps1` |
 | Secrets hygiene | DPAPI/no tracked state | Next does not surface prompt/MCP secrets, HF token or runtime secrets | PASS | `Test-Distribution.ps1`, OpenCode snapshot fixture |
 | Windows x64 packaging | Existing scripts | Avalonia Release build/publish alongside legacy fallback | PASS | Release build, distribution checks |
-| Default launcher cutover | Legacy launcher was the previous default | `BEEFORGE-AI.cmd` now starts the self-contained Avalonia console; `BEEFORGE-LEGACY.cmd` remains as fallback | PASS | Unified launcher start/close smoke verified; fallback retained |
+| Default launcher cutover | Legacy launcher was the previous default | Desktop shortcut now targets the self-contained `BeeForge.Next.App.exe` directly; CMD launchers were removed | PASS | Direct EXE launch smoke verified |
 
 ## Safe regression evidence
 
@@ -90,4 +90,4 @@ These are not implementation TODOs. They require controlled interaction with the
 | Two-PC RemoteClient | BLOCKED | Main PC + notebook Tailscale smoke with exclusive lease and local project tools |
 | Visual/UI acceptance | BLOCKED | User validates scaling, profile editing, confirmations, logs, optimization and runtime manager on the production desktop |
 
-The user explicitly authorized the final cutover before completing all manual environment gates. `BEEFORGE-AI.cmd` therefore starts the unified Avalonia console, while `BEEFORGE-LEGACY.cmd` preserves a recovery path. The remaining live gates are acceptance checks, not a reason to maintain two normal user interfaces.
+The user explicitly authorized the final cutover before completing all manual environment gates. The unified Avalonia console is now launched directly through `BeeForge.Next.App.exe`; the desktop shortcut points to that executable and uses the BeeForge icon. CMD launchers are no longer part of the normal or fallback startup path.
