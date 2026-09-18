@@ -24,7 +24,7 @@ foreach ($required in @(
     'Solution Architect запрещён',
     'После завершённого task немедленно используй его HANDOFF',
     'EXTERNAL_BLOCKER_CONFIRMED',
-    'ДЕЛЕГАЦИЯ НЕ БОЛЕЕ 6000 СИМВОЛОВ'
+    'ДЕЛЕГАЦИЯ НЕ БОЛЕЕ 12000 СИМВОЛОВ'
 )) {
     if ($lead -notmatch [regex]::Escape($required)) { throw "Team Lead misses anti-fragmentation rule: $required" }
 }
@@ -45,10 +45,10 @@ foreach ($required in @(
 )) {
     if ($systems -notmatch [regex]::Escape($required)) { throw "Systems Engineer misses bounded diagnosis rule: $required" }
 }
-if ($software -notmatch 'CONTEXT_ROLLOVER_REQUIRED' -or $software -notmatch '6000 символов') {
+if ($software -notmatch 'CONTEXT_ROLLOVER_REQUIRED' -or $software -notmatch '12000 символов') {
     throw 'Software Engineer lacks bounded handoff and context rollover contract'
 }
-if ($architect -notmatch '6000 символов' -or $architect -notmatch 'дословн') {
+if ($architect -notmatch '12000 символов' -or $architect -notmatch 'дословн') {
     throw 'Solution Architect can still flood Team Lead with verbatim project content'
 }
 if ($skill -notmatch 'One implementation owner' -or $skill -notmatch 'CONTEXT_ROLLOVER_REQUIRED' -or $skill -notmatch 'runtime guard rejects it') {

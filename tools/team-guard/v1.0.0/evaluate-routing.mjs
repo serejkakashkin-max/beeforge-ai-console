@@ -21,7 +21,7 @@ if(process.argv.includes('--check')) {
       if(!response.ok) throw Error('HTTP '+response.status);
       const data=await response.json(), calls=data.choices?.[0]?.message?.tool_calls || [];
       const chosen=calls[0]?.function?.name==='task'?JSON.parse(calls[0].function.arguments):{};
-      const ok=calls.length===1 && chosen.subagent_type===c.agent && String(chosen.prompt||'').length<=6000;
+      const ok=calls.length===1 && chosen.subagent_type===c.agent && String(chosen.prompt||'').length<=12000;
       if(ok) passed++;
       console.log(JSON.stringify({id:c.id,passed:ok,expected:c.agent,actual:chosen.subagent_type||null,wallMs:Date.now()-started,usage:data.usage||null}));
     } catch(e) {console.log(JSON.stringify({id:c.id,passed:false,error:String(e.message).slice(0,160),wallMs:Date.now()-started}));}

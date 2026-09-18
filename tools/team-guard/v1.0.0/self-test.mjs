@@ -21,7 +21,7 @@ let oversizedPromptBlocked = false;
 try {
   await hooks["tool.execute.before"](
     { tool: "task", sessionID: "oversized", callID: "oversized-1" },
-    { args: { agent: "systems-engineer", prompt: "x".repeat(6001) } },
+    { args: { agent: "systems-engineer", prompt: "x".repeat(12001) } },
   );
 } catch (error) {
   oversizedPromptBlocked = String(error?.message || error).includes("BEEFORGE_DELEGATION_CONTEXT_TOO_LARGE");

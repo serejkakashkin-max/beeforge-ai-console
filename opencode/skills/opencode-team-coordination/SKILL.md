@@ -23,9 +23,9 @@ Treat any request that authorizes project changes as implementation, even when i
 
 One ordinary implementation permits one Software Engineer task covering focused discovery, all related edits, diff review, and focused tests, followed by at most one Quality Engineer task when UI or behavior needs independent verification. Never create separate tasks merely to read files, return exact lines, inspect whitespace, perform one replacement, or run individual baseline/final tests. A specialist session is a unit of work, not a single tool call.
 
-Create at most one continuation of the same specialist only when its final handoff explicitly contains `CONTEXT_ROLLOVER_REQUIRED` or a new user request resolves a confirmed external blocker. Pass a checkpoint of at most 6000 characters containing completed work, current file state, checks, remaining work, and what not to repeat. Full source, full diffs, raw logs, and long verbatim excerpts are forbidden in handoffs because they inflate the Team Lead context and erase the benefit of fresh child sessions.
+Create at most one continuation of the same specialist only when its final handoff explicitly contains `CONTEXT_ROLLOVER_REQUIRED` or a new user request resolves a confirmed external blocker. Pass a checkpoint of at most 12000 characters containing completed work, current file state, checks, remaining work, and what not to repeat. Full source, full diffs, raw logs, and long verbatim excerpts are forbidden in handoffs because they inflate the Team Lead context and erase the benefit of fresh child sessions.
 
-The delegation input itself is also capped at 6000 characters. Include only the current goal, exact project or host scope, verified facts, success criterion, constraints, the previous compact handoff when needed, and a short failed-approach ledger. Do not paste the conversation, full command output, or speculative implementation plans.
+The delegation input itself is also capped at 12000 characters. Include only the current goal, exact project or host scope, verified facts, success criterion, constraints, the previous compact handoff when needed, and a short failed-approach ledger. Do not paste the conversation, full command output, or speculative implementation plans.
 
 For Systems Engineer work, require a bounded diagnostic loop: identify the earliest failing boundary, change one variable, and make no more than two corrected attempts for the same symptom. DNS, TLS, and OAuth are normal diagnostic subjects, not automatic stop conditions. Stop only at confirmed missing authorization, required user action, or repeated failure without new evidence. Return `EXTERNAL_BLOCKER_CONFIRMED` with evidence and the smallest next user action instead of stacking another proxy, port forward, service, package, or helper script over an unproven topology.
 
@@ -80,7 +80,7 @@ Start execution only after a subsequent unambiguous instruction such as “пл�
 
 ## Handoff
 
-Require every specialist to return a handoff of at most 6000 characters: goal and actual scope; files changed; commands and concise results; checks already passed; test URL/PID; findings; remaining checks; and what the next agent must not repeat. Do not request or forward full source, full diffs, raw logs, or long verbatim excerpts. Pass that handoff forward. After interruption, resume from the last confirmed stage instead of restarting successful work.
+Require every specialist to return a handoff of at most 12000 characters: goal and actual scope; files changed; commands and concise results; checks already passed; test URL/PID; findings; remaining checks; and what the next agent must not repeat. Do not request or forward full source, full diffs, raw logs, or long verbatim excerpts. Pass that handoff forward. After interruption, resume from the last confirmed stage instead of restarting successful work.
 
 ## Telegram bridge
 
