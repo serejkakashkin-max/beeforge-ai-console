@@ -5,6 +5,7 @@ using BeeForge.Next.Core.Benchmarking;
 using Avalonia.Platform.Storage;
 using BeeForge.Next.Core.Inference;
 using BeeForge.Next.Core.Workspace;
+using System.Diagnostics;
 
 namespace BeeForge.Next.App;
 
@@ -23,6 +24,7 @@ public partial class MainWindow : Window
             {
                 await vm.RefreshRuntimeStatusAsync();
                 await vm.RefreshBenchmarkStatusAsync();
+                if (BenchmarkRunsList.ItemCount > 0) BenchmarkRunsList.SelectedIndex = 0;
             }
         };
     }
@@ -241,7 +243,11 @@ public partial class MainWindow : Window
 
     private async void RefreshBenchmark_Click(object? sender, RoutedEventArgs e)
     {
-        if (ViewModel is { } vm) await vm.RefreshBenchmarkStatusAsync();
+        if (ViewModel is { } vm)
+        {
+            await vm.RefreshBenchmarkStatusAsync();
+            if (BenchmarkRunsList.ItemCount > 0) BenchmarkRunsList.SelectedIndex = 0;
+        }
     }
 
     private void PresetShort_Click(object? sender, RoutedEventArgs e) => ViewModel?.SetBenchmarkPreset("short");
@@ -253,7 +259,11 @@ public partial class MainWindow : Window
         if (ViewModel is not { CanRunBenchmark: true, SelectedProfile: { } selected } vm) return;
         var dialog = new ConfirmRuntimeWindow("Запустить тест скорости?",
             $"BeeForge выполнит разогрев и повторные синтетические замеры профиля «{selected.Name}» на работающей модели. Это займёт вычислительные ресурсы; OpenCode и модель не перезапускаются.");
-        if (await dialog.ShowDialog<bool>(this)) await vm.StartBenchmarkAsync();
+        if (await dialog.ShowDialog<bool>(this))
+        {
+            await vm.StartBenchmarkAsync();
+            if (BenchmarkRunsList.ItemCount > 0) BenchmarkRunsList.SelectedIndex = 0;
+        }
     }
 
     private async void StopBenchmark_Click(object? sender, RoutedEventArgs e)
@@ -296,11 +306,25 @@ public partial class MainWindow : Window
             await using var stream = await file.OpenWriteAsync();
             using var writer = new StreamWriter(stream);
             await writer.WriteAsync(BenchmarkComparisonReport.Render(selected));
-            vm.SetBenchmarkMessage("Отчёт сравнения сохранён.");
+            vm.SetBenchmarkMessage($"Отчёт сравнения сохранён: {file.Path.LocalPath}");
         }
         catch (Exception)
         {
             vm.SetBenchmarkMessage("Не удалось сохранить отчёт. История замеров не изменена.");
+        }
+    }
+
+    private void OpenBenchmarkFolder_Click(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel?.GetBenchmarkResultsDirectory() is not { } path) return;
+        try
+        {
+            Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo("explorer.exe", path) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            ViewModel.SetBenchmarkMessage($"Не удалось открыть папку результатов: {ex.GetType().Name}.");
         }
     }
 }

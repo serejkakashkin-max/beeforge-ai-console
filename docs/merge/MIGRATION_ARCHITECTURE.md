@@ -49,7 +49,7 @@ No new service may write to `opencode.json` or `profiles.json` concurrently with
 
 ## Toolchain and deployment
 
-Windows 10/11 x64 first. The baseline host had .NET 8 runtime but no SDK; SDK 8.0.425 was installed for the preview build, without changing the legacy launcher. Existing users keep the PowerShell launcher until the new build and migration pass. No user-specific paths, models, GGUF files, token stores or copied live profiles enter Git.
+Windows 10/11 x64 first. The baseline host had .NET 8 runtime but no SDK; SDK 8.0.425 was installed for development. The final launcher uses a self-contained win-x64 publish, so the normal application does not depend on a separately installed .NET runtime. No user-specific paths, models, GGUF files, token stores or copied live profiles enter Git.
 
 The Avalonia shell in `src/BeeForge.Next.App/` has progressed beyond the first read-only milestone. It still treats the existing BeeForge modules/files as the behavior authority, but now exposes guarded profile CRUD/import/export, runtime start/stop/connect, GGUF/Hugging Face/VRAM tooling, benchmark/autotune, runtime management, a localhost-only on-demand proxy, scenarios, logs/help, and allowlisted AI-team/remote controls. Opening the UI remains read-only by itself; mutations require explicit actions and preserve backups where applicable.
 
@@ -57,7 +57,7 @@ The Avalonia shell in `src/BeeForge.Next.App/` has progressed beyond the first r
 
 `LegacyLaunchPlanReader` obtains a typed launch plan from `Get-BeeArguments` in the existing BeeForge module. Local BeeLlama flags therefore remain byte/ordering-compatible with the old behavior authority, while RemoteClient produces no local argv. The selected executable is probed separately with `--help`, so upstream/custom runtimes can expose their own capabilities without removing BeeLlama-only flags from BeeLlama profiles.
 
-The optional preview now has a separate `LegacyRuntimeController` for status/start/stop. It invokes the existing module through a typed PowerShell entry point; the old PID ownership, health wait, OpenCode sync and profile save remain authoritative. The new entry point additionally rejects local start/stop while a managed remote lease is active and rejects RemoteClient local process actions. UI buttons require an explicit modal confirmation and are disabled until lease status has been read. This is not yet process/health parity for an upstream or custom runtime, and it does not switch the default launcher.
+The unified Avalonia UI uses `LegacyRuntimeController` for status/start/stop. It invokes the existing module through a typed PowerShell entry point; PID ownership, health wait, OpenCode sync and profile save remain authoritative. The entry point additionally rejects local start/stop while a managed remote lease is active and rejects RemoteClient local process actions. UI buttons require explicit confirmation and are disabled until lease status has been read. The Avalonia console is now the default launcher; the legacy PowerShell UI remains a fallback only.
 
 The same typed adapter now exposes `ConnectRemote` for selected RemoteClient profiles. The preview asks for confirmation; the legacy module checks the remote endpoint and alias before writing the active profile or syncing OpenCode. Rejected local-mode and offline-remote attempts are covered by fixture tests asserting that the profile store stays byte-identical. Telegram ownership and the local server process remain unchanged.
 

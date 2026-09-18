@@ -24,9 +24,13 @@ public sealed class IsolatedAutoTuner
     }
 
     public async Task<AutoTuneResult> RunAsync(string profileId, string profileJson, OptimizationObjective objective,
-        IProgress<string>? progress, CancellationToken cancellationToken)
+        IProgress<string>? progress, CancellationToken cancellationToken,
+        int numericTrials = UpstreamBenchmarkDefaults.OptimizationTrials,
+        bool scanTensorOverrides = false)
     {
+        if (numericTrials is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(numericTrials));
         var candidates = AutoTunePlanner.Candidates(profileJson);
+        if (candidates.Count == 0) throw new InvalidDataException("Нет допустимой исходной конфигурации.");
         var trials = new List<AutoTuneTrial>();
         var profileNode = System.Text.Json.Nodes.JsonNode.Parse(profileJson)!.AsObject();
         var modelPath = profileNode["modelPath"]?.ToString();
@@ -51,104 +55,145 @@ public sealed class IsolatedAutoTuner
             p["cpuMoeLayers"] ??= 0;
             return p.ToJsonString();
         }
-        foreach (var candidate in candidates)
+
+        (int prompt, int output) SearchWorkload() => objective switch
+        {
+            OptimizationObjective.Prefill => (UpstreamBenchmarkDefaults.OptimizationTokens * 2, 1),
+            OptimizationObjective.Decode => (1, UpstreamBenchmarkDefaults.OptimizationTokens),
+            _ => (UpstreamBenchmarkDefaults.OptimizationTokens * 2, UpstreamBenchmarkDefaults.OptimizationTokens)
+        };
+
+        double Score(AutoTuneTrial trial) => objective switch
+        {
+            OptimizationObjective.Prefill => trial.Prefill,
+            OptimizationObjective.Decode => trial.Decode,
+            _ => (trial.Prefill + trial.Decode) / 2.0
+        };
+
+        async Task<AutoTuneTrial> MeasureAsync(AutoTuneCandidate candidate, string label,
+            int promptTokens, int outputTokens, int repeats)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var status = await _runtime.GetStatusAsync(cancellationToken);
             if (status.Running || status.Ready || status.Leased || status.Remote)
                 throw new InvalidOperationException("Остановите рабочую модель и выключите удалённый доступ перед автоподбором.");
             if (!MemoryFits(candidate, status))
-            {
-                trials.Add(new AutoTuneTrial(candidate, 0, 0, "VRAM preflight"));
-                if (trials.Count == 1) break;
-                continue;
-            }
-            progress?.Report($"Проверяю {candidate.Name} ({trials.Count + 1}/{candidates.Count})…");
+                return new AutoTuneTrial(candidate, 0, 0, "VRAM preflight");
+            progress?.Report(label);
             try
             {
-                var sample = await TrialAsync(profileId, profileJson, candidate, cancellationToken);
-                trials.Add(new AutoTuneTrial(candidate, sample.PrefillTokensPerSecond,
-                    sample.DecodeTokensPerSecond, null));
+                var sample = await TrialAsync(profileId, profileJson, candidate, promptTokens, outputTokens,
+                    repeats, cancellationToken);
+                return new AutoTuneTrial(candidate, sample.PrefillTokensPerSecond,
+                    sample.DecodeTokensPerSecond, null);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                trials.Add(new AutoTuneTrial(candidate, 0, 0, ex.GetType().Name));
-                if (trials.Count == 1) break; // No trustworthy baseline.
+                return new AutoTuneTrial(candidate, 0, 0, ex.GetType().Name);
             }
         }
-        // Upstream TPE uses observed outcomes to explore combinations, not only one-field changes.
-        if (trials.Count > 0 && trials[0].Valid)
-        {
-            var search = new AdaptiveAutoTuneSearch(profileJson);
-            for (var i = 0; i < 12; i++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var candidate = search.Ask();
-                if (candidate.UBatch > candidate.Batch)
-                {
-                    search.Tell(new AutoTuneTrial(candidate, 0, 0, "UBatch exceeds batch"), trials[0], objective);
-                    continue;
-                }
-                var key = CandidateKey(candidate);
-                var previous = trials.FirstOrDefault(t => CandidateKey(t.Candidate) == key);
-                if (previous is not null)
-                {
-                    search.Tell(previous, trials[0], objective);
-                    continue; // Reuse evidence; confirmation below is deliberately measured again.
-                }
-                var status = await _runtime.GetStatusAsync(cancellationToken);
-                if (status.Running || status.Ready || status.Leased || status.Remote)
-                    throw new InvalidOperationException("Автоподбор остановлен: рабочая модель или удалённый доступ активны.");
-                if (!MemoryFits(candidate, status))
-                {
-                    var rejected = new AutoTuneTrial(candidate, 0, 0, "VRAM preflight");
-                    trials.Add(rejected);
-                    search.Tell(rejected, trials[0], objective);
-                    continue;
-                }
-                progress?.Report($"Адаптивный поиск TPE {i + 1}/12…");
-                AutoTuneTrial trial;
-                try
-                {
-                    var sample = await TrialAsync(profileId, profileJson, candidate, cancellationToken);
-                    trial = new AutoTuneTrial(candidate, sample.PrefillTokensPerSecond, sample.DecodeTokensPerSecond, null);
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex) { trial = new AutoTuneTrial(candidate, 0, 0, ex.GetType().Name); }
-                trials.Add(trial);
-                search.Tell(trial, trials[0], objective);
-            }
-        }
-        var provisional = AutoTuneResult.FromTrials(trials, objective);
-        if (provisional.Suggested is null) return provisional;
-        // Re-run both candidates after the search. A one-off spike must not
-        // generate a production profile recommendation.
-        var confirmation = new List<AutoTuneTrial>();
-        foreach (var candidate in new[] { candidates[0], provisional.Suggested })
+
+        var (searchPrompt, searchOutput) = SearchWorkload();
+        var baseline = await MeasureAsync(candidates[0], "Исходная конфигурация…", searchPrompt, searchOutput,
+            UpstreamBenchmarkDefaults.OptimizationRepeats);
+        trials.Add(baseline);
+        if (!baseline.Valid) return new AutoTuneResult(trials, null, 0);
+
+        // Stage 1: exact upstream numeric search shape (TPE over batch/ubatch/threads/GPU/CPU-MoE).
+        var stage1Search = new AdaptiveAutoTuneSearch(profileJson, seed: 42);
+        for (var i = 0; i < numericTrials; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var status = await _runtime.GetStatusAsync(cancellationToken);
-            if (status.Running || status.Ready || status.Leased || status.Remote)
-                throw new InvalidOperationException("Рабочая модель запущена во время проверки; автоподбор остановлен.");
-            progress?.Report($"Подтверждаю результат: {candidate.Name}…");
-            try
+            var candidate = stage1Search.Ask();
+            AutoTuneTrial trial;
+            if (candidate.UBatch > candidate.Batch)
+                trial = new AutoTuneTrial(candidate, 0, 0, "UBatch exceeds batch");
+            else
             {
-                var sample = await TrialAsync(profileId, profileJson, candidate, cancellationToken);
-                confirmation.Add(new AutoTuneTrial(candidate, sample.PrefillTokensPerSecond,
-                    sample.DecodeTokensPerSecond, null));
+                var key = CandidateKey(candidate);
+                var previous = trials.FirstOrDefault(t => CandidateKey(t.Candidate) == key);
+                trial = previous ?? await MeasureAsync(candidate,
+                    $"Этап 1/3 · TPE {i + 1}/{numericTrials}…", searchPrompt, searchOutput,
+                    UpstreamBenchmarkDefaults.OptimizationRepeats);
             }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex) { confirmation.Add(new AutoTuneTrial(candidate, 0, 0, ex.GetType().Name)); }
+            if (!trials.Contains(trial)) trials.Add(trial);
+            stage1Search.Tell(trial, baseline, objective);
         }
-        var confirmed = AutoTuneResult.FromTrials(confirmation, objective);
-        return confirmed.Suggested is null ? new AutoTuneResult(trials.Concat(confirmation).ToArray(), null, 0)
-            : new AutoTuneResult(trials.Concat(confirmation).ToArray(), confirmed.Suggested,
-                confirmed.ImprovementPercent);
+
+        var best1 = trials.Where(t => t.Valid).OrderByDescending(Score).First();
+
+        // Stage 2: exact upstream categorical grid. Quantized KV keeps FA enabled.
+        var quantizedKv = new[] { "kvK", "kvV" }.Any(k => profileNode[k]?.ToString() is { } s &&
+            s is not ("f16" or "f32" or "bf16"));
+        var flashChoices = quantizedKv ? new[] { true } : new[] { false, true };
+        var overrideChoices = scanTensorOverrides
+            ? UpstreamTensorOverrides.Patterns
+            : new[] { new KeyValuePair<string, string>("current", best1.Candidate.TensorOverride ?? string.Empty) };
+        var stage2 = new List<AutoTuneTrial>();
+        var stage2Total = flashChoices.Length * overrideChoices.Count;
+        var stage2Index = 0;
+        foreach (var flash in flashChoices)
+        {
+            foreach (var pattern in overrideChoices)
+            {
+                stage2Index++;
+                var candidate = best1.Candidate with
+                {
+                    Name = $"Grid FA={(flash ? "on" : "off")} / {pattern.Key}",
+                    FlashAttention = flash,
+                    TensorOverride = pattern.Value
+                };
+                var previous = trials.FirstOrDefault(t => CandidateKey(t.Candidate) == CandidateKey(candidate));
+                var trial = previous ?? await MeasureAsync(candidate,
+                    $"Этап 2/3 · Grid {stage2Index}/{stage2Total}…", searchPrompt, searchOutput,
+                    UpstreamBenchmarkDefaults.OptimizationRepeats);
+                stage2.Add(trial);
+                if (!trials.Contains(trial)) trials.Add(trial);
+            }
+        }
+        var best2 = stage2.Where(t => t.Valid).DefaultIfEmpty(best1).OrderByDescending(Score).First();
+
+        // Stage 3: a second full numeric TPE pass with the best categorical choice fixed.
+        var stage3Search = new AdaptiveAutoTuneSearch(profileJson, seed: 43,
+            fixedFlash: best2.Candidate.FlashAttention, fixedOverride: best2.Candidate.TensorOverride);
+        var stage3 = new List<AutoTuneTrial>();
+        for (var i = 0; i < numericTrials; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var candidate = stage3Search.Ask();
+            AutoTuneTrial trial;
+            if (candidate.UBatch > candidate.Batch)
+                trial = new AutoTuneTrial(candidate, 0, 0, "UBatch exceeds batch");
+            else
+            {
+                var previous = trials.FirstOrDefault(t => CandidateKey(t.Candidate) == CandidateKey(candidate));
+                trial = previous ?? await MeasureAsync(candidate,
+                    $"Этап 3/3 · TPE {i + 1}/{numericTrials}…", searchPrompt, searchOutput,
+                    UpstreamBenchmarkDefaults.OptimizationRepeats);
+            }
+            stage3.Add(trial);
+            if (!trials.Contains(trial)) trials.Add(trial);
+            stage3Search.Tell(trial, baseline, objective);
+        }
+        var best3 = stage3.Where(t => t.Valid).DefaultIfEmpty(best2).OrderByDescending(Score).First();
+
+        // Upstream performs a separate final comparison with 256 prompt / 128 generation / 6 repeats.
+        var comparison = new List<AutoTuneTrial>
+        {
+            await MeasureAsync(candidates[0], "Контроль: исходные настройки…", 256, 128, 6),
+            await MeasureAsync(best3.Candidate, "Контроль: найденные настройки…", 256, 128, 6)
+        };
+        trials.AddRange(comparison);
+        var confirmed = AutoTuneResult.FromTrials(comparison, objective);
+        return confirmed.Suggested is null
+            ? new AutoTuneResult(trials, null, confirmed.ImprovementPercent)
+            : new AutoTuneResult(trials, confirmed.Suggested, confirmed.ImprovementPercent);
     }
 
     private async Task<BenchmarkSample> TrialAsync(string profileId, string original,
-        AutoTuneCandidate candidate, CancellationToken cancellationToken)
+        AutoTuneCandidate candidate, int promptTokens, int outputTokens, int repeats,
+        CancellationToken cancellationToken)
     {
         var temporaryDirectory = Path.Combine(Path.GetTempPath(), "beeforge-tune-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temporaryDirectory);
@@ -190,17 +235,19 @@ public sealed class IsolatedAutoTuner
                 catch (InvalidDataException) { }
                 await Task.Delay(1000, wait.Token);
             }
-            // Identical work for every candidate; warmup is deliberately discarded.
-            await _probe.MeasureAsync(endpoint, plan.Alias, 1024, 64, TimeSpan.FromMinutes(2), cancellationToken);
-            var first = await _probe.MeasureAsync(endpoint, plan.Alias, 1024, 64,
-                TimeSpan.FromMinutes(2), cancellationToken);
-            var second = await _probe.MeasureAsync(endpoint, plan.Alias, 1024, 64,
-                TimeSpan.FromMinutes(2), cancellationToken);
-            return new BenchmarkSample((first.PrefillTokensPerSecond + second.PrefillTokensPerSecond) / 2,
-                (first.DecodeTokensPerSecond + second.DecodeTokensPerSecond) / 2,
-                (first.PromptTokens + second.PromptTokens) / 2,
-                (first.OutputTokens + second.OutputTokens) / 2,
-                (first.PromptMilliseconds + second.PromptMilliseconds) / 2);
+            var samples = new List<BenchmarkSample>();
+            for (var i = 0; i < repeats; i++)
+            {
+                var sample = await _probe.MeasureAsync(endpoint, plan.Alias, promptTokens, outputTokens,
+                    TimeSpan.FromSeconds(UpstreamBenchmarkDefaults.BenchmarkTimeoutSeconds), cancellationToken);
+                if (!(repeats > 1 && i == 0)) samples.Add(sample);
+            }
+            if (samples.Count == 0) throw new InvalidDataException("Пробный benchmark не вернул измерений.");
+            return new BenchmarkSample(samples.Average(x => x.PrefillTokensPerSecond),
+                samples.Average(x => x.DecodeTokensPerSecond),
+                (int)Math.Round(samples.Average(x => x.PromptTokens)),
+                (int)Math.Round(samples.Average(x => x.OutputTokens)),
+                samples.Average(x => x.PromptMilliseconds));
         }
         finally
         {

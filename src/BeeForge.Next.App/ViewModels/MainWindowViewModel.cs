@@ -62,7 +62,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void NotifyActionAvailability()
     {
         foreach (var name in new[] { nameof(CanUseServices), nameof(CanControlLocal), nameof(CanStartLocal), nameof(CanStopLocal),
-            nameof(CanConnectRemote), nameof(CanRunBenchmark), nameof(CanAutoTune) }) OnPropertyChanged(name);
+            nameof(CanConnectRemote), nameof(CanRunBenchmark), nameof(CanAutoTune), nameof(BenchmarkRunHint) }) OnPropertyChanged(name);
     }
     private CancellationTokenSource? _selectionCancellation;
     private ProfileOption? _selectedProfile;
@@ -74,6 +74,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private string _teamText = "Нажмите «Обновить команду» для просмотра действующих агентов OpenCode.";
     private string _benchmarkStatusText = "Проверьте состояние теста скорости.";
     private string _benchmarkHistoryText = "Истории замеров пока нет.";
+    private string _lastBenchmarkResultText = "Обычный benchmark ещё не запускался.";
+    private string _autoTuneResultText = "Автоподбор ещё не запускался.";
     private IReadOnlyList<BenchmarkRunOption> _benchmarkRunOptions = Array.Empty<BenchmarkRunOption>();
     private string _activeProfileId = "";
     private bool _runtimeReady;
@@ -375,8 +377,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(CanRunBenchmark));
             OnPropertyChanged(nameof(CanAutoTune));
             OnPropertyChanged(nameof(CanSaveTune));
+            OnPropertyChanged(nameof(BenchmarkRunHint));
             _tuneResult = null;
             _tuneFingerprint = null;
+            AutoTuneResultText = "Автоподбор для выбранного профиля ещё не запускался.";
             _selectionCancellation?.Cancel();
             _selectionCancellation?.Dispose();
             _selectionCancellation = new CancellationTokenSource();
@@ -416,8 +420,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set { _teamText = value; OnPropertyChanged(); }
     }
 
-    private string _benchmarkInputText = "4096";
-    private string _benchmarkOutputText = "256";
+    private string _benchmarkInputText = UpstreamBenchmarkDefaults.StandardPromptTokens.ToString();
+    private string _benchmarkOutputText = UpstreamBenchmarkDefaults.StandardOutputTokens.ToString();
     public string BenchmarkInputText
     {
         get => _benchmarkInputText;
@@ -432,13 +436,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         (BenchmarkInputText, BenchmarkOutputText) = preset switch
         {
-            "short" => ("512", "128"),
+            "short" => ("256", "64"),
             "long" => ("32768", "256"),
-            _ => ("4096", "256")
+            _ => (UpstreamBenchmarkDefaults.StandardPromptTokens.ToString(),
+                UpstreamBenchmarkDefaults.StandardOutputTokens.ToString())
         };
     }
-    public string BenchmarkTimeoutText { get; set; } = "900";
-    public string BenchmarkRepeatsText { get; set; } = "3";
+    public string BenchmarkTimeoutText { get; set; } = UpstreamBenchmarkDefaults.BenchmarkTimeoutSeconds.ToString();
+    public string BenchmarkRepeatsText { get; set; } = UpstreamBenchmarkDefaults.StandardRepeats.ToString();
+    public string OptimizationTrialsText { get; set; } = UpstreamBenchmarkDefaults.OptimizationTrials.ToString();
+    public bool OptimizationScanTensorOverrides { get; set; }
     public IReadOnlyList<string> OptimizationObjectives { get; } =
         new[] { "Баланс PP/TG", "Максимум PP", "Максимум TG" };
     public string SelectedOptimizationObjective { get; set; } = "Баланс PP/TG";
@@ -457,6 +464,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _benchmarkStatusText;
         private set { _benchmarkStatusText = value; OnPropertyChanged(); }
     }
+    public string LastBenchmarkResultText
+    {
+        get => _lastBenchmarkResultText;
+        private set { _lastBenchmarkResultText = value; OnPropertyChanged(); }
+    }
+    public string AutoTuneResultText
+    {
+        get => _autoTuneResultText;
+        private set { _autoTuneResultText = value; OnPropertyChanged(); }
+    }
     public bool IsBenchmarkBusy
     {
         get => _isBenchmarkBusy;
@@ -470,6 +487,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(CanRefreshBenchmark));
             OnPropertyChanged(nameof(CanAutoTune));
             OnPropertyChanged(nameof(CanSaveTune));
+            OnPropertyChanged(nameof(BenchmarkRunHint));
         }
     }
     public bool CanRunBenchmark => !IsBenchmarkBusy && !IsRuntimeBusy && !_servicesBusy && _runtimeReady &&
@@ -478,6 +496,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool CanStopBenchmark => IsBenchmarkBusy && _benchmarkCancellation is not null;
     public bool CanRefreshBenchmark => !IsBenchmarkBusy && _benchmarkStore is not null;
     public void SetBenchmarkMessage(string message) => BenchmarkStatusText = message;
+    public string BenchmarkRunHint => IsBenchmarkBusy ? "Сейчас выполняется benchmark/автоподбор."
+        : SelectedProfile?.Mode != "LocalHost" ? "Обычный benchmark доступен только для локального профиля."
+        : _isLeased ? "Локальный benchmark недоступен, пока модель передана удалённому клиенту."
+        : !_runtimeReady ? "Обычный benchmark запускается только на уже работающей основной модели. Сначала запустите модель во вкладке Inference. Автоподбор ниже, наоборот, требует остановленной основной модели и использует временные серверы."
+        : "Основная модель готова — обычный benchmark можно запускать.";
     public bool CanAutoTune => !IsBenchmarkBusy && !IsRuntimeBusy && !_servicesBusy && _leaseKnown && !_isLeased &&
         !_runtimeRunning && SelectedProfile?.Mode == "LocalHost" && _autoTuner is not null;
     public bool CanSaveTune => !IsBenchmarkBusy && _tuneResult?.Suggested is not null &&
@@ -486,11 +509,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public async Task RunAutoTuneAsync()
     {
         if (!CanAutoTune || _autoTuner is null || _storePath is null || SelectedProfile is null) return;
+        if (!int.TryParse(OptimizationTrialsText, out var numericTrials) || numericTrials is < 1 or > 100)
+        {
+            BenchmarkStatusText = "Количество TPE-проб на этап должно быть от 1 до 100 (upstream по умолчанию: 45).";
+            return;
+        }
         LegacyProfile profile;
         try { profile = LegacyProfileCatalog.Load(_storePath).Profiles.Single(p => p.Id == SelectedProfile.Id); }
         catch (Exception) { BenchmarkStatusText = "Не удалось прочитать профиль для подбора."; return; }
         _tuneFingerprint = BenchmarkRunRequest.Fingerprint(profile.RawJson);
         _tuneResult = null;
+        AutoTuneResultText = "Автоподбор выполняется… Итог и найденные параметры останутся в этом блоке после завершения.";
         _benchmarkCancellation = new CancellationTokenSource();
         IsBenchmarkBusy = true;
         try
@@ -503,16 +532,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 _ => OptimizationObjective.Balanced
             };
             _tuneResult = await _autoTuner.RunAsync(profile.Id, profile.RawJson, objective,
-                progress, _benchmarkCancellation.Token);
-            var lines = _tuneResult.Trials.Select(t => t.Error is null
-                ? $"{t.Candidate.Name}: PP {t.Prefill:0.0}, TG {t.Decode:0.0} tok/s"
-                : $"{t.Candidate.Name}: ошибка {t.Error}");
-            BenchmarkStatusText = string.Join(Environment.NewLine, lines) + Environment.NewLine +
-                (_tuneResult.Suggested is null ? "Надёжного ускорения от 5% не найдено; профиль не изменён."
-                : $"Предложение: {_tuneResult.Suggested.Name}, +{_tuneResult.ImprovementPercent:0.0}%. Можно создать отдельный профиль.");
+                progress, _benchmarkCancellation.Token, numericTrials, OptimizationScanTensorOverrides);
+            AutoTuneResultText = RenderAutoTuneResult(_tuneResult);
+            BenchmarkStatusText = _tuneResult.Suggested is null
+                ? "Автоподбор завершён. Надёжного ускорения от 5% не найдено."
+                : "Автоподбор завершён. Найдено предложение — его можно сохранить как новый профиль.";
         }
-        catch (OperationCanceledException) { BenchmarkStatusText = "Автоподбор остановлен. Профиль не изменён."; }
-        catch (Exception ex) { BenchmarkStatusText = $"Автоподбор не завершён: {ex.GetType().Name}. Профиль не изменён."; }
+        catch (OperationCanceledException)
+        {
+            AutoTuneResultText = "Автоподбор остановлен. Профиль не изменён.";
+            BenchmarkStatusText = AutoTuneResultText;
+        }
+        catch (Exception ex)
+        {
+            AutoTuneResultText = $"Автоподбор не завершён: {ex.GetType().Name}. Профиль не изменён.";
+            BenchmarkStatusText = AutoTuneResultText;
+        }
         finally { _benchmarkCancellation.Dispose(); _benchmarkCancellation = null; IsBenchmarkBusy = false; }
     }
 
@@ -539,6 +574,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var runs = _benchmarkStore.Load(limit: 50);
             BenchmarkRunOptions = runs.Select(run => new BenchmarkRunOption(run)).ToArray();
             var newest = runs.FirstOrDefault();
+            LastBenchmarkResultText = newest is null ? "Обычный benchmark ещё не запускался."
+                : RenderBenchmarkRun(newest);
             var previous = newest is null ? null : runs.Skip(1).FirstOrDefault(run =>
                 run.ModelAlias == newest.ModelAlias && run.PromptTokens == newest.PromptTokens &&
                 run.OutputTokens == newest.OutputTokens);
@@ -553,7 +590,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     $"{run.CompletedAt.LocalDateTime:g} · {run.PromptTokens}/{run.OutputTokens} · " +
                     $"PP {run.PrefillTokensPerSecond:0.0} ±{run.PrefillStdDev:0.0} · " +
                     $"TG {run.DecodeTokensPerSecond:0.0} ±{run.DecodeStdDev:0.0} tok/s · " +
-                    $"{run.Repeats} повторов · конфигурация {run.ProfileSha256[..8]}"));
+                    $"TTFT {run.TimeToFirstTokenMs:0.0} ms · {run.MeasuredRepeats}/{run.Repeats} измерено/всего · " +
+                    $"конфигурация {run.ProfileSha256[..8]}"));
         }
         catch (Exception)
         {
@@ -566,12 +604,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public async Task StartBenchmarkAsync()
     {
         if (_benchmarkRunner is null || !CanRunBenchmark || SelectedProfile is null || _storePath is null) return;
-        if (!int.TryParse(BenchmarkInputText, out var input) || input < 256 || input > 200000 ||
-            !int.TryParse(BenchmarkOutputText, out var output) || output < 16 || output > 4096 ||
-            !int.TryParse(BenchmarkTimeoutText, out var timeout) || timeout < 30 || timeout > 3600 ||
-            !int.TryParse(BenchmarkRepeatsText, out var repeats) || repeats < 2 || repeats > 10)
+        if (!int.TryParse(BenchmarkInputText, out var input) || input < 1 || input > 200000 ||
+            !int.TryParse(BenchmarkOutputText, out var output) || output < 1 || output > 4096 ||
+            !int.TryParse(BenchmarkTimeoutText, out var timeout) || timeout < 5 || timeout > 3600 ||
+            !int.TryParse(BenchmarkRepeatsText, out var repeats) || repeats < 1 || repeats > 10)
         {
-            BenchmarkStatusText = "Проверьте значения: input 256–200000, output 16–4096, повторы 2–10, timeout 30–3600 с.";
+            BenchmarkStatusText = "Проверьте значения: input 1–200000, output 1–4096, повторы 1–10, timeout 5–3600 с.";
             return;
         }
         LegacyProfileCatalog catalog;
@@ -607,8 +645,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var progress = new Progress<BenchmarkProgress>(p =>
                 BenchmarkStatusText = $"{p.Phase}: {p.Completed}/{p.Total}");
             var run = await _benchmarkRunner.RunAsync(request, progress, _benchmarkCancellation.Token);
-            BenchmarkStatusText = $"Готово · PP {run.PrefillTokensPerSecond:0.0} ±{run.PrefillStdDev:0.0} · " +
-                $"TG {run.DecodeTokensPerSecond:0.0} ±{run.DecodeStdDev:0.0} tok/s";
+            LastBenchmarkResultText = RenderBenchmarkRun(run);
+            BenchmarkStatusText = "Benchmark завершён и сохранён в историю.";
         }
         catch (OperationCanceledException) { BenchmarkStatusText = "Тест остановлен. Работа модели не затронута."; }
         catch (Exception ex) { BenchmarkStatusText = $"Тест не завершён: {ex.GetType().Name}. Проверьте активную модель и её совместимость с /completion."; }
@@ -623,6 +661,39 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _benchmarkCancellation?.Cancel();
         return Task.CompletedTask;
+    }
+
+    public string? GetBenchmarkResultsDirectory()
+    {
+        if (_benchmarkStore is null) return null;
+        return _benchmarkStore.RootDirectory;
+    }
+
+    private static string RenderBenchmarkRun(StoredBenchmarkRun run) =>
+        $"ПОСЛЕДНИЙ РЕЗУЛЬТАТ{Environment.NewLine}" +
+        $"Профиль: {run.ProfileName}{Environment.NewLine}" +
+        $"Нагрузка: {run.PromptTokens}/{run.OutputTokens} · повторы {run.Repeats} · измерено {run.MeasuredRepeats}{Environment.NewLine}" +
+        $"PP: {run.PrefillTokensPerSecond:0.0} ±{run.PrefillStdDev:0.0} tok/s{Environment.NewLine}" +
+        $"TG: {run.DecodeTokensPerSecond:0.0} ±{run.DecodeStdDev:0.0} tok/s{Environment.NewLine}" +
+        $"TTFT: {run.TimeToFirstTokenMs:0.0} ±{run.TimeToFirstTokenStdDev:0.0} ms{Environment.NewLine}" +
+        $"Длительность: {run.DurationSeconds:0.0} сек · {run.CompletedAt.LocalDateTime:g}";
+
+    private static string RenderAutoTuneResult(AutoTuneResult result)
+    {
+        var valid = result.Trials.Where(t => t.Valid).ToArray();
+        var baseline = valid.FirstOrDefault();
+        var tail = valid.TakeLast(2).ToArray();
+        var comparison = tail.Length == 2
+            ? $"Контроль: исходные PP {tail[0].Prefill:0.0} / TG {tail[0].Decode:0.0}; найденные PP {tail[1].Prefill:0.0} / TG {tail[1].Decode:0.0}."
+            : baseline is null ? "Контрольные измерения не завершены." : $"Исходный замер: PP {baseline.Prefill:0.0} / TG {baseline.Decode:0.0}.";
+        if (result.Suggested is not { } s)
+            return $"АВТОПОДБОР ЗАВЕРШЁН{Environment.NewLine}{comparison}{Environment.NewLine}" +
+                "Надёжного улучшения от 5% не найдено. Текущий профиль оставлен без изменений.";
+        return $"АВТОПОДБОР ЗАВЕРШЁН{Environment.NewLine}{comparison}{Environment.NewLine}" +
+            $"Рекомендация: +{result.ImprovementPercent:0.0}%{Environment.NewLine}" +
+            $"batch={s.Batch}, ubatch={s.UBatch}, threads={s.Threads}, threadsBatch={s.ThreadsBatch}, flashAttention={(s.FlashAttention ? "on" : "off")}, " +
+            $"gpuLayers={s.GpuLayers ?? "без изменения"}, cpuMoeLayers={(s.CpuMoeLayers?.ToString() ?? "без изменения")}, tensorOverride={(string.IsNullOrWhiteSpace(s.TensorOverride) ? "без изменения" : s.TensorOverride)}{Environment.NewLine}" +
+            "Нажмите «Сохранить как новый профиль», чтобы создать отдельный профиль. Рабочий профиль автоматически не изменяется.";
     }
 
     public async Task RefreshTeamAsync()

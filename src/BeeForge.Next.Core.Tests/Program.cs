@@ -70,6 +70,9 @@ try
         if (request.RequestUri!.AbsolutePath == "/v1/models")
             return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
                 { Content = new StringContent("{\"data\":[{\"id\":\"Q2\"}]}") };
+        if (request.RequestUri.AbsolutePath == "/metrics")
+            return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                { Content = new StringContent("llamacpp:predicted_tokens_seconds 42\nllamacpp:prompt_tokens_seconds 84\n") };
         benchmarkCalls++;
         var speed = benchmarkCalls == 1 ? 1 : benchmarkCalls == 2 ? 10 : 20;
         return new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
@@ -78,13 +81,19 @@ try
     var benchmarkStore = new BenchmarkRunStore(benchmarkRoot);
     var benchmarkRunner = new StandardBenchmarkRunner(new HttpBenchmarkProbe(benchmarkClient), benchmarkStore);
     var benchmarkRequest = new BenchmarkRunRequest("local", "Локальная", "Q2", "http://127.0.0.1:8080/v1",
-        BenchmarkRunRequest.Fingerprint("{\"batch\":2048}"), 256, 16, 2, 30);
+        BenchmarkRunRequest.Fingerprint("{\"batch\":2048}"), 256, 16, 3, 30);
     var benchmarkRun = await benchmarkRunner.RunAsync(benchmarkRequest, null, CancellationToken.None);
     Assert(benchmarkCalls == 3 && benchmarkRun.PrefillTokensPerSecond == 15 &&
-        benchmarkRun.DecodeTokensPerSecond == 30 && benchmarkRun.PrefillStdDev == 5,
-        "benchmark discards warmup and computes repeated metrics");
+        benchmarkRun.DecodeTokensPerSecond == 30 && benchmarkRun.PrefillStdDev == 5 &&
+        benchmarkRun.MeasuredRepeats == 2 && benchmarkRun.TimeToFirstTokenMs == 123,
+        "upstream benchmark repeat semantics discard request one and compute PP/TG/TTFT");
     Assert(benchmarkStore.Load("local").Single().Id == benchmarkRun.Id,
         "benchmark history survives reload");
+    var benchmarkRunDirectory = benchmarkStore.GetRunDirectory(benchmarkRun);
+    Assert(benchmarkRunDirectory is not null && File.Exists(Path.Combine(benchmarkRunDirectory, "run.json")) &&
+        File.Exists(Path.Combine(benchmarkRunDirectory, "report.md")) &&
+        File.Exists(Path.Combine(benchmarkRunDirectory, "metrics.prom")),
+        "upstream-style benchmark artifact directory stores run/report/Prometheus snapshot");
     await benchmarkStore.SaveAsync(benchmarkRun with { Id = "other-profile", ProfileId = "other" });
     Assert(benchmarkStore.Load(limit: 10).Count == 2 && benchmarkStore.Load("local").Count == 1,
         "benchmark comparison can include other profiles without mixing profile folders");
@@ -113,8 +122,9 @@ try
     {
         var proposal = adaptive.Ask();
         Assert(proposal == adaptiveTwin.Ask(), "TPE seeded search is reproducible");
-        Assert(proposal.Batch is >= 128 and <= 8192 && proposal.Threads > 0,
-            "TPE search obeys bounded parameter space");
+        Assert(proposal.Batch is >= 256 and <= 16384 && proposal.UBatch is >= 256 and <= 8192 &&
+            proposal.Threads > 0,
+            "TPE search obeys upstream numeric parameter space");
         var score = 100.0 + proposal.Threads;
         var outcome = new AutoTuneTrial(proposal, score, score, i % 9 == 0 ? "fixture failure" : null);
         adaptive.Tell(outcome, adaptiveBaseline, OptimizationObjective.Balanced);
@@ -125,6 +135,17 @@ try
         new LlamaServerLauncher.Optimization.Samplers.TPESampler(seed: 42));
     engineStudy.Optimize(t => Math.Pow(t.SuggestFloat("x", -10, 10) - 2, 2), 100);
     Assert(engineStudy.BestValue < 0.1, "upstream TPE converges on deterministic quadratic fixture");
+    Assert(UpstreamBenchmarkDefaults.StandardPromptTokens == 512 &&
+        UpstreamBenchmarkDefaults.StandardOutputTokens == 128 &&
+        UpstreamBenchmarkDefaults.StandardRepeats == 3 &&
+        UpstreamBenchmarkDefaults.OptimizationTrials == 45 &&
+        UpstreamBenchmarkDefaults.OptimizationTokens == 192 &&
+        UpstreamBenchmarkDefaults.WarmupRuns == 35,
+        "benchmark defaults match audited upstream v1.9.8");
+    Assert(UpstreamTensorOverrides.Patterns.Count == 9 &&
+        UpstreamTensorOverrides.Patterns[1].Key == "ffn_cpu_all" &&
+        UpstreamTensorOverrides.Patterns[^1].Key == "ffn_cpu_from_6",
+        "upstream tensor-override grid is complete");
     var trialJson = AutoTunePlanner.CreateTrialProfileJson(catalog.Profiles[0].RawJson, tuningCandidates[1], 29876);
     Assert(trialJson.Contains("\"port\":29876", StringComparison.Ordinal) &&
         catalog.Profiles[0].RawJson.Contains("\"unknownField\":\"preserve\"", StringComparison.Ordinal),

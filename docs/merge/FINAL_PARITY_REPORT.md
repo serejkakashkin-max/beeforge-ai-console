@@ -35,10 +35,10 @@ This report compares the behavior contract captured from BeeForge `main` at base
 | VRAM actual comparison | Live status | Next compares reliable estimate with live observed VRAM | PASS | status/view-model path; live numerical acceptance BLOCKED below |
 | Hardware monitor | Legacy subset | CPU/GPU/RAM/VRAM/temp/context/uptime/tokens/slots | PASS | adapter/status fixtures + module tests |
 | Live PP/TG/slots | Legacy benchmark/status | Current PP/TG and bounded slots snapshot surfaced | PASS | typed runtime adapter + build |
-| Benchmark workload | Existing benchmark | Repeatable `/completion` warmup + repeated runs | PASS | fake HTTP benchmark fixture + `Test-BeeBenchmarkLimits.ps1` |
-| Benchmark history | Retained legacy files | Per-profile JSON history with profile fingerprint | PASS | .NET persistence fixture |
-| Benchmark comparison/export | Limited | Multi-run comparison and Markdown export | PASS | .NET comparison fixture |
-| Automatic optimizer | Not present | Baseline → bounded/TPE trials → best candidate → confirmation → separate copy only when improvement is meaningful | PASS | .NET planner/TPE/result/profile-backup fixtures |
+| Benchmark workload | Existing benchmark | Audited upstream `/completion` request and repeat/warmup semantics, PP/TG/TTFT and Prometheus snapshot | PASS | exact-source SHA-256 verification + fake HTTP fixture + `Test-BeeBenchmarkLimits.ps1` |
+| Benchmark history | Retained legacy files | Upstream-style per-run artifact directory (`run.json`, `report.md`, optional `metrics.prom`) plus compatibility reader for earlier Next history | PASS | .NET persistence fixture |
+| Benchmark comparison/export | Limited | Multi-run PP/TG/TTFT comparison and Markdown export | PASS | .NET comparison fixture |
+| Automatic optimizer | Not present | Upstream Stage 1 TPE → Stage 2 Flash/Tensor Override grid → Stage 3 TPE → 256/128 × 6 comparison, with BeeForge isolated-process/profile safety | PASS | exact-source snapshot + .NET TPE/defaults/grid/profile-backup fixtures |
 | Optimizer objective | Not present | PP, TG, balanced | PASS | .NET objective fixture |
 | Optimizer safety | Not present | Isolated port/process, minimum gain threshold, backup, source profile remains unchanged | PASS | .NET fixtures + Windows job fixture |
 | Scenarios/presets | Profiles only | Ordered scenarios, atomic store/backups, manual first-profile selection | PASS | .NET scenario fixture |
@@ -63,13 +63,13 @@ This report compares the behavior contract captured from BeeForge `main` at base
 | RemoteClient no Telegram bridge | Required | Preserved by installer | PASS | `Test-BeeRemoteInstall.ps1` |
 | Secrets hygiene | DPAPI/no tracked state | Next does not surface prompt/MCP secrets, HF token or runtime secrets | PASS | `Test-Distribution.ps1`, OpenCode snapshot fixture |
 | Windows x64 packaging | Existing scripts | Avalonia Release build/publish alongside legacy fallback | PASS | Release build, distribution checks |
-| Default launcher cutover | Legacy launcher is current default | Not switched yet | BLOCKED | Must wait for the live/manual gates below; legacy fallback must remain for at least one release |
+| Default launcher cutover | Legacy launcher was the previous default | `BEEFORGE-AI.cmd` now starts the self-contained Avalonia console; `BEEFORGE-LEGACY.cmd` remains as fallback | PASS | Unified launcher start/close smoke verified; fallback retained |
 
 ## Safe regression evidence
 
 The current branch passed all safe automated checks without starting the user's production model or mutating live Telegram/Tailscale/Serena state:
 
-- 22 PowerShell/smoke regression scripts: PASS.
+- 23 PowerShell/smoke regression scripts: PASS.
 - `BeeForge.Next.Core.Tests` compatibility/integration fixture: PASS (`NEXT_PROFILE_READONLY_TEST_OK`).
 - Avalonia `Release` build: 0 warnings, 0 errors.
 - PowerShell runtime module import: PASS.
@@ -77,9 +77,9 @@ The current branch passed all safe automated checks without starting the user's 
 
 ## Remaining live/manual acceptance gates
 
-These are not implementation TODOs. They require controlled interaction with the user's real environment and therefore are not claimed by isolated tests:
+These are not implementation TODOs. They require controlled interaction with the user's real environment and therefore remain final acceptance checks after the user-authorized cutover:
 
-| Gate | Status | Required evidence before default launcher cutover |
+| Gate | Status | Remaining acceptance evidence |
 | --- | --- | --- |
 | Existing BeeLlama/Tiel profile live start | BLOCKED | Start the real model from Next and compare generated argv/health/startup with legacy |
 | Same-profile speed | BLOCKED | Compare PP/TG/startup on identical model/runtime/settings; no material regression |
@@ -90,4 +90,4 @@ These are not implementation TODOs. They require controlled interaction with the
 | Two-PC RemoteClient | BLOCKED | Main PC + notebook Tailscale smoke with exclusive lease and local project tools |
 | Visual/UI acceptance | BLOCKED | User validates scaling, profile editing, confirmations, logs, optimization and runtime manager on the production desktop |
 
-Until these gates are executed, `BEEFORGE-AI.cmd` remains the default launcher and the legacy UI remains the fallback. This is deliberate: the original migration specification forbids replacing a proven working path before equivalent behavior is demonstrated in the live environment.
+The user explicitly authorized the final cutover before completing all manual environment gates. `BEEFORGE-AI.cmd` therefore starts the unified Avalonia console, while `BEEFORGE-LEGACY.cmd` preserves a recovery path. The remaining live gates are acceptance checks, not a reason to maintain two normal user interfaces.

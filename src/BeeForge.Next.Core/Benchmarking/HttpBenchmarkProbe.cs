@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 
 namespace BeeForge.Next.Core.Benchmarking;
@@ -14,6 +15,35 @@ public sealed class HttpBenchmarkProbe
 
     public HttpBenchmarkProbe(HttpClient? httpClient = null) =>
         _http = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+
+    public async Task<bool> CheckHealthOnceAsync(Uri apiBase, CancellationToken cancellationToken)
+    {
+        var health = HealthUrl(apiBase);
+        try
+        {
+            using var response = await _http.GetAsync(health, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> WaitForHealthAsync(Uri apiBase, TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(10))
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (await CheckHealthOnceAsync(apiBase, cancellationToken)) return true;
+            await Task.Delay(500, cancellationToken);
+        }
+        return false;
+    }
 
     public async Task VerifyModelAsync(Uri apiBase, string modelAlias, CancellationToken cancellationToken)
     {
@@ -36,15 +66,30 @@ public sealed class HttpBenchmarkProbe
     public async Task<BenchmarkSample> MeasureAsync(Uri apiBase, string modelAlias,
         int promptTokens, int outputTokens, TimeSpan timeout, CancellationToken cancellationToken)
     {
-        if (promptTokens is < 256 or > 200000) throw new ArgumentOutOfRangeException(nameof(promptTokens));
-        if (outputTokens is < 16 or > 4096) throw new ArgumentOutOfRangeException(nameof(outputTokens));
-        if (timeout < TimeSpan.FromSeconds(30) || timeout > TimeSpan.FromHours(1))
+        if (promptTokens is < 1 or > 200000) throw new ArgumentOutOfRangeException(nameof(promptTokens));
+        if (outputTokens is < 1 or > 4096) throw new ArgumentOutOfRangeException(nameof(outputTokens));
+        if (timeout < TimeSpan.FromSeconds(5) || timeout > TimeSpan.FromHours(1))
             throw new ArgumentOutOfRangeException(nameof(timeout));
         if (string.IsNullOrWhiteSpace(modelAlias)) throw new ArgumentException("Model alias is required.", nameof(modelAlias));
-        var completionUrl = CompletionUrl(apiBase);
-        // llama-server's /completion is model-independent when exactly one model
-        // is loaded; the caller must verify the active alias before measuring.
         var prompt = string.Join(' ', Enumerable.Repeat("word", promptTokens));
+        return await MeasurePromptAsync(apiBase, modelAlias, prompt, outputTokens, timeout,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Exact standard workload request shape used by LlamaServerLauncherAvalonia
+    /// HttpBenchmarkService at the audited upstream commit. BeeForge only adds
+    /// endpoint/alias validation around the request.
+    /// </summary>
+    public async Task<BenchmarkSample> MeasurePromptAsync(Uri apiBase, string modelAlias,
+        string prompt, int outputTokens, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(modelAlias)) throw new ArgumentException("Model alias is required.", nameof(modelAlias));
+        if (string.IsNullOrEmpty(prompt)) throw new ArgumentException("Prompt is required.", nameof(prompt));
+        if (outputTokens < 1 || outputTokens > 4096) throw new ArgumentOutOfRangeException(nameof(outputTokens));
+        if (timeout < TimeSpan.FromSeconds(5) || timeout > TimeSpan.FromHours(1))
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        var completionUrl = CompletionUrl(apiBase);
         var payload = new { prompt, n_predict = outputTokens, stream = false,
             cache_prompt = false, temperature = 0.0 };
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -63,9 +108,25 @@ public sealed class HttpBenchmarkProbe
         var promptMs = Number(timings, "prompt_ms");
         if (!double.IsFinite(promptMs) || promptMs < 0) promptMs = 0;
         if (!double.IsFinite(pp) || !double.IsFinite(tg) || pp <= 0 || tg <= 0 ||
-            promptCount < 1 || outputCount < 16)
+            promptCount < 1 || outputCount < 1)
             throw new InvalidDataException("llama-server returned incomplete benchmark timings.");
         return new BenchmarkSample(pp, tg, promptCount, outputCount, promptMs);
+    }
+
+    public async Task<string?> TryReadMetricsAsync(Uri apiBase, CancellationToken cancellationToken)
+    {
+        var uri = MetricsUrl(apiBase);
+        try
+        {
+            using var response = await _http.GetAsync(uri, cancellationToken);
+            if (!response.IsSuccessStatusCode) return null;
+            var text = await response.Content.ReadAsStringAsync(cancellationToken);
+            return text.Length <= 2 * 1024 * 1024 ? text : null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
     }
 
     public static Uri CompletionUrl(Uri apiBase)
@@ -82,6 +143,18 @@ public sealed class HttpBenchmarkProbe
             throw new ArgumentException("API base URL must end in /v1.", nameof(apiBase));
         var root = apiBase.GetLeftPart(UriPartial.Authority) + path[..^3];
         return new Uri(root.TrimEnd('/') + "/completion", UriKind.Absolute);
+    }
+
+    public static Uri HealthUrl(Uri apiBase)
+    {
+        var completion = CompletionUrl(apiBase);
+        return new Uri(completion.GetLeftPart(UriPartial.Authority) + "/health", UriKind.Absolute);
+    }
+
+    public static Uri MetricsUrl(Uri apiBase)
+    {
+        var completion = CompletionUrl(apiBase);
+        return new Uri(completion.GetLeftPart(UriPartial.Authority) + "/metrics", UriKind.Absolute);
     }
 
     private static double Number(JsonElement source, string name) =>

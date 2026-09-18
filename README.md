@@ -3,9 +3,9 @@
 Локальная Windows-консоль для запуска GGUF-моделей через llama-server/BeeLlama,
 синхронизации команды OpenCode и защищённого управления через личного Telegram-бота.
 
-## BeeForge Next (предварительная оболочка)
+## BeeForge AI Console — объединённый интерфейс
 
-Новый интерфейс Avalonia развивается параллельно со старым. Он читает профили,
+Основной интерфейс BeeForge построен на Avalonia. Он читает профили,
 показывает точный план запуска и управляет локальной моделью через прежний
 BeeForge backend. Запуск и остановка требуют подтверждения; при передаче модели
 ноутбуку локальное управление блокируется. Редактор профилей, настройки
@@ -16,13 +16,13 @@ OpenCode, Telegram и Serena остаются в проверенной конс
 без загрузки весов. «Обзор» показывает ресурсы работающей локальной модели,
 а «Система» — последние записи журналов без изменения файлов. «AI Workspace»
 показывает только имена и состояния агентов/MCP, не выводя промпты или команды
-запуска. Для сборки preview нужен .NET 8 SDK:
+запуска. Для разработки и повторной публикации нужен .NET 8 SDK:
 
 ```powershell
-pwsh -File .\scripts\Start-BeeForgeNextPreview.ps1
+pwsh -File .\scripts\Publish-BeeForgeNext.ps1
 ```
 
-Локальную автономную сборку для Windows x64 можно установить рядом со старой:
+Автономная Windows x64 сборка публикуется в `local\BeeForge.Next`:
 
 ```powershell
 dotnet publish .\src\BeeForge.Next.App\BeeForge.Next.App.csproj -c Release -r win-x64 --self-contained -o .\local\BeeForge.Next
@@ -32,18 +32,16 @@ dotnet publish .\src\BeeForge.Next.App\BeeForge.Next.App.csproj -c Release -r wi
 Папка `local/` не попадает в Git. Старый профиль при открытии новой оболочки не
 переписывается; профиль и OpenCode меняются только после подтверждённого запуска
 модели либо успешного подключения удалённого профиля через существующий backend.
-Переход на новый интерфейс по умолчанию ещё
-не выполнен.
-
-Обычный `BEEFORGE-AI.cmd` не менялся. Подробные этапы, базовые тесты и ограничения
-зафиксированы в `docs/merge/`.
+`BEEFORGE-AI.cmd` запускает объединённый интерфейс. Старый PowerShell-интерфейс
+сохранён как аварийный fallback `BEEFORGE-LEGACY.cmd`; оба варианта используют
+одни и те же backend-модули, профили, Telegram, Serena и OpenCode.
 
 ## Развёртывание на новом ПК
 
 Репозиторий не содержит моделей, токенов, журналов, резервных копий и локального
 runtime. Они создаются или выбираются на целевом компьютере.
 
-Требования: Windows 10/11, PowerShell 7, Git, Node.js LTS, Python 3.11–3.13,
+Требования: Windows 10/11, PowerShell 7, .NET 8 SDK, Git, Node.js LTS, Python 3.11–3.13,
 `uv`, OpenCode Desktop, совместимый `llama-server.exe` и GGUF-модель.
 
 ```powershell

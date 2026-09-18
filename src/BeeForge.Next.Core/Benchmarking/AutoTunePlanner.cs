@@ -17,7 +17,9 @@ public static class AutoTunePlanner
         var gpuLayers = root["gpuLayers"]?.ToString() ?? "all";
         var modelLayerCount = Read(root, "modelLayerCount", 0);
         var cpuMoeLayers = Read(root, "cpuMoeLayers", 0);
-        var baseline = new AutoTuneCandidate("Исходные", batch, ubatch, threads, threadsBatch, flash);
+        var tensorOverride = root["tensorOverride"]?.ToString() ?? string.Empty;
+        var baseline = new AutoTuneCandidate("Исходные", batch, ubatch, threads, threadsBatch, flash,
+            null, null, tensorOverride);
         if (batch is < 128 or > 8192 || ubatch is < 64 or > 8192 || ubatch > batch ||
             threads is < 1 or > 128 || threadsBatch is < 1 or > 128)
             throw new InvalidDataException("Исходный профиль вне поддерживаемого диапазона автоподбора. Его параметры не будут подменены.");
@@ -60,6 +62,7 @@ public static class AutoTunePlanner
         root["flashAttention"] = candidate.FlashAttention;
         if (candidate.GpuLayers is not null) root["gpuLayers"] = candidate.GpuLayers;
         if (candidate.CpuMoeLayers is not null) root["cpuMoeLayers"] = candidate.CpuMoeLayers.Value;
+        if (candidate.TensorOverride is not null) root["tensorOverride"] = candidate.TensorOverride;
         root["host"] = "127.0.0.1";
         root["port"] = port;
         return root.ToJsonString();
@@ -70,7 +73,8 @@ public static class AutoTunePlanner
 }
 
 public sealed record AutoTuneCandidate(string Name, int Batch, int UBatch, int Threads,
-    int ThreadsBatch, bool FlashAttention, string? GpuLayers = null, int? CpuMoeLayers = null);
+    int ThreadsBatch, bool FlashAttention, string? GpuLayers = null, int? CpuMoeLayers = null,
+    string? TensorOverride = null);
 public sealed record AutoTuneTrial(AutoTuneCandidate Candidate, double Prefill, double Decode,
     string? Error)
 {
@@ -93,7 +97,9 @@ public sealed record AutoTuneResult(IReadOnlyList<AutoTuneTrial> Trials, AutoTun
         {
             OptimizationObjective.Prefill => trial.Prefill / baseline.Prefill,
             OptimizationObjective.Decode => trial.Decode / baseline.Decode,
-            _ => 0.3 * trial.Prefill / baseline.Prefill + 0.7 * trial.Decode / baseline.Decode
+            // Matches upstream BenchMetric.Mean: arithmetic mean of PP/TG,
+            // normalized only for the final improvement comparison.
+            _ => (trial.Prefill + trial.Decode) / (baseline.Prefill + baseline.Decode)
         };
         var best = trials.Where(t => t.Valid &&
                 t.Prefill >= baseline.Prefill * 0.9 && t.Decode >= baseline.Decode * 0.9)

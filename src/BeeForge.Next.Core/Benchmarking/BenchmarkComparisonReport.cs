@@ -14,8 +14,8 @@ public static class BenchmarkComparisonReport
         var builder = new StringBuilder("# BeeForge benchmark comparison\n\n");
         builder.AppendLine("Scores are measured server timings, not model-quality scores. A delta is shown only for identical alias and workload.");
         builder.AppendLine();
-        builder.AppendLine("| Run | Profile | Date (UTC) | Input | Output | Repeats | PP tok/s | TG tok/s | PP σ | TG σ | Configuration |");
-        builder.AppendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
+        builder.AppendLine("| Run | Profile | Date (UTC) | Input | Output | Requests | Measured | PP tok/s | TG tok/s | TTFT ms | PP σ | TG σ | Configuration |");
+        builder.AppendLine("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
         foreach (var run in runs)
         {
             builder.Append("| ").Append(Cell(run.Id[..Math.Min(8, run.Id.Length)]));
@@ -23,8 +23,10 @@ public static class BenchmarkComparisonReport
             builder.Append(" | ").Append(run.CompletedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture));
             builder.Append(" | ").Append(run.PromptTokens).Append(" | ").Append(run.OutputTokens);
             builder.Append(" | ").Append(run.Repeats);
+            builder.Append(" | ").Append(run.MeasuredRepeats);
             builder.Append(" | ").Append(Format(run.PrefillTokensPerSecond));
             builder.Append(" | ").Append(Format(run.DecodeTokensPerSecond));
+            builder.Append(" | ").Append(Format(run.TimeToFirstTokenMs));
             builder.Append(" | ").Append(Format(run.PrefillStdDev));
             builder.Append(" | ").Append(Format(run.DecodeStdDev));
             builder.Append(" | ").Append(Cell(run.ProfileSha256[..Math.Min(8, run.ProfileSha256.Length)]));

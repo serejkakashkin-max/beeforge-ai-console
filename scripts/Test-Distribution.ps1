@@ -5,6 +5,20 @@ $ErrorActionPreference = 'Stop'
 if([string]::IsNullOrWhiteSpace($Root)){$Root=Split-Path -Parent $PSScriptRoot}
 $failures = [Collections.Generic.List[string]]::new()
 
+$mainLauncher = Get-Content -LiteralPath (Join-Path $Root 'BEEFORGE-AI.cmd') -Raw
+$legacyLauncherPath = Join-Path $Root 'BEEFORGE-LEGACY.cmd'
+if ($mainLauncher -notmatch 'Start-BeeForgeConsole\.ps1' -or $mainLauncher -match 'BeeLlama-Manager\.ps1') {
+    $failures.Add('BEEFORGE-AI.cmd должен запускать объединённый BeeForge Next через Start-BeeForgeConsole.ps1')
+}
+if (-not (Test-Path -LiteralPath $legacyLauncherPath -PathType Leaf)) {
+    $failures.Add('Не найден аварийный launcher BEEFORGE-LEGACY.cmd')
+} elseif ((Get-Content -LiteralPath $legacyLauncherPath -Raw) -notmatch 'BeeLlama-Manager\.ps1') {
+    $failures.Add('BEEFORGE-LEGACY.cmd не указывает на legacy-интерфейс')
+}
+if (-not (Test-Path -LiteralPath (Join-Path $Root 'scripts\Publish-BeeForgeNext.ps1') -PathType Leaf)) {
+    $failures.Add('Не найден Publish-BeeForgeNext.ps1')
+}
+
 # BEEFORGE-AI.cmd starts the desktop UI with Windows PowerShell 5.1. Unlike
 # PowerShell 7, it does not reliably decode UTF-8 scripts without a BOM. The
 # remote-access module contains Russian UI messages and is imported before the

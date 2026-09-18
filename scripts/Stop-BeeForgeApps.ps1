@@ -14,6 +14,7 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $utf8NoBom
 $OutputEncoding = $utf8NoBom
 $script:ConsoleScript = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\ui\BeeLlama-Manager.ps1'))
+$script:NextConsoleExe = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\local\BeeForge.Next\BeeForge.Next.App.exe'))
 $script:OpenCodeExe = [System.IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Programs\@opencode-aidesktop\OpenCode.exe'))
 $script:CoreModule = Join-Path $PSScriptRoot 'BeeLlamaManager.Core.psm1'
 Import-Module $script:CoreModule -Force
@@ -37,10 +38,14 @@ function New-Result {
 
 function Get-ExactConsoleProcesses {
     $needle = $script:ConsoleScript.ToLowerInvariant()
+    $nextNeedle = $script:NextConsoleExe.ToLowerInvariant()
     @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.Name -in @('powershell.exe', 'pwsh.exe') -and
-        -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
-        $_.CommandLine.ToLowerInvariant().Contains($needle)
+        ($_.Name -in @('powershell.exe', 'pwsh.exe') -and
+            -not [string]::IsNullOrWhiteSpace($_.CommandLine) -and
+            $_.CommandLine.ToLowerInvariant().Contains($needle)) -or
+        ($_.Name -eq 'BeeForge.Next.App.exe' -and
+            -not [string]::IsNullOrWhiteSpace($_.ExecutablePath) -and
+            ([System.IO.Path]::GetFullPath($_.ExecutablePath)).ToLowerInvariant() -eq $nextNeedle)
     })
 }
 
@@ -114,6 +119,7 @@ try {
             Valid         = $true
             Action        = $Action
             ConsoleScript = $script:ConsoleScript
+            NextConsoleExe = $script:NextConsoleExe
             OpenCodeExe   = $script:OpenCodeExe
             CoreModule    = $script:CoreModule
             Commands      = @{
