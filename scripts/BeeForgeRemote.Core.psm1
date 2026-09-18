@@ -11,11 +11,24 @@ function Get-BeeTailscaleExecutable {
     throw 'Tailscale не установлен. Установите его и войдите в тот же tailnet на обоих компьютерах.'
 }
 
-function Invoke-BeeTailscale([string[]]$Arguments,[switch]$AllowFailure) {
+function Invoke-BeeTailscale([string[]]$Arguments,[switch]$AllowFailure,[int]$TimeoutSec=15) {
     $executable = Get-BeeTailscaleExecutable
-    $output = & $executable @Arguments 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0 -and -not $AllowFailure) { throw "tailscale $($Arguments -join ' ') завершился с ошибкой: $($output.Trim())" }
-    return $output.Trim()
+    $tempRoot=Join-Path ([IO.Path]::GetTempPath()) ('beeforge-tailscale-cli-'+[guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $tempRoot -Force|Out-Null
+    $stdout=Join-Path $tempRoot 'stdout.txt';$stderr=Join-Path $tempRoot 'stderr.txt'
+    try {
+        $process=Start-Process -FilePath $executable -ArgumentList $Arguments -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -WindowStyle Hidden
+        try{$process|Wait-Process -Timeout $TimeoutSec -ErrorAction Stop}catch{}
+        if(-not$process.HasExited){
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "tailscale $($Arguments -join ' ') не ответил за $TimeoutSec сек. Проверьте службу Tailscale и повторите действие."
+        }
+        $output=((Get-Content -LiteralPath $stdout,$stderr -Raw -ErrorAction SilentlyContinue)-join[Environment]::NewLine).Trim()
+        if ($process.ExitCode -ne 0 -and -not $AllowFailure) { throw "tailscale $($Arguments -join ' ') завершился с ошибкой: $output" }
+        return $output
+    } finally {
+        if(Test-Path -LiteralPath $tempRoot){Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue}
+    }
 }
 
 function Get-BeeTailscaleStatus {
